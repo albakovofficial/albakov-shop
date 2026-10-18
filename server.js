@@ -584,7 +584,9 @@ async function api(req, res, url, body) {
         const pr = db.products.find((x) => x.active !== false && x.colors && x.colors.length); if (!pr) fail(400, 'Добавьте хотя бы один товар');
         const c = pr.colors[0], ctx = notifyContext({ size: (c.sizes[0] || {}).size || '' }, pr, c);
         const m = Mail.render(ctx);
-        await smtp.send(mailCfg(), { to, subject: '[Пример] ' + m.subject, html: m.html, text: m.text });
+        // Ошибку почтового сервера показываем администратору как есть — по ней видно, что не так (пароль, порт, адрес)
+        try { await smtp.send(mailCfg(), { to, subject: '[Пример] ' + m.subject, html: m.html, text: m.text }); }
+        catch (e) { console.error('Пробное письмо не отправлено:', e.message); fail(502, e.message); }
         return {};
       }
     }

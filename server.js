@@ -324,6 +324,29 @@ async function placeOrder(req, b) {
   console.log(`Новый заказ № ${order.number} на ${order.total} ₽`);
   return { order: orderView(order), token: order.token, payUrl, user: publicUser(user) };
 }
+/* Отправка письма: картинки с нашего сайта (логотип, фото товаров) вкладываем в само письмо,
+   иначе Mail.ru, Яндекс и другие прячут их, пока получатель не нажмёт «Показать изображения» */
+const IMG_TYPES = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' };
+function embedImages(html) {
+  const inline = [], seen = new Map(); let total = 0;
+  const base = PUBLIC_URL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const out = String(html || '').replace(new RegExp('src="' + base + '/([^"?#]+)"', 'g'), (m, rel) => {
+    try {
+      rel = decodeURIComponent(rel.replace(/&amp;/g, '&'));
+      if (seen.has(rel)) return 'src="cid:' + seen.get(rel) + '"';
+      const file = path.normalize(path.join(PUBLIC_DIR, rel)), type = IMG_TYPES[path.extname(file).toLowerCase()];
+      if (!type || !file.startsWith(PUBLIC_DIR + path.sep) || !fs.existsSync(file)) return m;
+      const size = fs.statSync(file).size;
+      if (size > 700 * 1024 || total + size > 2 * 1024 * 1024) return m; // слишком тяжёлое — оставляем ссылкой
+      const cid = 'img' + inline.length + '.' + crypto.randomBytes(6).toString('hex') + '@albakov';
+      inline.push({ cid, type, filename: path.basename(file), content: fs.readFileSync(file) }); total += size; seen.set(rel, cid);
+      return 'src="cid:' + cid + '"';
+    } catch (e) { return m; }
+  });
+  return { html: out, inline };
+}
+function sendMail(msg) { const e = embedImages(msg.html); return smtp.send(mailCfg(), Object.assign({}, msg, e)); }
+
 /* ---------------- Письма о заказе: покупателю и магазину ---------------- */
 function sendOrderMails(order) {
   if (!mailReady()) return;
@@ -336,11 +359,11 @@ function sendOrderMails(order) {
   };
   const jobs = [];
   const mc = Mail.renderOrder(Object.assign({ kind: 'customer', url: `${PUBLIC_URL}/#/order/${order.id}` }, base));
-  jobs.push(smtp.send(mailCfg(), { to: order.customer.email, subject: mc.subject, html: mc.html, text: mc.text }).then(() => { order.mailedAt = new Date().toISOString(); save(); }));
+  jobs.push(sendMail({ to: order.customer.email, subject: mc.subject, html: mc.html, text: mc.text }).then(() => { order.mailedAt = new Date().toISOString(); save(); }));
   const shopTo = cs.email || mailCfg().fromEmail;
   if (shopTo) {
     const ms = Mail.renderOrder(Object.assign({ kind: 'shop', url: `${PUBLIC_URL}/#/admin?s=orders&id=${order.id}` }, base));
-    jobs.push(smtp.send(mailCfg(), { to: shopTo, subject: ms.subject, html: ms.html, text: ms.text }));
+    jobs.push(sendMail({ to: shopTo, subject: ms.subject, html: ms.html, text: ms.text }));
   }
   Promise.allSettled(jobs).then((r) => r.forEach((x) => { if (x.status === 'rejected') console.error('Письмо о заказе не отправлено:', x.reason && x.reason.message); }));
 }
@@ -380,7 +403,7 @@ async function processWaitlist() {
       const p = db.products.find((x) => x.id === w.productId), c = p.colors.find((x) => x.id === w.colorId);
       const m = Mail.render(notifyContext(w, p, c));
       try {
-        await smtp.send(mailCfg(), { to: w.email, subject: m.subject, html: m.html, text: m.text, unsubscribe: notifyContext(w, p, c).unsubscribe });
+        await sendMail({ to: w.email, subject: m.subject, html: m.html, text: m.text, unsubscribe: notifyContext(w, p, c).unsubscribe });
         w.status = 'sent'; w.sentAt = new Date().toISOString(); delete w.error; res.sent++;
       } catch (e) { w.status = 'failed'; w.error = e.message; res.failed++; console.error('Письмо не отправлено:', w.email, e.message); }
       save();
@@ -585,7 +608,7 @@ async function api(req, res, url, body) {
         const c = pr.colors[0], ctx = notifyContext({ size: (c.sizes[0] || {}).size || '' }, pr, c);
         const m = Mail.render(ctx);
         // Ошибку почтового сервера показываем администратору как есть — по ней видно, что не так (пароль, порт, адрес)
-        try { await smtp.send(mailCfg(), { to, subject: '[Пример] ' + m.subject, html: m.html, text: m.text }); }
+        try { await sendMail({ to, subject: '[Пример] ' + m.subject, html: m.html, text: m.text }); }
         catch (e) { console.error('Пробное письмо не отправлено:', e.message); fail(502, e.message); }
         return {};
       }

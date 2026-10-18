@@ -46,7 +46,7 @@
     var t = ctx.tpl, subject = fill(t.subject, v), heading = fill(t.heading, v), button = fill(t.button, v);
     var paras = fill(t.text, v).split(/\n\s*\n/).map(function (p) { return p.trim(); }).filter(Boolean);
     var footer = fill(t.footer, v);
-    var serif = "Georgia,'Times New Roman',serif", sans = "'Helvetica Neue',Arial,sans-serif";
+    var serif = "Montserrat,'Helvetica Neue',Arial,sans-serif", sans = "Montserrat,'Helvetica Neue',Arial,sans-serif";
     var html =
       '<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark light"><title>' + esc(subject) + '</title></head>' +
       '<body style="margin:0;padding:0;background:#F4F1EB;">' +
@@ -92,7 +92,7 @@
   function renderOrder(ctx) {
     var o = ctx.order, c = o.customer, d = o.delivery || {}, money = ctx.money, shop = ctx.kind === 'shop';
     var paid = o.payment && o.payment.status === 'paid';
-    var serif = "Georgia,'Times New Roman',serif", sans = "'Helvetica Neue',Arial,sans-serif";
+    var serif = "Montserrat,'Helvetica Neue',Arial,sans-serif", sans = "Montserrat,'Helvetica Neue',Arial,sans-serif";
     var subject = shop ? 'Новый заказ № ' + o.number + ' на ' + money(o.total) : (paid ? 'Заказ № ' + o.number + ' оплачен' : 'Заказ № ' + o.number + ' принят') + ' — ' + ctx.store;
     var eyebrow = shop ? 'Новый заказ' : (paid ? 'Оплата получена' : 'Заказ принят');
     var heading = shop ? 'Заказ № ' + o.number : 'Спасибо, ' + c.firstName + '!';

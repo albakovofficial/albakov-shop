@@ -147,6 +147,8 @@ setInterval(() => {
 
 /* Защита от подбора пароля */
 const attempts = new Map();
+// Старые счётчики попыток убираем, чтобы память не росла от потока разных адресов
+setInterval(() => { const old = Date.now() - 15 * 60e3; for (const [k, a] of attempts) if (a.t < old) attempts.delete(k); }, 10 * 60e3).unref();
 // Адрес покупателя. Заголовку X-Forwarded-For верим, только если запрос пришёл от своего nginx на этом же сервере
 function clientIp(req) {
   const direct = req.socket.remoteAddress || '';
@@ -540,6 +542,7 @@ async function api(req, res, url, body) {
       try { d.update = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'update-status.json'), 'utf8')); } catch (e) { d.update = null; }
       return { data: d };
     }
+    if (p[1] === 'health' && M === 'GET') return { health: health() };
     if (p[1] === 'password' && M === 'POST') {
       if (String(body.password || '').length < 8) fail(400, 'Пароль должен быть не короче 8 символов');
       if (!pwOk(body.password)) fail(400, 'Слишком длинный пароль');
@@ -633,6 +636,23 @@ async function api(req, res, url, body) {
   fail(404, 'Не найдено');
 }
 
+/* Состояние магазина для панели: целостность базы, размеры, место на диске, давность копии */
+function health() {
+  const out = { at: new Date().toISOString(), node: process.version, uptimeH: Math.round(process.uptime() / 360) / 10, memMB: Math.round(process.memoryUsage().rss / 1048576) };
+  try {
+    flush();
+    out.db = { integrity: Object.values(store.sql.prepare('PRAGMA quick_check').get())[0] };
+    const size = (f) => { try { return fs.statSync(f).size; } catch (e) { return 0; } };
+    out.db.sizeMB = Math.round((size(DB_FILE) + size(DB_FILE + '-wal')) / 10485.76) / 100;
+    out.db.counts = {};
+    for (const r of store.sql.prepare('SELECT coll, COUNT(*) AS n FROM records GROUP BY coll').all()) out.db.counts[r.coll] = r.n;
+  } catch (e) { out.db = { integrity: 'ошибка: ' + e.message }; }
+  try { const st = fs.statfsSync(DATA_DIR); out.disk = { freeGB: Math.round(st.bavail * st.bsize / 1e8) / 10, totalGB: Math.round(st.blocks * st.bsize / 1e8) / 10 }; } catch (e) {}
+  try { let n = 0, b = 0; for (const f of fs.readdirSync(UPLOAD_DIR)) { const st = fs.statSync(path.join(UPLOAD_DIR, f)); if (st.isFile()) { n++; b += st.size; } } out.uploads = { files: n, sizeMB: Math.round(b / 10485.76) / 100 }; } catch (e) {}
+  out.mail = mailReady(); out.pay = payReady(); out.https = COOKIE_SECURE; out.publicUrl = PUBLIC_URL;
+  return out;
+}
+
 /* ---------------- HTTP ---------------- */
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.json': 'application/json', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.woff': 'font/woff', '.txt': 'text/plain; charset=utf-8' };
 function readBody(req, limit) {
@@ -653,7 +673,11 @@ function serveStatic(req, res, pathname) {
   if (rel === null || rel.includes('\0')) { res.writeHead(400); return res.end(); }
   let file = path.normalize(path.join(PUBLIC_DIR, rel));
   if (file !== PUBLIC_DIR && !file.startsWith(PUBLIC_DIR + path.sep)) { res.writeHead(403); return res.end(); }
-  if (pathname === '/' || !fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(PUBLIC_DIR, 'index.html');
+  // Скрытые файлы (.env, .git …) и несуществующие файлы с расширением — честный 404, а не главная страница
+  if (rel.split('/').some((seg) => seg.startsWith('.'))) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Не найдено'); }
+  const exists = pathname !== '/' && fs.existsSync(file) && fs.statSync(file).isFile();
+  if (!exists && path.extname(rel) && path.extname(rel) !== '.html') { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Не найдено'); }
+  if (!exists) file = path.join(PUBLIC_DIR, 'index.html');
   const ext = path.extname(file).toLowerCase();
   const cache = ext === '.html' ? 'no-cache' : file.includes(path.sep + 'uploads' + path.sep) ? 'public, max-age=31536000, immutable' : 'public, max-age=3600';
   res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': cache });
@@ -661,8 +685,8 @@ function serveStatic(req, res, pathname) {
 }
 // Откуда странице можно загружать скрипты, стили, шрифты и картинки. Скрипты — только свои
 const CSP = [
-  "default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src 'self' data: https://fonts.gstatic.com", "img-src 'self' data: blob: https:", "connect-src 'self'",
+  "default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline'",
+  "font-src 'self' data:", "img-src 'self' data: blob: https:", "connect-src 'self'",
   "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'self'"
 ].join('; ');
 const server = http.createServer(async (req, res) => {
@@ -700,6 +724,11 @@ const server = http.createServer(async (req, res) => {
     return;
   }
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); return res.end(); }
+  if (url.pathname === '/robots.txt') {
+    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=86400' });
+    return res.end('User-agent: *\nAllow: /\nDisallow: /api/\n');
+  }
+  if (url.pathname === '/favicon.ico') { res.writeHead(301, { Location: '/img/favicon.png', 'Cache-Control': 'public, max-age=86400' }); return res.end(); }
   try { serveStatic(req, res, url.pathname); } catch (e) { console.error(e); if (!res.headersSent) res.writeHead(500); res.end(); }
 });
 // Ни одна ошибка в обработке запроса не должна останавливать магазин

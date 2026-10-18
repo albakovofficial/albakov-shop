@@ -114,6 +114,19 @@ WantedBy=multi-user.target
 UNIT
   systemctl daemon-reload
   systemctl enable "$SERVICE" >/dev/null 2>&1
+  harden_nginx
+}
+
+# nginx не сообщает свою версию посторонним (заголовок Server и страницы ошибок).
+# Вызывается при установке и при каждом обновлении — безопасно повторять.
+harden_nginx() {
+  command -v nginx >/dev/null 2>&1 || return 0
+  local f=/etc/nginx/conf.d/albakov-hardening.conf
+  printf '# Магазин ALBAKOV: не показывать версию nginx\nserver_tokens off;\n' > "$f.new"
+  if [ -f "$f" ] && cmp -s "$f" "$f.new"; then rm -f "$f.new"; return 0; fi
+  mv -f "$f.new" "$f"
+  if nginx -t >/dev/null 2>&1; then systemctl reload nginx >/dev/null 2>&1 || true
+  else rm -f "$f"; nginx -t >/dev/null 2>&1 && systemctl reload nginx >/dev/null 2>&1 || true; fi
 }
 
 # Пока домен не указывает на сервер, каждые 10 минут пробуем получить сертификат HTTPS; получили — проверка выключается сама

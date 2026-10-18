@@ -164,13 +164,24 @@
     opts = opts || {};
     var now = Date.now();
     var out = { lines: [], subtotal: 0, baseTotal: 0, eligibleSubtotal: 0, count: 0, errors: [] };
+    // Одинаковые позиции (товар + цвет + размер) складываем: иначе можно было бы
+    // обойти проверку остатка, прислав одну и ту же вещь несколькими строками
+    var merged = [], seen = {};
     (lines || []).forEach(function (l) {
+      if (!l || typeof l !== 'object') return;
+      var key = [l.productId, l.colorId || '', l.size].join('\u0001');
+      var q = Math.max(1, Math.floor(Number(l.qty) || 1));
+      if (seen[key]) { seen[key].qty = Math.min(999, seen[key].qty + q); return; }
+      seen[key] = { productId: l.productId, colorId: l.colorId, size: l.size, qty: Math.min(999, q) };
+      merged.push(seen[key]);
+    });
+    merged.forEach(function (l) {
       var p = (data.products || []).find(function (x) { return x.id === l.productId; });
       if (!p || p.active === false) { out.errors.push('Товар больше недоступен'); return; }
       var col = colorOf(p, l.colorId);
       var s = (col.sizes || []).find(function (x) { return x.size === l.size; });
       var qty = Math.max(1, Math.floor(Number(l.qty) || 1));
-      var stock = s ? Number(s.stock) || 0 : 0;
+      var stock = s ? Math.max(0, Number(s.stock) || 0) : 0;
       var pr = productPrice(p, data.promotions, now);
       var line = {
         productId: p.id, slug: p.slug, name: p.name, colorId: col.id, color: col.name, colors: p.colors.length, size: l.size, qty: qty,

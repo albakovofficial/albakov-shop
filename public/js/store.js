@@ -228,6 +228,7 @@
     async adminLogin(pw) { await call('POST', 'api/admin/login', { password: pw }); this.isAdmin = true; },
     async adminLogout() { await call('POST', 'api/admin/logout'); this.isAdmin = false; },
     async adminData() { return (await call('GET', 'api/admin/data')).data; },
+    async adminHealth() { return (await call('GET', 'api/admin/health')).health; },
     async adminSave(name, value) { await call('PUT', 'api/admin/' + name, { value: value }); return true; },
     async adminUpsert(name, item) { return await call('PUT', 'api/admin/' + name + '/' + encodeURIComponent(item.id), { value: item }); },
     async subscribe(b) { return await call('POST', 'api/notify', b); },

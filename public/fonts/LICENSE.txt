@@ -1,0 +1,3 @@
+Шрифт: Montserrat (© The Montserrat Project Authors).
+Распространяется по лицензии SIL Open Font License 1.1: https://openfontlicense.org
+Файлы — кириллица и латиница, переменная насыщенность 300–600.

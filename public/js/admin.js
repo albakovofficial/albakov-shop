@@ -868,8 +868,24 @@
       '<h4 class="adm-sub">Пароль администратора</h4><div class="promo-form"><input class="input" type="password" id="newPass" placeholder="Новый пароль, от 8 символов" autocomplete="new-password" aria-label="Новый пароль"><button type="button" class="btn ghost" id="passSave">Сменить</button></div>' +
       (local ? '' : backupStatusHtml(DATA.backup)) +
       (local ? '' : updateStatusHtml(DATA.update)) +
+      (local ? '' : '<h4 class="adm-sub">Состояние магазина</h4><div id="healthBox"><p class="muted" style="font-size:14px">Проверяю…</p></div>') +
       '<h4 class="adm-sub">Резервная копия</h4><p class="muted" style="font-size:14px">Скопируйте данные магазина, чтобы сохранить их или перенести на сервер.</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn ghost sm" id="bkShow">Показать данные</button>' + (local ? '<button type="button" class="btn ghost sm" id="bkImport">Загрузить из копии</button><button type="button" class="btn ghost sm" id="demoReset">Сбросить демо-данные</button>' : '') + '</div><div id="bkBox"></div>';
     m.insertBefore(card, $('.adm-bar', m));
+    if (!local) A().API.adminHealth().then(function (h) {
+      var box = $('#healthBox'); if (!box) return;
+      var dbOk = h.db && h.db.integrity === 'ok', lowDisk = h.disk && h.disk.freeGB < 2, c = (h.db && h.db.counts) || {};
+      var num = function (n) { return String(n).replace('.', ','); };
+      var li = function (k, v, bad) { return '<div class="adm-li"><span>' + k + '</span><span class="' + (bad ? 'bad' : '') + '">' + v + '</span></div>'; };
+      box.innerHTML = '<div class="adm-list">' +
+        li('База данных', dbOk ? 'в порядке · ' + num(h.db.sizeMB) + ' МБ' : 'ошибка: ' + esc((h.db && h.db.integrity) || ''), !dbOk) +
+        li('Записей', 'заказов ' + (c.orders || 0) + ' · покупателей ' + (c.users || 0) + ' · товаров ' + (c.products || 0)) +
+        (h.uploads ? li('Фото', h.uploads.files + ' шт. · ' + num(h.uploads.sizeMB) + ' МБ') : '') +
+        (h.disk ? li('Свободно на диске', num(h.disk.freeGB) + ' из ' + num(h.disk.totalGB) + ' ГБ', lowDisk) : '') +
+        li('HTTPS', h.https ? 'включён' : 'ещё не включён', !h.https) +
+        li('Почта для писем', h.mail ? 'подключена' : 'не настроена', !h.mail) +
+        li('Онлайн-оплата', h.pay ? 'подключена' : 'не подключена') +
+        li('Работает без перезапуска', num(h.uptimeH) + ' ч') + '</div>';
+    }).catch(function (e) { var box = $('#healthBox'); if (box) box.innerHTML = '<p class="form-error">' + esc(A().errMsg(e)) + '</p>'; });
     $('#admPathGen').addEventListener('click', function () { var a = 'abcdefghijkmnpqrstuvwxyz23456789', r = 'vhod-'; for (var i = 0; i < 10; i++) r += a[Math.floor(Math.random() * a.length)]; $('#admPath').value = r; });
     $('#admPathSave').addEventListener('click', async function () {
       var slug = $('#admPath').value.trim().toLowerCase();

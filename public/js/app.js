@@ -399,7 +399,7 @@
       '</div><div class="hero-media"><img src="' + esc(heroImg) + '" alt=""></div></section>';
     if (h.showCategories !== false && D.categories.length) {
       html += '<section class="section"><div class="wrap"><div class="section-head"><h2>Категории</h2><a class="link" href="#/catalog">Весь каталог</a></div><div class="cats">' +
-        sortedCats().filter(function (c) { return gProducts().some(function (p) { return p.categoryId === c.id; }); }).map(function (c) { return '<a class="cat" href="#/catalog?cat=' + esc(c.slug) + '"><img src="' + esc(c.image || Art.make(c.art)) + '" alt="" loading="lazy"><span>' + esc(c.name) + '</span></a>'; }).join('') + '</div></div></section>';
+        sortedCats().map(function (c) { return { c: c, n: gProducts().filter(function (p) { return p.categoryId === c.id; }).length }; }).filter(function (x) { return x.n > 0; }).map(function (x) { var c = x.c; return '<a class="cat" href="#/catalog?cat=' + esc(c.slug) + '"><span class="cat-ph"><img src="' + esc(c.image || Art.make(c.art)) + '" alt="" loading="lazy"></span><span class="cat-cap"><span class="cat-name">' + esc(c.name) + '</span><span class="cat-n">' + x.n + ' ' + plural(x.n, 'модель', 'модели', 'моделей') + '</span><svg class="cat-go" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15M14 7l5 5-5 5"/></svg></span></a>'; }).join('') + '</div></div></section>';
     }
     if (h.showNew !== false) {
       var news = gProducts().filter(function (p) { return (p.tags || []).indexOf('new') !== -1; });

@@ -1,0 +1,8 @@
+node_modules/
+.env
+data/db.json
+data/*.sqlite*
+data/backup-status.json
+data/update-status.json
+public/uploads/*
+!public/uploads/.gitkeep

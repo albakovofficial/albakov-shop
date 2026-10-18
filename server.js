@@ -679,8 +679,12 @@ function serveStatic(req, res, pathname) {
   if (!exists && path.extname(rel) && path.extname(rel) !== '.html') { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Не найдено'); }
   if (!exists) file = path.join(PUBLIC_DIR, 'index.html');
   const ext = path.extname(file).toLowerCase();
-  const cache = ext === '.html' ? 'no-cache' : file.includes(path.sep + 'uploads' + path.sep) ? 'public, max-age=31536000, immutable' : 'public, max-age=3600';
-  res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': cache });
+  // Фото товаров не меняются (новое фото — новый файл) — кэшируем надолго. Остальное браузер перепроверяет
+  // при каждом заходе (ответ 304 без загрузки), поэтому новая версия сайта видна сразу после обновления
+  const immutable = file.includes(path.sep + 'uploads' + path.sep) || ext === '.woff2';
+  const st = fs.statSync(file), lm = new Date(Math.floor(st.mtimeMs / 1000) * 1000).toUTCString();
+  if (!immutable && req.headers['if-modified-since'] === lm) { res.writeHead(304, { 'Cache-Control': 'no-cache', 'Last-Modified': lm }); return res.end(); }
+  res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache', 'Last-Modified': lm });
   fs.createReadStream(file).on('error', () => res.end()).pipe(res);
 }
 // Откуда странице можно загружать скрипты, стили, шрифты и картинки. Скрипты — только свои

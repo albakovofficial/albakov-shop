@@ -204,10 +204,8 @@
   function head(title, actions, sub) { return '<div class="adm-head"><div><h1 class="serif">' + esc(title) + '</h1>' + (sub ? '<p class="muted" style="margin-top:6px;font-size:14px;max-width:70ch">' + sub + '</p>' : '') + '</div><div class="adm-actions">' + (actions || '') + '</div></div>'; }
 
   function loginView(v) {
-    var local = A().API.mode === 'local';
     v.innerHTML = '<div class="wrap"><div class="auth" style="padding-top:72px"><div style="text-align:center;display:grid;gap:12px"><span class="eyebrow">Панель управления</span><h1 class="serif" style="font-size:52px">Вход</h1></div>' +
-      '<form class="form" id="admLogin" novalidate><label class="field"><span>Пароль администратора</span><input class="input" type="password" id="adm-pass" autocomplete="current-password"></label><p class="form-error" id="admErr"></p><button class="btn block">Войти</button></form>' +
-      (local ? '<p class="demo-note">Пароль по умолчанию — <b class="copyable">admin</b>. Смените его в разделе «Настройки» сразу после входа.</p>' : '') + '</div></div>';
+      '<form class="form" id="admLogin" novalidate><label class="field"><span>Пароль администратора</span><input class="input" type="password" id="adm-pass" autocomplete="current-password"></label><p class="form-error" id="admErr"></p><button class="btn block">Войти</button></form>' + '</div></div>';
     $('#admLogin').addEventListener('submit', async function (e) {
       e.preventDefault();
       try { await A().API.adminLogin($('#adm-pass').value); DATA = null; location.hash = '#/admin?s=overview'; await A().refresh(); }
@@ -227,7 +225,6 @@
     var promosActive = DATA.promotions.filter(function (p) { return Pricing.inWindow(p, Date.now()); }).length;
     var codesActive = DATA.promocodes.filter(function (c) { return c.active; }).length;
     m.innerHTML = head('Обзор') +
-      (A().API.mode === 'local' ? '<div class="demo-note" style="margin-bottom:24px">Сайт работает в демо-режиме: изменения сохраняются только в этом браузере. Чтобы магазин заработал для покупателей и принимал оплату, запустите его на сервере — инструкция в файле README.md проекта.</div>' : '') +
       '<div class="adm-stats">' +
         stat('Новые заказы', newN, '#/admin?s=orders&f=new') + stat('Заказов сегодня', todayN, '#/admin?s=orders') + stat('Выручка, всего', fmt(revenue), '#/admin?s=orders') + stat('Покупателей', DATA.users.length, '#/admin?s=customers') +
         stat('Товаров в продаже', DATA.products.filter(function (p) { return p.active !== false; }).length, '#/admin?s=products') + stat('Активных акций', promosActive, '#/admin?s=promotions') + stat('Активных промокодов', codesActive, '#/admin?s=promocodes') +
@@ -779,9 +776,8 @@
   }
 
   function paymentSettings(m) {
-    var server = A().API.mode === 'server';
     settingsForm(m, 'Оплата, касса, доставка',
-      'Онлайн-оплата и фискальные чеки работают через ЮKassa: она передаёт данные чека в подключённую онлайн-кассу (свою или «Чеки от ЮKassa») по 54-ФЗ.' + (server ? (A().D.payReady ? ' <b>ЮKassa подключена</b> — покупатели видят онлайн-оплату.' : ' <b>Онлайн-оплата скрыта на сайте</b>, пока не выбран провайдер ЮKassa и не указаны shopId и секретный ключ — до этого покупатели видят только оплату при получении.') : ' <b>Сейчас демо-режим</b> — настройки сохранятся, а реальная оплата заработает после запуска на сервере.'), [
+      'Онлайн-оплата и фискальные чеки работают через ЮKassa: она передаёт данные чека в подключённую онлайн-кассу (свою или «Чеки от ЮKassa») по 54-ФЗ.' + (A().D.payReady ? ' <b>ЮKassa подключена</b> — покупатели видят онлайн-оплату.' : ' <b>Онлайн-оплата скрыта на сайте</b>, пока не выбран провайдер ЮKassa и не указаны shopId и секретный ключ — до этого покупатели видят только оплату при получении.'), [
       { section: 'Способы оплаты' },
       { k: 'online', label: 'Онлайн-оплата картой и СБП', type: 'checkbox' },
       { k: 'onlineLabel', label: 'Название онлайн-оплаты' },
@@ -805,15 +801,12 @@
     });
     // Секретный ключ хранится только на сервере
     var card = document.createElement('div'); card.className = 'adm-card'; card.style.marginTop = '20px';
-    card.innerHTML = '<h4 class="adm-sub" style="margin-top:0;padding-top:0;border-top:0">Секретный ключ ЮKassa</h4>' + (server
-      ? '<p class="muted" style="font-size:14px;margin-bottom:12px" id="secState">Проверяем…</p><div class="promo-form"><input class="input" id="secKey" type="password" placeholder="live_… или test_…" autocomplete="off" aria-label="Секретный ключ"><button type="button" class="btn ghost" id="secSave">Сохранить ключ</button></div><p class="muted" style="font-size:13px;margin-top:10px">Адрес для уведомлений ЮKassa (HTTP-уведомления, событие payment.succeeded и payment.canceled): <span class="copyable">' + esc(location.origin + '/api/payments/yookassa') + '</span></p>'
-      : '<p class="muted" style="font-size:14px">Ключ вводится здесь же после запуска сайта на сервере. Он хранится только на сервере и никогда не попадает в браузер покупателя.</p>');
+    card.innerHTML = '<h4 class="adm-sub" style="margin-top:0;padding-top:0;border-top:0">Секретный ключ ЮKassa</h4>' +
+      '<p class="muted" style="font-size:14px;margin-bottom:12px" id="secState">Проверяем…</p><div class="promo-form"><input class="input" id="secKey" type="password" placeholder="live_… или test_…" autocomplete="off" aria-label="Секретный ключ"><button type="button" class="btn ghost" id="secSave">Сохранить ключ</button></div><p class="muted" style="font-size:13px;margin-top:10px">Адрес для уведомлений ЮKassa (HTTP-уведомления, событие payment.succeeded и payment.canceled): <span class="copyable">' + esc(location.origin + '/api/payments/yookassa') + '</span></p>';
     m.insertBefore(card, $('.adm-bar', m));
-    if (server) {
-      var showState = function (r) { $('#secState').textContent = r.hasSecret ? 'Ключ сохранён на сервере (' + r.mask + ').' : 'Ключ ещё не задан — онлайн-оплата через ЮKassa не будет работать.'; };
-      A().API.adminSecret().then(showState).catch(function () {});
-      $('#secSave').addEventListener('click', async function () { try { showState(await A().API.adminSecret($('#secKey').value.trim())); $('#secKey').value = ''; toast('Ключ сохранён'); } catch (e) { toast(A().errMsg(e), true); } });
-    }
+    var showState = function (r) { $('#secState').textContent = r.hasSecret ? 'Ключ сохранён на сервере (' + r.mask + ').' : 'Ключ ещё не задан — онлайн-оплата через ЮKassa не будет работать.'; };
+    A().API.adminSecret().then(showState).catch(function () {});
+    $('#secSave').addEventListener('click', async function () { try { showState(await A().API.adminSecret($('#secKey').value.trim())); $('#secKey').value = ''; toast('Ключ сохранён'); } catch (e) { toast(A().errMsg(e), true); } });
   }
 
   function pages(m, q) {
@@ -839,7 +832,6 @@
   }
 
   function generalSettings(m) {
-    var local = A().API.mode === 'local';
     settingsForm(m, 'Настройки', '', [
       { k: 'storeName', label: 'Название магазина', hint: 'Логотип меняется в разделе «Логотип и название»' },
       { k: 'tagline', label: 'Слоган' },
@@ -866,12 +858,12 @@
       '<p class="muted" style="font-size:14px">Покупатели не видят ссылку «Управление»: она появляется в подвале только после вашего входа. ' + (hasPath ? 'Сейчас задан секретный адрес входа, адрес #/admin для посторонних не открывается.' : 'Сейчас вход работает по адресу <b>#/admin</b>. Задайте свой адрес, чтобы его нельзя было угадать.') + '</p>' +
       '<div class="promo-form"><input class="input" id="admPath" placeholder="Например, vhod-k7m2q" autocomplete="off" aria-label="Секретный адрес входа"><button type="button" class="btn ghost" id="admPathGen">Придумать</button><button type="button" class="btn ghost" id="admPathSave">Сохранить</button></div><div id="admPathOut"></div>' +
       '<h4 class="adm-sub">Пароль администратора</h4><div class="promo-form"><input class="input" type="password" id="newPass" placeholder="Новый пароль, от 8 символов" autocomplete="new-password" aria-label="Новый пароль"><button type="button" class="btn ghost" id="passSave">Сменить</button></div>' +
-      (local ? '' : backupStatusHtml(DATA.backup)) +
-      (local ? '' : updateStatusHtml(DATA.update)) +
-      (local ? '' : '<h4 class="adm-sub">Состояние магазина</h4><div id="healthBox"><p class="muted" style="font-size:14px">Проверяю…</p></div>') +
-      '<h4 class="adm-sub">Резервная копия</h4><p class="muted" style="font-size:14px">Скопируйте данные магазина, чтобы сохранить их или перенести на сервер.</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn ghost sm" id="bkShow">Показать данные</button>' + (local ? '<button type="button" class="btn ghost sm" id="bkImport">Загрузить из копии</button><button type="button" class="btn ghost sm" id="demoReset">Сбросить демо-данные</button>' : '') + '</div><div id="bkBox"></div>';
+      backupStatusHtml(DATA.backup) +
+      updateStatusHtml(DATA.update) +
+      '<h4 class="adm-sub">Состояние магазина</h4><div id="healthBox"><p class="muted" style="font-size:14px">Проверяю…</p></div>' +
+      '<h4 class="adm-sub">Резервная копия</h4><p class="muted" style="font-size:14px">Скопируйте данные магазина, чтобы сохранить их или перенести на сервер.</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn ghost sm" id="bkShow">Показать данные</button>' + '</div><div id="bkBox"></div>';
     m.insertBefore(card, $('.adm-bar', m));
-    if (!local) A().API.adminHealth().then(function (h) {
+    A().API.adminHealth().then(function (h) {
       var box = $('#healthBox'); if (!box) return;
       var dbOk = h.db && h.db.integrity === 'ok', lowDisk = h.disk && h.disk.freeGB < 2, c = (h.db && h.db.counts) || {};
       var num = function (n) { return String(n).replace('.', ','); };
@@ -906,19 +898,6 @@
       $('#bkText').value = JSON.stringify(d);
       $('#bkCopy').addEventListener('click', function () { var t = $('#bkText'); navigator.clipboard.writeText(t.value).then(function () { toast('Скопировано'); }).catch(function () { t.select(); toast('Выделено — нажмите Ctrl+C'); }); });
     });
-    if (local) {
-      $('#bkImport').addEventListener('click', function () {
-        $('#bkBox').innerHTML = '<textarea class="textarea" id="bkIn" rows="6" placeholder="Вставьте сюда скопированные данные" style="font-size:13px;font-family:monospace"></textarea><button type="button" class="btn sm" id="bkApply" style="margin-top:8px">Загрузить</button>';
-        $('#bkApply').addEventListener('click', async function () {
-          try {
-            var d = JSON.parse($('#bkIn').value);
-            for (var k of ['settings', 'categories', 'sizeCharts', 'products', 'promotions', 'promocodes', 'pages']) if (d[k]) await A().API.adminSave(k, d[k]);
-            await afterSave('Данные загружены');
-          } catch (e) { toast('Не получилось прочитать данные. Проверьте, что скопирован весь текст.', true); }
-        });
-      });
-      bindConfirm($('#demoReset'), async function () { await A().API.resetDemo(); location.hash = '#/'; location.reload(); });
-    }
   }
 
 
@@ -926,7 +905,7 @@
 
   /* ================= Слайдер на главной ================= */
   // Картинки шаблонов берём из стартовых слайдов: новинки, акция, первый заказ
-  function seedImg(i) { var sl = window.SEED && SEED.settings.slider && SEED.settings.slider.slides[i]; return sl ? sl.image : ''; }
+  function seedImg(i) { return ['img/slide-new.jpg', 'img/slide-sale.jpg', 'img/slide-welcome.jpg'][i] || ''; }
   var SLIDE_TPL = {
     sale: { name: 'Акция', hint: 'Связан с акцией: сам покажет скидку и срок и скроется, когда акция закончится', slide: { layout: 'full', eyebrow: 'Акция', title: 'Название\n*акции*', text: 'Коротко о том, на что скидка.', image: seedImg(1), btn1: { label: 'Смотреть товары', link: '#/sale' }, btn2: { label: 'Все акции', link: '#/sale' } } },
     welcome: { name: 'Скидка на первый заказ', hint: 'С промокодом, который покупатель копирует одним нажатием', slide: { layout: 'split', eyebrow: 'Для новых покупателей', title: '−10%\nна *первый заказ*', text: 'Зарегистрируйтесь и введите промокод при оформлении.', image: seedImg(2), code: 'WELCOME10', btn1: { label: 'Зарегистрироваться', link: '#/account?tab=register' }, btn2: { label: '', link: '' } } },
@@ -1184,11 +1163,10 @@
   }
 
   /* ================= Сообщить о поступлении ================= */
-  var W_STATUS = { waiting: ['Ждёт поступления', 'new'], failed: ['Ошибка отправки — повторим', 'canceled'], sent: ['Письмо отправлено', 'done'], demo: ['Товар поступил (демо: письмо не отправлялось)', 'processing'], canceled: ['Покупатель отменил', ''] };
+  var W_STATUS = { waiting: ['Ждёт поступления', 'new'], failed: ['Ошибка отправки — повторим', 'canceled'], sent: ['Письмо отправлено', 'done'], canceled: ['Покупатель отменил', ''] };
   function notifyMsg(base, n) {
     if (!n) return base;
     if (n.sent) return base + '. Отправлено писем о поступлении: ' + n.sent;
-    if (n.demo) return base + '. Товар ждали ' + n.demo + ' чел. — на сервере им ушли бы письма';
     if (n.ready && n.disabled) return base + '. Уведомления выключены, письма не отправлены';
     if (n.ready && n.noMail) return base + '. ' + n.ready + ' чел. ждут этот товар, но почта для отправки не настроена';
     if (n.failed) return base + '. Не удалось отправить писем: ' + n.failed;
@@ -1212,12 +1190,12 @@
 
   async function notifySection(m, q) {
     var API = A().API, tab = q.tab || 'requests', tpl = Mail.tplOf(DATA.settings);
-    var mail = { ready: false, demo: API.mode === 'local' };
+    var mail = { ready: false };
     try { mail = (await API.adminMail()).mail; } catch (e) {}
     var wl = DATA.waitlist || [];
     var waiting = wl.filter(function (w) { return w.status === 'waiting' || w.status === 'failed'; });
     var ready = Mail.readyRequests(wl, DATA.products);
-    var mailState = mail.demo ? ['Демо-режим', 'processing', 'Письма начнут уходить после запуска на сервере'] : mail.ready ? ['Настроена', 'done', esc(mail.fromEmail)] : ['Не настроена', 'canceled', 'Письма не отправляются'];
+    var mailState = mail.ready ? ['Настроена', 'done', esc(mail.fromEmail)] : ['Не настроена', 'canceled', 'Письма не отправляются'];
     m.innerHTML = head('Сообщить о поступлении', '', 'Если нужного размера или цвета нет, покупатель нажимает на сайте «Сообщить о поступлении» и оставляет почту. Когда вы пополните остаток в карточке товара и сохраните её, письмо уйдёт автоматически — один раз на каждую заявку.') +
       '<ol class="adm-steps"><li><b>Покупатель оставляет заявку</b><span>на странице товара, если размера или цвета нет</span></li><li><b>Вы пополняете остаток</b><span>в разделе «Товары», в нужном цвете и размере</span></li><li><b>Письмо уходит само</b><span>сразу после сохранения товара</span></li></ol>' +
       '<div class="adm-stats" style="margin-top:20px">' +
@@ -1225,7 +1203,7 @@
         '<a class="adm-stat" href="#/admin?s=notify&tab=mail"><span class="eyebrow">Почта для отправки</span><b class="adm-stat-sm"><span class="status ' + mailState[1] + '">' + mailState[0] + '</span></b><span class="muted" style="font-size:14px">' + mailState[2] + '</span></a>' +
         '<a class="adm-stat" href="#/admin?s=notify"><span class="eyebrow">Ждут поступления</span><b class="num">' + waiting.length + '</b></a>' +
       '</div>' +
-      (ready.length && !mail.ready && !mail.demo ? '<div class="adm-alert">' + ready.length + ' ' + plural(ready.length, 'заявка', 'заявки', 'заявок') + ': товар уже в наличии, но письма не ушли, потому что почта для отправки не настроена. <a class="link" href="#/admin?s=notify&tab=mail">Настроить почту</a></div>' : '') +
+      (ready.length && !mail.ready ? '<div class="adm-alert">' + ready.length + ' ' + plural(ready.length, 'заявка', 'заявки', 'заявок') + ': товар уже в наличии, но письма не ушли, потому что почта для отправки не настроена. <a class="link" href="#/admin?s=notify&tab=mail">Настроить почту</a></div>' : '') +
       '<div class="tabs adm-tabs">' + [['requests', 'Заявки'], ['letter', 'Текст письма'], ['mail', 'Почта для отправки']].map(function (t) { return '<a href="#/admin?s=notify&tab=' + t[0] + '" class="' + (tab === t[0] ? 'on' : '') + '">' + t[1] + '</a>'; }).join('') + '</div><div id="nBody"></div>';
     $('#nToggle').addEventListener('click', async function () {
       var s2 = clone(DATA.settings); s2.notify = Object.assign({}, tpl, { enabled: !tpl.enabled });
@@ -1239,7 +1217,7 @@
 
   function requestsTab(body, q, wl, ready, mail) {
     var f = q.f || 'waiting';
-    var match = { waiting: ['waiting', 'failed'], done: ['sent', 'demo'], canceled: ['canceled'], all: null }[f];
+    var match = { waiting: ['waiting', 'failed'], done: ['sent'], canceled: ['canceled'], all: null }[f];
     var list = wl.filter(function (w) { return !match || match.indexOf(w.status) !== -1; }).slice().reverse();
     var groups = {};
     wl.filter(function (w) { return w.status === 'waiting' || w.status === 'failed'; }).forEach(function (w) {
@@ -1278,7 +1256,7 @@
       '<div class="adm-ph">' + Mail.PLACEHOLDERS.map(function (x) { return '<button type="button" class="chip" data-ph="' + esc(x[0]) + '" title="' + esc(x[1]) + '">' + esc(x[0]) + '<small>' + esc(x[1]) + '</small></button>'; }).join('') + '</div>' +
       '<div id="ltForm">' + formHtml(defs, tpl) + '</div>' +
       '<div class="adm-bar" style="position:static;background:none;padding-bottom:0"><button class="btn" id="ltSave">Сохранить текст</button><button class="btn ghost" id="ltReset" type="button">Вернуть стандартный</button><span class="form-error" id="ltErr"></span></div>' +
-      '<div class="adm-test"><h4 class="adm-sub">Проверить письмо</h4>' + (mail.demo ? '<p class="muted" style="font-size:14px">В демо-режиме письма не отправляются. После запуска на сервере здесь можно будет отправить пример себе на почту.</p>' : '<div class="promo-form"><input class="input" id="ltTo" type="email" placeholder="Ваша почта" aria-label="Почта для примера"><button type="button" class="btn ghost" id="ltTest">Отправить пример</button></div>' + (mail.ready ? '' : '<p class="muted" style="font-size:13px;margin-top:8px">Сначала настройте почту для отправки.</p>')) + '</div></div>' +
+      '<div class="adm-test"><h4 class="adm-sub">Проверить письмо</h4>' + ('<div class="promo-form"><input class="input" id="ltTo" type="email" placeholder="Ваша почта" aria-label="Почта для примера"><button type="button" class="btn ghost" id="ltTest">Отправить пример</button></div>' + (mail.ready ? '' : '<p class="muted" style="font-size:13px;margin-top:8px">Сначала настройте почту для отправки.</p>')) + '</div></div>' +
       '<div class="adm-preview"><div class="adm-preview-head"><span class="eyebrow">Так покупатель увидит письмо</span><div class="adm-preview-subj"><span class="muted">Тема:</span> <b id="pvSubj"></b></div></div><div id="pvBox" class="adm-preview-box"></div></div></div>';
     var box = $('#ltForm', body), host = $('#pvBox', body), shadow = host.attachShadow ? host.attachShadow({ mode: 'open' }) : host, lastField = null;
     function current() { return readForm(box, defs, Object.assign({}, tpl)); }
@@ -1325,7 +1303,6 @@
       { k: 'fromName', label: 'Имя отправителя', placeholder: DATA.settings.storeName }
     ];
     body.innerHTML = '<div class="adm-card"><p class="muted" style="font-size:14px;max-width:70ch;margin-bottom:16px">Письма уходят с вашего почтового ящика. Лучше всего — ящик на домене магазина в <b>Яндекс 360</b> или <b>Mail.ru для бизнеса</b>, например <span class="copyable">shop@albakov.ru</span>: такие письма реже попадают в спам.</p>' +
-      (mail.demo ? '<p class="demo-note" style="margin-bottom:16px">Демо-режим: настройки сохранятся, но письма отправляет только сервер. Пароль здесь не сохраняется — введите его после запуска сайта на сервере.</p>' : '') +
       '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px"><span class="muted" style="font-size:14px;align-self:center">Заполнить для:</span><button type="button" class="btn ghost sm" data-preset="yandex">Яндекс 360</button><button type="button" class="btn ghost sm" data-preset="mailru">Mail.ru</button></div>' +
       '<div id="mlForm">' + formHtml(defs, Object.assign({}, mail, { pass: '' })) + '</div>' +
       '<div class="adm-bar" style="position:static;background:none;padding-bottom:0"><button class="btn" id="mlSave">Сохранить</button><span class="form-error" id="mlErr"></span></div></div>';
@@ -1337,7 +1314,7 @@
       var m = readForm(box, defs, {});
       if (!m.host || !m.user) { $('#mlErr').textContent = 'Укажите сервер и логин'; return; }
       if (!m.fromEmail) m.fromEmail = m.user;
-      try { await A().API.adminMailSave(m); toast(mail.demo ? 'Настройки сохранены в демо-режиме' : 'Настройки почты сохранены. Проверьте их: «Текст письма» → «Отправить пример».'); location.hash = '#/admin?s=notify&tab=mail&t=' + Date.now(); } catch (e) { $('#mlErr').textContent = A().errMsg(e); }
+      try { await A().API.adminMailSave(m); toast('Настройки почты сохранены. Проверьте их: «Текст письма» → «Отправить пример».'); location.hash = '#/admin?s=notify&tab=mail&t=' + Date.now(); } catch (e) { $('#mlErr').textContent = A().errMsg(e); }
     });
   }
 

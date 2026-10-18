@@ -110,14 +110,14 @@
           '<button class="icon-btn" data-act="search" aria-label="Поиск">' + ICON.search + '</button>' +
           '<a class="icon-btn hide-m acc-link" id="accLink" href="#/account" aria-label="Личный кабинет">' + ICON.user + '</a>' +
           '<button class="icon-btn" data-act="cart" aria-label="Корзина">' + ICON.bag + '<span class="badge-count" id="cartCount" hidden></span></button>' +
-        '</div></div><div class="gbar">' + genderTabs('gtabs-bar') + '</div><span class="hdr-progress" id="hdrProgress" aria-hidden="true"></span></header>' +
+        '</div></div><div class="gbar">' + genderTabs('gtabs-bar') + '</div></header>' +
       '<main id="view"></main>' +
       footerHtml() +
       '<div class="scrim" id="scrim"></div>' +
       '<aside class="drawer left" id="menuDrawer" aria-label="Меню"><div class="drawer-head"><a class="logo" href="#/" aria-label="' + esc(s.storeName) + '">' + brandHtml(s, 'mobile', 'brand-drawer') + '</a><button class="icon-btn" data-act="close">' + ICON.close + '</button></div>' +
         '<div class="drawer-body">' + genderTabs('gtabs-drawer') + '<nav class="mnav">' + navLinks() + '<a href="#/account">Личный кабинет</a></nav>' +
         '<div class="mnav-sub">' + sortedCats().map(function (c) { return '<a href="#/catalog?cat=' + esc(c.slug) + '">' + esc(c.name) + '</a>'; }).join('') + '</div>' +
-        '<div class="socials">' + socialsHtml() + '</div></div></aside>' +
+        socialsHtml() + '</div></aside>' +
       '<aside class="drawer right" id="cartDrawer" aria-label="Корзина"><div class="drawer-head"><h3>Корзина</h3><button class="icon-btn" data-act="close">' + ICON.close + '</button></div><div class="drawer-body" id="cartBody"></div><div class="drawer-foot" id="cartFoot"></div></aside>' +
       '<div class="modal" id="modal" role="dialog" aria-modal="true"><div class="modal-box"><button class="icon-btn modal-close" data-act="close">' + ICON.close + '</button><div id="modalBody"></div></div></div>' +
       '<div class="toast-wrap" aria-live="polite"></div>' +
@@ -148,12 +148,29 @@
   // Ссылки из настроек: только адреса сайта, https, почта и телефон — «javascript:» и подобное отбрасываем
   function safeUrl(u) { u = String(u || '').trim(); return /^(https?:\/\/|#|\/|mailto:|tel:)/i.test(u) || /^[\w.-]+(\/|$|\?|#)/.test(u) && !/^[\w.+-]+:/.test(u) ? u : '#/'; }
   function navLinks() { return (D.settings.nav || []).map(function (n) { return '<a href="' + esc(safeUrl(n.link)) + '">' + esc(n.label) + '</a>'; }).join(''); }
-  function socialsHtml() { return (D.settings.socials || []).filter(function (x) { return x.url; }).map(function (x) { return '<a href="' + esc(safeUrl(x.url)) + '" target="_blank" rel="noopener">' + esc(x.name) + '</a>'; }).join(''); }
+  /* Соцсети: подпись «Социальные сети», под ней ссылки с цветными значками */
+  var SOC_ICON = {
+    telegram: '<svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="16" fill="#2AABEE"/><path fill="#fff" d="M7.4 15.6l15.5-6c.7-.3 1.4.2 1.1 1.3l-2.6 12.4c-.2.9-.7 1.1-1.4.7l-4-2.9-1.9 1.9c-.2.2-.4.4-.8.4l.3-4.1 7.4-6.7c.3-.3-.1-.4-.5-.2l-9.1 5.8-3.9-1.2c-.9-.3-.9-.9.2-1.4z"/></svg>',
+    vk: '<svg viewBox="0 0 32 32"><rect width="32" height="32" rx="9" fill="#0077FF"/><path fill="#fff" d="M17 22.3c-6.6 0-10.4-4.5-10.5-12.1h3.3c.1 5.6 2.5 7.9 4.5 8.4v-8.4h3.1v4.8c1.9-.2 4-2.4 4.6-4.8h3.1c-.5 2.9-2.7 5.1-4.2 6 1.5.7 4 2.6 4.9 6.1h-3.4c-.7-2.3-2.6-4.1-5-4.3v4.3h-.4z"/></svg>',
+    instagram: '<svg viewBox="0 0 32 32"><defs><radialGradient id="igG" cx="30%" cy="107%" r="150%"><stop offset="0" stop-color="#FDF497"/><stop offset=".05" stop-color="#FDF497"/><stop offset=".45" stop-color="#FD5949"/><stop offset=".6" stop-color="#D6249F"/><stop offset=".9" stop-color="#285AEB"/></radialGradient></defs><rect width="32" height="32" rx="9" fill="url(#igG)"/><rect x="8" y="8" width="16" height="16" rx="4.8" fill="none" stroke="#fff" stroke-width="1.9"/><circle cx="16" cy="16" r="3.9" fill="none" stroke="#fff" stroke-width="1.9"/><circle cx="21.1" cy="10.9" r="1.2" fill="#fff"/></svg>',
+    other: '<svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="16" fill="#1d1d1f"/><path fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" d="M14.2 17.8l3.6-3.6M13 15.4l-1.6 1.6a3 3 0 004.2 4.2l1.6-1.6M19 16.6l1.6-1.6a3 3 0 00-4.2-4.2L14.8 12.4"/></svg>'
+  };
+  function socialKind(x) {
+    var t = (String(x.url || '') + ' ' + String(x.name || '')).toLowerCase();
+    return /t\.me|telegram|телеграм/.test(t) ? 'telegram' : /vk\.com|vk\.ru|вконтакте|\bvk\b/.test(t) ? 'vk' : /instagram|инстаграм/.test(t) ? 'instagram' : 'other';
+  }
+  function socialsHtml() {
+    var list = (D.settings.socials || []).filter(function (x) { return x.url; });
+    if (!list.length) return '';
+    return '<div class="socials"><h4 class="socials-title">Социальные сети</h4><ul>' + list.map(function (x) {
+      return '<li><a href="' + esc(safeUrl(x.url)) + '" target="_blank" rel="noopener"><span class="soc-ic" aria-hidden="true">' + SOC_ICON[socialKind(x)] + '</span><span>' + esc(x.name) + '</span></a></li>';
+    }).join('') + '</ul></div>';
+  }
   function footerHtml() {
     var s = D.settings, c = s.contacts || {};
     var pages = function (g) { return D.pages.filter(function (p) { return p.inFooter && (p.group || 'help') === g; }).map(function (p) { return '<li><a href="#/page/' + esc(p.slug) + '">' + esc(p.title) + '</a></li>'; }).join(''); };
     return '<footer class="footer">' + footerMark() + '<div class="wrap footer-top">' +
-      '<div><a class="logo logo-foot" href="#/" aria-label="' + esc(s.storeName) + '">' + brandHtml(s, 'desktop', 'brand-foot') + '</a><p class="muted" style="margin-top:16px;max-width:34ch">' + esc(s.tagline || '') + '</p><div class="socials">' + socialsHtml() + '</div></div>' +
+      '<div><a class="logo logo-foot" href="#/" aria-label="' + esc(s.storeName) + '">' + brandHtml(s, 'desktop', 'brand-foot') + '</a><p class="muted" style="margin-top:16px;max-width:34ch">' + esc(s.tagline || '') + '</p>' + socialsHtml() + '</div>' +
       '<div><h4>Магазин</h4><ul>' + sortedCats().map(function (x) { return '<li><a href="#/catalog?cat=' + esc(x.slug) + '">' + esc(x.name) + '</a></li>'; }).join('') + '<li><a href="#/sale">Акции</a></li></ul></div>' +
       '<div><h4>Покупателям</h4><ul>' + pages('help') + '<li><a href="#/sizes">Таблица размеров</a></li><li><a href="#/account">Личный кабинет</a></li>' + pages('brand') + '</ul></div>' +
       '<div><h4>Контакты</h4><ul>' +
@@ -228,7 +245,6 @@
     document.body.classList.toggle('hero-under', !!$('#view > .slider:first-child'));
     syncHeaderH();
     v.classList.remove('view-in'); void v.offsetWidth; v.classList.add('view-in');
-    reveal(v);
     if (!routeKeepScroll) window.scrollTo(0, 0);
     routeKeepScroll = false;
   }
@@ -242,29 +258,15 @@
   }
   window.addEventListener('resize', syncHeaderH);
 
-  /* ---------- Плавное появление блоков при прокрутке ---------- */
-  var RV_SEL = '.section-head, .card, .cat, .promo-band, .bonus-band, .editorial > *, .benefit, .prose > *, .order-card, .step, .how-measure > div, .table-wrap';
-  var io = ('IntersectionObserver' in window) ? new IntersectionObserver(function (es) {
-    es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
-  }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 }) : null;
-  function reveal(box) {
-    if (!io || !box || box.closest('.adm-main')) return;
-    $$(RV_SEL, box).forEach(function (el, i) {
-      if (el.classList.contains('rv') || el.closest('.adm, .modal, .drawer')) return;
-      el.classList.add('rv');
-      if (el.classList.contains('card') || el.classList.contains('cat')) el.style.setProperty('--d', ((Array.prototype.indexOf.call(el.parentNode.children, el) % 4) * 70) + 'ms');
-      io.observe(el);
-    });
-  }
   /* ---------- 3D: наклон за курсором (только мышь) ---------- */
-  var TILT_SEL = '.card .ph, .cat, .promo-band, .editorial .media';
+  var TILT_SEL = '.card .ph, .cat-ph, .promo-band, .editorial .media';
   function initTilt() {
     if (!(window.matchMedia && matchMedia('(hover: hover) and (pointer: fine)').matches)) return;
     var cur = null;
     function reset(el) { el.style.transition = 'transform .8s cubic-bezier(.2,.7,.2,1)'; el.style.transform = ''; el.classList.remove('tilting'); }
     document.addEventListener('pointermove', function (e) {
       var el = e.target.closest ? e.target.closest(TILT_SEL) : null;
-      if (el && (el.closest('.adm-main, .modal, .drawer') || (el.classList.contains('rv') && !el.classList.contains('in')))) el = null;
+      if (el && (el.closest('.adm-main, .modal, .drawer'))) el = null;
       if (cur && cur !== el) reset(cur);
       cur = el; if (!el) return;
       var r = el.getBoundingClientRect(), x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
@@ -399,7 +401,7 @@
       '</div><div class="hero-media"><img src="' + esc(heroImg) + '" alt=""></div></section>';
     if (h.showCategories !== false && D.categories.length) {
       html += '<section class="section"><div class="wrap"><div class="section-head"><h2>Категории</h2><a class="link" href="#/catalog">Весь каталог</a></div><div class="cats">' +
-        sortedCats().map(function (c) { return { c: c, n: gProducts().filter(function (p) { return p.categoryId === c.id; }).length }; }).filter(function (x) { return x.n > 0; }).map(function (x) { var c = x.c; return '<a class="cat" href="#/catalog?cat=' + esc(c.slug) + '"><span class="cat-ph"><img src="' + esc(c.image || Art.make(c.art)) + '" alt="" loading="lazy"></span><span class="cat-cap"><span class="cat-name">' + esc(c.name) + '</span><span class="cat-n">' + x.n + ' ' + plural(x.n, 'модель', 'модели', 'моделей') + '</span><svg class="cat-go" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15M14 7l5 5-5 5"/></svg></span></a>'; }).join('') + '</div></div></section>';
+        sortedCats().filter(function (c) { return gProducts().some(function (p) { return p.categoryId === c.id; }); }).map(function (c) { return '<a class="cat" href="#/catalog?cat=' + esc(c.slug) + '"><span class="cat-ph"><img src="' + esc(c.image || Art.make(c.art)) + '" alt="" loading="lazy"></span><span class="cat-cap"><span class="cat-name">' + esc(c.name) + '</span><svg class="cat-go" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15M14 7l5 5-5 5"/></svg></span></a>'; }).join('') + '</div></div></section>';
     }
     if (h.showNew !== false) {
       var news = gProducts().filter(function (p) { return (p.tags || []).indexOf('new') !== -1; });
@@ -550,7 +552,6 @@
       list.sort(function (a, b) { return (totalStock(a) === 0) - (totalStock(b) === 0); });
       $('#found').textContent = list.length + ' ' + plural(list.length, 'товар', 'товара', 'товаров');
       $('#results').innerHTML = list.length ? list.map(card).join('') : '<div class="empty" style="grid-column:1/-1"><h3>Ничего не нашлось</h3><p>Попробуйте изменить фильтры</p></div>';
-      reveal($('#results'));
       // Выбранные фильтры — чипами над товарами, каждый снимается одним нажатием
       var chips = [];
       if (cat) chips.push(['cat', cat.name]);
@@ -808,7 +809,7 @@
   function checkout(v) {
     if (!Cart.get().length) { v.innerHTML = '<div class="wrap"><div class="empty"><h3>Корзина пуста</h3><a class="btn ghost" href="#/catalog">В каталог</a></div></div>'; return; }
     var s = D.settings, u = API.user || {}, methods = (s.delivery && s.delivery.methods) || [], pay = Object.assign({}, s.payment || {});
-    if (API.mode === 'server' && !D.payReady) pay.online = false; // ЮKassa ещё не подключена — онлайн-оплату не предлагаем
+    if (!D.payReady) pay.online = false; // ЮKassa ещё не подключена — онлайн-оплату не предлагаем
     var st = { deliveryId: methods[0] && methods[0].id, payment: pay.online ? 'online' : 'cod', code: '', useBonus: false };
     v.innerHTML = '<div class="wrap"><div class="page-head"><div class="crumbs"><a href="#/cart">Корзина</a><span>/</span><span>Оформление</span></div><h1>Оформление заказа</h1></div>' +
       '<form class="checkout" id="coForm" novalidate><div>' +
@@ -827,7 +828,7 @@
         (!pay.online && !pay.cod ? '<p class="demo-note">Оформление заказов временно недоступно — свяжитесь с нами по телефону из раздела «Контакты».</p>' : '') +
         (pay.cod ? '<label class="option"><input type="radio" name="pay" value="cod"><span><b>' + esc(pay.codLabel || 'При получении') + '</b><small>Картой или наличными курьеру и в пункте выдачи</small></span><span></span></label>' : '') + '</div>' +
         '<p class="demo-note bonus-paid" id="bonusPaid" hidden>Заказ полностью оплачен бонусами — платить ничего не нужно.</p>' +
-        (API.mode === 'local' ? '<p class="demo-note" style="margin-top:16px">Демо-режим: деньги не списываются. Онлайн-оплата через ЮKassa и чеки онлайн-кассы работают, когда сайт запущен на сервере.</p>' : '') + '</div>' +
+        '</div>' +
       '</div><aside class="summary"><h3 class="serif" style="font-size:28px">Ваш заказ</h3><div id="coSum"></div>' +
         '<div class="promo-form"><input class="input" id="co-code" placeholder="Промокод" autocomplete="off" aria-label="Промокод"><button type="button" class="btn ghost" id="applyCode">Применить</button></div><div class="promo-msg" id="promoMsg"></div>' +
         '<div id="coBonus"></div><div id="coTotals" style="display:grid;gap:10px"></div>' +
@@ -922,7 +923,7 @@
       var o = await API.getOrder(parts[1]);
       var payLabel = o.payment.method === 'bonus' ? 'Оплачен бонусами' : o.payment.method === 'online' ? PAY[o.payment.status] : 'Оплата при получении';
       v.innerHTML = '<div class="wrap"><div class="success"><span class="eyebrow">Заказ № ' + esc(o.number) + '</span><h1>Спасибо за заказ</h1>' +
-        '<p class="muted" style="max-width:46ch">' + (API.mode === 'server' && D.mailReady ? 'Подтверждение придёт на ' + esc(o.customer.email) + (o.payment.method === 'online' && o.payment.status !== 'paid' ? ' после оплаты' : '') + '. ' : '') + 'Мы свяжемся по телефону ' + esc(fmtPhone(o.customer.phone)) + ', чтобы согласовать доставку.</p>' +
+        '<p class="muted" style="max-width:46ch">' + (D.mailReady ? 'Подтверждение придёт на ' + esc(o.customer.email) + (o.payment.method === 'online' && o.payment.status !== 'paid' ? ' после оплаты' : '') + '. ' : '') + 'Мы свяжемся по телефону ' + esc(fmtPhone(o.customer.phone)) + ', чтобы согласовать доставку.</p>' +
         '<div style="display:flex;gap:18px;flex-wrap:wrap;justify-content:center"><span class="status ' + esc(o.status) + '">' + esc(STATUS[o.status] || o.status) + '</span><span class="status ' + esc(o.payment.status) + '">' + esc(payLabel) + '</span></div>' +
         '<div class="order-card" style="width:100%;text-align:left">' + o.items.map(function (i) { return '<div class="mini-line"><img src="' + esc(i.image || Art.make(i.art)) + '" alt=""><div><div>' + esc(i.name) + '</div><div class="sub">' + (i.color ? esc(i.color) + ' · ' : '') + esc(i.size) + ' · ' + i.qty + ' шт.</div></div><span class="num">' + fmt(i.price * i.qty) + '</span></div>'; }).join('') +
           (o.promoDiscount ? '<div class="sum-row disc"><span>Промокод ' + esc(o.promoCode) + '</span><span>−' + fmt(o.promoDiscount) + '</span></div>' : '') +
@@ -1120,8 +1121,7 @@
 
   /* ---------- Обновление данных после правок в админке ---------- */
   async function refresh() {
-    if (API.mode === 'local') D = API.publicState();
-    else { try { var r = await fetch('api/state', { credentials: 'same-origin' }); var j = await r.json(); if (j.ok) D = j.data; } catch (e) {} }
+    try { var r = await fetch('api/state', { credentials: 'same-origin' }); var j = await r.json(); if (j.ok) D = j.data; } catch (e) {}
     window.App.D = D;
     var scroll = window.scrollY; renderShell(); routeKeepScroll = true; route(); window.scrollTo(0, scroll);
   }
@@ -1169,13 +1169,12 @@
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closePanels(); });
     document.addEventListener('cart:change', function () { updateCartCount(); if ($('#cartDrawer.open')) renderCartDrawer(); if (cartPageDraw && parseHash().parts[0] === 'cart') cartPageDraw(); });
     bindLines(document);
-    // Шапка сжимается при прокрутке, полоска показывает, сколько страницы прочитано
+    // Шапка сжимается при прокрутке
     var ticking = false;
     function onScroll() {
       ticking = false;
-      var y = window.scrollY, h = document.documentElement.scrollHeight - innerHeight;
+      var y = window.scrollY;
       var hd = $('.header'); if (hd) hd.classList.toggle('scrolled', y > 24);
-      var pg = $('#hdrProgress'); if (pg) pg.style.transform = 'scaleX(' + (h > 0 ? Math.min(1, y / h) : 0) + ')';
       var tt = $('#toTop'); if (tt) tt.hidden = y < 900;
     }
     window.addEventListener('scroll', function () { if (!ticking) { ticking = true; requestAnimationFrame(onScroll); } }, { passive: true });

@@ -79,6 +79,9 @@ sync_code() {
   rsync -a --ignore-existing "$src/data/" "$APP_DIR/data/" 2>/dev/null || true
   rsync -a --ignore-existing "$src/public/uploads/" "$APP_DIR/public/uploads/" 2>/dev/null || true
   chown -R root:root "$APP_DIR"
+  # Права на код: всё читаемо для сайта (исходник мог прийти с закрытыми правами, например из git-клона только для root)
+  chmod 755 "$APP_DIR"
+  find "$APP_DIR" \( -path "$APP_DIR/data" -o -path "$APP_DIR/public/uploads" -o -path "$APP_DIR/.env" \) -prune -o -exec chmod u=rwX,go=rX {} +
   chown -R "$APP_USER:$APP_USER" "$APP_DIR/data" "$APP_DIR/public/uploads"
   if [ -f "$APP_DIR/.env" ]; then chown "root:$APP_USER" "$APP_DIR/.env"; chmod 640 "$APP_DIR/.env"; fi
 }

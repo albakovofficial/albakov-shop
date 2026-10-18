@@ -30,6 +30,7 @@ printf '%s' "$BRANCH" | grep -qE '^[A-Za-z0-9_./-]+$' || { echo "BRANCH указ
 mkdir -p "$STATE_DIR"; chmod 700 "$STATE_DIR"
 export GIT_SSH_COMMAND="ssh -i $DEPLOY_KEY -o IdentitiesOnly=yes -o UserKnownHostsFile=$STATE_DIR/known_hosts -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=20"
 export GIT_TERMINAL_PROMPT=0
+umask 022
 
 ts()  { date '+%F %T'; }
 log() { printf '%s  %s\n' "$(ts)" "$*"; }

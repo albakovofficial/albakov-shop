@@ -1176,8 +1176,7 @@ input[type="range"] { accent-color: var(--accent); width: 100%; }
   .si-price { font-size: 13px; }
 }
 
-/* ---------- Главная: «Ателье» — фото до края экрана, заголовок заходит на фото ---------- */
-/* Заголовок белый в режиме «разница»: на белом фоне он чёрный, на тёмном фото — светлый */
+/* ---------- Главная: «Ателье» — фото до левого края экрана, текст в своей колонке ---------- */
 .atelier-sec { background: var(--bg); isolation: isolate; overflow: hidden; }
 .atelier { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); align-items: center; }
 .atelier-media { position: relative; margin: 0; margin-left: calc(-1 * max(var(--gutter), env(safe-area-inset-left, 0px)) - max(0px, (100vw - var(--maxw)) / 2)); height: clamp(520px, 86vh, 880px); overflow: hidden; background: var(--surface); }
@@ -1187,7 +1186,7 @@ input[type="range"] { accent-color: var(--accent); width: 100%; }
 .atelier-media.pre.in { clip-path: inset(0); transition: clip-path 1.4s cubic-bezier(.77, 0, .18, 1); }
 .atelier-media.pre.in img { transform: none; transition: transform 2.4s var(--ease); }
 .atelier-copy { position: relative; display: grid; justify-items: start; min-width: 0; padding-block: clamp(32px, 4vw, 64px); padding-left: clamp(32px, 5vw, 88px); }
-.atelier-copy h2 { margin: 22px 0 30px calc(-1 * clamp(120px, 19vw, 300px)); font-family: var(--serif); font-weight: 300; font-size: clamp(56px, 7.2vw, 118px); line-height: .94; letter-spacing: -.035em; color: #fff; mix-blend-mode: difference; text-wrap: balance; }
+.atelier-copy h2 { max-width: 100%; margin: 20px 0 28px; font-family: var(--serif); font-weight: 300; font-size: clamp(40px, 5vw, 84px); line-height: 1; letter-spacing: -.03em; color: var(--text); text-wrap: balance; overflow-wrap: break-word; }
 .atelier-copy p { max-width: 40ch; font-size: 16px; line-height: 1.75; color: var(--muted); white-space: pre-line; }
 /* шов: строчка пунктиром, «прошивается» при появлении */
 .atelier-seam { display: block; width: min(100%, 280px); height: 2px; margin: 36px 0 24px; background: linear-gradient(90deg, var(--text) 0 7px, transparent 7px 12px) repeat-x; background-size: 12px 1px; background-position: 0 50%; }
@@ -1197,7 +1196,7 @@ input[type="range"] { accent-color: var(--accent); width: 100%; }
   .atelier { grid-template-columns: minmax(0, 1fr); }
   .atelier-media { margin-right: calc(-1 * max(var(--gutter), env(safe-area-inset-right, 0px))); height: auto; aspect-ratio: 4 / 5; }
   .atelier-copy { padding: 30px 0 0; }
-  .atelier-copy h2 { margin: 14px 0 18px; color: var(--text); mix-blend-mode: normal; font-size: clamp(38px, 11vw, 52px); }
+  .atelier-copy h2 { margin: 14px 0 18px; font-size: clamp(38px, 11vw, 52px); }
   .atelier-seam { margin: 26px 0 20px; }
 }
 

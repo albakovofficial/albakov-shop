@@ -19,8 +19,10 @@
   function art(spec, w, h) {
     spec = spec || { kind: 'tee', tone: '#3a3632' };
     var tone = spec.tone || '#3a3632', shape = SHAPES[spec.kind] || SHAPES.tee;
+    var hi = '#f8f6f2', lo = '#e4e0d8';
+    try { var cs = getComputedStyle(document.documentElement); hi = cs.getPropertyValue('--art-hi').trim() || hi; lo = cs.getPropertyValue('--art-lo').trim() || lo; } catch (e) {}
     var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 400" preserveAspectRatio="xMidYMid slice">' +
-      '<defs><radialGradient id="g" cx="50%" cy="38%" r="75%"><stop offset="0" stop-color="#f8f6f2"/><stop offset="1" stop-color="#e4e0d8"/></radialGradient>' +
+      '<defs><radialGradient id="g" cx="50%" cy="38%" r="75%"><stop offset="0" stop-color="' + hi + '"/><stop offset="1" stop-color="' + lo + '"/></radialGradient>' +
       '<linearGradient id="t" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="' + shade(tone, 1.25) + '"/><stop offset="1" stop-color="' + shade(tone, 0.78) + '"/></linearGradient></defs>' +
       '<rect width="300" height="400" fill="url(#g)"/>' +
       '<ellipse cx="150" cy="364" rx="96" ry="9" fill="rgba(20,20,22,.14)"/>' +

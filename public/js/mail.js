@@ -49,25 +49,25 @@
     var serif = "Montserrat,'Helvetica Neue',Arial,sans-serif", sans = "Montserrat,'Helvetica Neue',Arial,sans-serif";
     var html =
       '<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark light"><title>' + esc(subject) + '</title></head>' +
-      '<body style="margin:0;padding:0;background:#F4F1EB;">' +
+      '<body style="margin:0;padding:0;background:#F3F4F6;">' +
       '<div style="display:none;max-height:0;overflow:hidden;opacity:0">' + esc(v.product + ' — ' + v.color + ', ' + v.size) + '</div>' +
-      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#F4F1EB;"><tr><td align="center" style="padding:40px 16px;">' +
+      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#F3F4F6;"><tr><td align="center" style="padding:40px 16px;">' +
       '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;">' +
         '<tr><td align="center" style="padding:0 0 36px;font-family:' + serif + ';font-size:28px;letter-spacing:9px;color:#141414;">' +
           (ctx.logo ? '<img src="' + esc(ctx.logo.src) + '" alt="' + esc(ctx.store) + '" height="' + (ctx.logo.w / ctx.logo.h > 4 ? 18 : 44) + '" width="' + Math.round((ctx.logo.w / ctx.logo.h > 4 ? 18 : 44) * ctx.logo.w / ctx.logo.h) + '" style="display:block;border:0;">' : esc(String(ctx.store || '').toUpperCase())) + '</td></tr>' +
-        '<tr><td style="background:#FFFFFF;border:1px solid #DDDAD3;">' +
+        '<tr><td style="background:#FFFFFF;border:1px solid #E3E6EA;">' +
           '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">' +
           (ctx.image ? '<tr><td style="padding:0;"><img src="' + esc(ctx.image) + '" width="560" alt="' + esc(v.product) + '" style="display:block;width:100%;max-width:560px;height:auto;border:0;"></td></tr>' : '') +
           '<tr><td style="padding:40px 40px 8px;">' +
-            '<div style="font-family:' + sans + ';font-size:12px;letter-spacing:3px;text-transform:uppercase;color:#3B3B3F;">Снова в наличии</div>' +
+            '<div style="font-family:' + sans + ';font-size:12px;letter-spacing:3px;text-transform:uppercase;color:#2A3036;">Снова в наличии</div>' +
             '<h1 style="margin:14px 0 18px;font-family:' + serif + ';font-weight:400;font-size:36px;line-height:1.1;color:#141414;">' + esc(heading) + '</h1>' +
-            paras.map(function (p) { return '<p style="margin:0 0 14px;font-family:' + sans + ';font-size:15px;line-height:1.65;color:#2B2B2E;">' + esc(p).replace(/\n/g, '<br>') + '</p>'; }).join('') +
+            paras.map(function (p) { return '<p style="margin:0 0 14px;font-family:' + sans + ';font-size:15px;line-height:1.65;color:#2A3036;">' + esc(p).replace(/\n/g, '<br>') + '</p>'; }).join('') +
           '</td></tr>' +
           '<tr><td style="padding:16px 40px 8px;">' +
-            '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid #DDDAD3;border-bottom:1px solid #DDDAD3;"><tr>' +
+            '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid #E3E6EA;border-bottom:1px solid #E3E6EA;"><tr>' +
               '<td style="padding:18px 0;font-family:' + sans + ';color:#141414;font-size:15px;">' + esc(v.product) +
                 '<div style="margin-top:6px;font-size:14px;color:#4A4A4F;">' +
-                  (ctx.colorHex ? '<span style="display:inline-block;width:10px;height:10px;border-radius:5px;background:' + esc(ctx.colorHex) + ';vertical-align:middle;margin-right:6px;border:1px solid #BDBAB4;"></span>' : '') +
+                  (ctx.colorHex ? '<span style="display:inline-block;width:10px;height:10px;border-radius:5px;background:' + esc(ctx.colorHex) + ';vertical-align:middle;margin-right:6px;border:1px solid #C2C7CD;"></span>' : '') +
                   esc(v.color) + ' · размер ' + esc(v.size) + '</div></td>' +
               '<td align="right" style="padding:18px 0;font-family:' + sans + ';font-size:15px;color:#141414;white-space:nowrap;">' + esc(v.price) +
                 (ctx.oldPrice ? '<div style="margin-top:6px;font-size:14px;color:#626267;text-decoration:line-through;">' + esc(ctx.oldPrice) + '</div>' : '') + '</td>' +
@@ -75,7 +75,7 @@
           '</td></tr>' +
           '<tr><td style="padding:28px 40px 44px;">' +
             '<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td style="background:#141414;">' +
-              '<a href="' + esc(ctx.url) + '" style="display:inline-block;padding:16px 34px;font-family:' + sans + ';font-size:13px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;color:#F4F1EB;text-decoration:none;">' + esc(button) + '</a>' +
+              '<a href="' + esc(ctx.url) + '" style="display:inline-block;padding:16px 34px;font-family:' + sans + ';font-size:13px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;color:#F3F4F6;text-decoration:none;">' + esc(button) + '</a>' +
             '</td></tr></table>' +
           '</td></tr>' +
           '</table>' +
@@ -101,10 +101,10 @@
       : 'Ваш заказ № ' + o.number + (paid ? ' оплачен и передан в сборку.' : ' принят.') + ' Мы свяжемся с вами по телефону, чтобы согласовать доставку.';
     var row = function (l, r, strong) { return '<tr><td style="padding:6px 0;font-family:' + sans + ';font-size:' + (strong ? 17 : 15) + 'px;color:' + (strong ? '#141414' : '#4A4A4F') + ';">' + esc(l) + '</td><td align="right" style="padding:6px 0;font-family:' + sans + ';font-size:' + (strong ? 17 : 15) + 'px;color:#141414;white-space:nowrap;">' + esc(r) + '</td></tr>'; };
     var items = o.items.map(function (i) {
-      return '<tr>' + (i.image ? '<td style="padding:14px 0;border-bottom:1px solid #DDDAD3;" width="64"><img src="' + esc(i.image) + '" width="52" height="69" alt="" style="display:block;border:0;object-fit:cover;background:#ECE8E1;"></td>' : '') +
-        '<td style="padding:14px ' + (i.image ? '12px' : '12px 14px 0') + ';border-bottom:1px solid #DDDAD3;font-family:' + sans + ';font-size:15px;color:#141414;">' + esc(i.name) +
+      return '<tr>' + (i.image ? '<td style="padding:14px 0;border-bottom:1px solid #E3E6EA;" width="64"><img src="' + esc(i.image) + '" width="52" height="69" alt="" style="display:block;border:0;object-fit:cover;background:#ECE8E1;"></td>' : '') +
+        '<td style="padding:14px ' + (i.image ? '12px' : '12px 14px 0') + ';border-bottom:1px solid #E3E6EA;font-family:' + sans + ';font-size:15px;color:#141414;">' + esc(i.name) +
           '<div style="margin-top:4px;font-size:13px;color:#4A4A4F;">' + esc([i.color, 'размер ' + i.size, i.qty + ' шт.'].filter(Boolean).join(' · ')) + '</div></td>' +
-        '<td align="right" style="padding:14px 0;border-bottom:1px solid #DDDAD3;font-family:' + sans + ';font-size:15px;color:#141414;white-space:nowrap;">' + esc(money(i.price * i.qty)) + '</td></tr>';
+        '<td align="right" style="padding:14px 0;border-bottom:1px solid #E3E6EA;font-family:' + sans + ';font-size:15px;color:#141414;white-space:nowrap;">' + esc(money(i.price * i.qty)) + '</td></tr>';
     }).join('');
     var sums = row('Товары', money(o.subtotal)) +
       (o.saleDiscount ? row('Скидка по акции', '−' + money(o.saleDiscount)) : '') +
@@ -115,16 +115,16 @@
     var where = [d.city, d.address].filter(Boolean).join(', ');
     var html =
       '<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + esc(subject) + '</title></head>' +
-      '<body style="margin:0;padding:0;background:#F4F1EB;">' +
-      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#F4F1EB;"><tr><td align="center" style="padding:40px 16px;">' +
+      '<body style="margin:0;padding:0;background:#F3F4F6;">' +
+      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#F3F4F6;"><tr><td align="center" style="padding:40px 16px;">' +
       '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;">' +
         '<tr><td align="center" style="padding:0 0 32px;font-family:' + serif + ';font-size:28px;letter-spacing:9px;color:#141414;">' +
           (ctx.logo ? '<img src="' + esc(ctx.logo.src) + '" alt="' + esc(ctx.store) + '" height="18" style="display:inline-block;height:18px;width:auto;border:0;">' : esc(ctx.store)) + '</td></tr>' +
-        '<tr><td style="background:#FFFFFF;border:1px solid #DDDAD3;padding:40px 40px 36px;">' +
-          '<div style="font-family:' + sans + ';font-size:12px;letter-spacing:3px;text-transform:uppercase;color:#3B3B3F;">' + esc(eyebrow) + '</div>' +
+        '<tr><td style="background:#FFFFFF;border:1px solid #E3E6EA;padding:40px 40px 36px;">' +
+          '<div style="font-family:' + sans + ';font-size:12px;letter-spacing:3px;text-transform:uppercase;color:#2A3036;">' + esc(eyebrow) + '</div>' +
           '<h1 style="margin:14px 0 16px;font-family:' + serif + ';font-weight:400;font-size:34px;line-height:1.1;color:#141414;">' + esc(heading) + '</h1>' +
-          '<p style="margin:0 0 24px;font-family:' + sans + ';font-size:15px;line-height:1.65;color:#2B2B2E;">' + esc(lead) + '</p>' +
-          '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid #DDDAD3;">' + items + '</table>' +
+          '<p style="margin:0 0 24px;font-family:' + sans + ';font-size:15px;line-height:1.65;color:#2A3036;">' + esc(lead) + '</p>' +
+          '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid #E3E6EA;">' + items + '</table>' +
           '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:14px;">' + sums + '</table>' +
           (where ? '<p style="margin:22px 0 0;font-family:' + sans + ';font-size:14px;line-height:1.6;color:#4A4A4F;">Адрес: ' + esc(where) + (o.comment ? '<br>Комментарий: ' + esc(o.comment) : '') + '</p>' : '') +
           (shop ? '' : '<p style="margin:10px 0 0;font-family:' + sans + ';font-size:14px;color:#4A4A4F;">Оплата: ' + esc(ctx.payLabel) + '</p>') +
@@ -143,20 +143,20 @@
   function frame(ctx, subject, preheader, inner, footer) {
     var sans = "Montserrat,'Helvetica Neue',Arial,sans-serif";
     return '<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>' + esc(subject) + '</title></head>' +
-      '<body style="margin:0;padding:0;background:#F4F1EB;">' +
+      '<body style="margin:0;padding:0;background:#F3F4F6;">' +
       '<div style="display:none;max-height:0;overflow:hidden;opacity:0">' + esc(preheader) + '</div>' +
-      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#F4F1EB;"><tr><td align="center" style="padding:40px 16px;">' +
+      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#F3F4F6;"><tr><td align="center" style="padding:40px 16px;">' +
       '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;">' +
         '<tr><td align="center" style="padding:0 0 32px;font-family:' + sans + ';font-size:26px;letter-spacing:9px;color:#141414;">' +
           (ctx.logo ? '<img src="' + esc(ctx.logo.src) + '" alt="' + esc(ctx.store) + '" height="18" style="display:inline-block;height:18px;width:auto;border:0;">' : esc(String(ctx.store || '').toUpperCase())) + '</td></tr>' +
-        '<tr><td style="background:#FFFFFF;border:1px solid #DDDAD3;padding:44px 40px 40px;">' + inner + '</td></tr>' +
+        '<tr><td style="background:#FFFFFF;border:1px solid #E3E6EA;padding:44px 40px 40px;">' + inner + '</td></tr>' +
         '<tr><td style="padding:26px 8px 0;font-family:' + sans + ';font-size:13px;line-height:1.6;color:#626267;text-align:center;">' + footer + '</td></tr>' +
       '</table></td></tr></table></body></html>';
   }
   var SANS = "Montserrat,'Helvetica Neue',Arial,sans-serif";
-  function eyebrow(t) { return '<div style="font-family:' + SANS + ';font-size:12px;letter-spacing:3px;text-transform:uppercase;color:#3B3B3F;text-align:center;">' + esc(t) + '</div>'; }
+  function eyebrow(t) { return '<div style="font-family:' + SANS + ';font-size:12px;letter-spacing:3px;text-transform:uppercase;color:#2A3036;text-align:center;">' + esc(t) + '</div>'; }
   function h1(t) { return '<h1 style="margin:14px 0 14px;font-family:' + SANS + ';font-weight:300;font-size:32px;line-height:1.15;color:#141414;text-align:center;">' + esc(t) + '</h1>'; }
-  function para(t, extra) { return '<p style="margin:0 0 14px;font-family:' + SANS + ';font-size:15px;line-height:1.65;color:#2B2B2E;text-align:center;' + (extra || '') + '">' + t + '</p>'; }
+  function para(t, extra) { return '<p style="margin:0 0 14px;font-family:' + SANS + ';font-size:15px;line-height:1.65;color:#2A3036;text-align:center;' + (extra || '') + '">' + t + '</p>'; }
   function button(label, url) {
     return '<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:28px auto 0;"><tr><td style="background:#141414;">' +
       '<a href="' + esc(url) + '" style="display:inline-block;padding:16px 34px;font-family:' + SANS + ';font-size:13px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;color:#FFFFFF;text-decoration:none;">' + esc(label) + '</a></td></tr></table>';
@@ -167,7 +167,7 @@
     var code = String(ctx.code), spaced = code.slice(0, 3) + ' ' + code.slice(3);
     var subject = spaced + ' — код подтверждения ' + ctx.store;
     var cells = code.split('').map(function (d) {
-      return '<td align="center" style="width:44px;height:56px;border:1px solid #BDBAB4;background:#F4F1EB;font-family:' + SANS + ';font-size:28px;font-weight:600;color:#141414;">' + esc(d) + '</td>';
+      return '<td align="center" style="width:44px;height:56px;border:1px solid #C2C7CD;background:#F3F4F6;font-family:' + SANS + ';font-size:28px;font-weight:600;color:#141414;">' + esc(d) + '</td>';
     });
     var boxes = '<table role="presentation" cellpadding="0" cellspacing="6" border="0" align="center" style="margin:26px auto 22px;"><tr>' + cells.slice(0, 3).join('') + '<td style="width:10px;"></td>' + cells.slice(3).join('') + '</tr></table>';
     var inner = eyebrow('Подтверждение почты') + h1(ctx.name ? ctx.name + ', ваш код' : 'Ваш код') +
@@ -185,9 +185,9 @@
     if (ctx.bonusPercent) perks.push(['Бонусы', 'Возвращаем ' + ctx.bonusPercent + '% с каждой покупки. 1 бонус = 1 ₽.']);
     if (ctx.promo && ctx.promo.code) perks.push(['Первый заказ', ctx.promo.text]);
     perks.push(['Личный кабинет', 'Заказы, бонусный счёт и данные для быстрого оформления.']);
-    var list = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:26px 0 0;border-top:1px solid #DDDAD3;">' +
+    var list = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:26px 0 0;border-top:1px solid #E3E6EA;">' +
       perks.map(function (x) {
-        return '<tr><td style="padding:16px 0;border-bottom:1px solid #DDDAD3;font-family:' + SANS + ';">' +
+        return '<tr><td style="padding:16px 0;border-bottom:1px solid #E3E6EA;font-family:' + SANS + ';">' +
           '<div style="font-size:15px;font-weight:600;color:#141414;">' + esc(x[0]) + '</div>' +
           '<div style="margin-top:4px;font-size:14px;line-height:1.55;color:#4A4A4F;">' + esc(x[1]) + '</div></td></tr>';
       }).join('') + '</table>';

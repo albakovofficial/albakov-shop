@@ -1317,7 +1317,7 @@
       var pr = sample ? Pricing.productPrice(sample, DATA.promotions) : { price: 0 };
       var r = Mail.render({ tpl: t, store: DATA.settings.storeName, product: sample ? sample.name : 'Пальто из шерсти', color: c ? c.name : 'Графит', colorHex: c && c.hex, size: c && c.sizes[0] ? c.sizes[0].size : 'M', price: fmt(pr.price), oldPrice: pr.oldPrice ? fmt(pr.oldPrice) : '', url: '#', image: c && c.images && c.images[0] && !/^data:image\/svg/.test(c.images[0]) ? c.images[0] : '', unsubscribe: '#', contacts: [DATA.settings.contacts.phone, DATA.settings.contacts.email].filter(Boolean).join(' · ') });
       $('#pvSubj', body).textContent = r.subject;
-      shadow.innerHTML = r.html.replace(/^[\s\S]*?<body[^>]*>/, '<div style="background:#F4F1EB">').replace(/<\/body>[\s\S]*$/, '</div>');
+      shadow.innerHTML = r.html.replace(/^[\s\S]*?<body[^>]*>/, '<div style="background:#F3F4F6">').replace(/<\/body>[\s\S]*$/, '</div>');
     }
     preview();
     shadow.addEventListener('click', function (e) { if (e.target.closest && e.target.closest('a')) e.preventDefault(); });

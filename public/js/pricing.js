@@ -83,6 +83,14 @@
     if (st.home && st.home.showBonus === undefined && seed && seed.settings.home) ['showBonus', 'bonusEyebrow', 'bonusTitle', 'bonusText'].forEach(function (k) { st.home[k] = seed.settings.home[k]; });
     // Заголовок блока преимуществ (13.8): появляется у магазинов, где его ещё не было; пустой — скрыт
     if (st.home && st.home.benefitsTitle === undefined && seed && seed.settings.home) { st.home.benefitsEyebrow = seed.settings.home.benefitsEyebrow; st.home.benefitsTitle = seed.settings.home.benefitsTitle; }
+    // Преимущества (13.9): стандартные «Примерка» и «Возврат 14 дней» меняем на «Качество» и «Премиум ткани»; свои тексты владельца не трогаем
+    if (st.home && Array.isArray(st.home.benefits) && seed && seed.settings.home) {
+      var sb = seed.settings.home.benefits;
+      st.home.benefits.forEach(function (b, i) {
+        if (b.title === 'Примерка' && b.text === 'Оплачиваете только то, что подошло') st.home.benefits[i] = Object.assign({}, sb[1], { id: b.id });
+        if (b.title === 'Возврат 14 дней' && b.text === 'Без объяснения причин, если сохранён вид') st.home.benefits[i] = Object.assign({}, sb[2], { id: b.id });
+      });
+    }
     // Хиты продаж на главной (появились в 13.4): блок включён, самые продаваемые добавляются сами
     if (st.home && st.home.showHits === undefined) { st.home.showHits = true; st.home.hitsAuto = true; }
     // Короткий блок бонусов (13.4): стандартные длинные тексты меняем на новые, свои тексты владельца не трогаем

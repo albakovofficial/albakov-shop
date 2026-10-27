@@ -30,9 +30,12 @@ vec3 matColor(float m, vec3 p) {
   if (m < 12.5) return srgb(vec3(0.929, 0.725, 0.294));     // 12 gold
   if (m < 13.5) return srgb(vec3(0.941, 0.345, 0.486));     // 13 pink
   if (m < 14.5) return srgb(vec3(0.102, 0.698, 0.282));     // 14 delivery green
+  if (m < 15.5) return srgb(vec3(0.788, 0.573, 0.369));     // 15 camel wool
+  if (m < 16.5) return srgb(vec3(0.227, 0.259, 0.322));     // 16 navy wool
   return srgb(vec3(0.5));
 }
 float matGloss(float m) {
+  if (m > 14.5 && m < 16.5) return 0.08;  // wool — matte
   if (m > 0.5 && m < 1.5) return 1.0;   // glass
   if (m > 2.5 && m < 3.5) return 0.9;   // silver
   if (m > 11.5 && m < 12.5) return 0.85; // gold
@@ -155,14 +158,54 @@ vec2 gift(vec3 p) {
   return r;
 }
 
-float yawFor() { return uIcon == 0 ? 0.0 : uIcon == 1 ? 0.62 : uIcon == 2 ? 0.40 : uIcon == 3 ? 0.55 : 0.30; }
+float sdStar5(vec2 p, float r, float rf) {
+  const vec2 k1 = vec2(0.809016994375, -0.587785252292); const vec2 k2 = vec2(-k1.x, k1.y);
+  p.x = abs(p.x); p -= 2.0 * max(dot(k1, p), 0.0) * k1; p -= 2.0 * max(dot(k2, p), 0.0) * k2; p.x = abs(p.x); p.y -= r;
+  vec2 ba = rf * vec2(-k1.y, k1.x) - vec2(0, 1); float h = clamp(dot(p, ba) / dot(ba, ba), 0.0, r);
+  return length(p - ba * h) * sign(p.y * ba.x - p.x * ba.y);
+}
+vec2 quality(vec3 p) {
+  vec2 r = vec2(1e5, 0.0);
+  vec3 m = p - vec3(0.0, 1.02, 0.0);
+  float ang = atan(m.y, m.x);
+  float rim2 = length(m.xy) - (0.54 + 0.032 * cos(14.0 * ang));
+  r = U(r, vec2((extrude(rim2, m.z, 0.06) - 0.03) * 0.8, 12.0));                 // scalloped gold seal
+  r = U(r, vec2(sdRoundCylZ(m - vec3(0.0, 0.0, 0.07), 0.40, 0.035, 0.02), 5.0));     // white face
+  r = U(r, vec2(sdTorusXY(m - vec3(0.0, 0.0, 0.10), 0.40, 0.028), 12.0));            // gold ring
+  float st = sdStar5(m.xy - vec2(0.0, -0.01), 0.26, 0.46) - 0.025;
+  r = U(r, vec2(extrude(st, m.z - 0.11, 0.045) - 0.02, 12.0));                       // gold star
+  vec2 q = p.xy; q.x = abs(q.x);
+  vec2 rb = rot(-0.32) * (q - vec2(0.24, 0.36));
+  float tail = sdBox2(rb, vec2(0.15, 0.36), 0.03);
+  tail = max(tail, -sdTri2(rb, vec2(-0.16, -0.37), vec2(0.16, -0.37), vec2(0.0, -0.22)));
+  r = U(r, vec2(extrude(tail, p.z + 0.06, 0.03) - 0.015, 0.0));                     // blue ribbons
+  return r;
+}
+vec2 fabric(vec3 p) {
+  vec2 r = vec2(1e5, 0.0);
+  vec3 a = p - vec3(0.02, 0.11, 0.0); a.xz = rot(0.06) * a.xz;
+  r = U(r, vec2(sdRoundBox(a, vec3(0.66, 0.10, 0.44), 0.095), 16.0));             // navy wool
+  vec3 b = p - vec3(-0.04, 0.315, 0.02); b.xz = rot(-0.07) * b.xz;
+  r = U(r, vec2(sdRoundBox(b, vec3(0.62, 0.10, 0.42), 0.095), 15.0));             // camel wool
+  vec3 c = p - vec3(0.03, 0.52, -0.01); c.xz = rot(0.04) * c.xz;
+  r = U(r, vec2(sdRoundBox(c, vec3(0.58, 0.10, 0.40), 0.095), 9.0));              // cream cotton
+  vec3 rl = p - vec3(0.0, 0.81, 0.02); rl.xz = rot(0.18) * rl.xz;
+  r = U(r, vec2(sdRoundCylZ(rl.zyx, 0.19, 0.50, 0.05), 6.0));                       // fabric roll
+  r = U(r, vec2(sdRoundCylZ(rl.zyx, 0.06, 0.53, 0.02), 8.0));                       // cardboard core
+  r = U(r, vec2(sdRoundBox(c - vec3(0.36, 0.0, 0.41), vec3(0.10, 0.065, 0.012), 0.02), 12.0)); // gold tag
+  return r;
+}
+
+float yawFor() { return uIcon == 0 ? 0.0 : uIcon == 1 ? 0.62 : uIcon == 2 ? 0.40 : uIcon == 3 ? 0.55 : uIcon == 4 ? 0.30 : uIcon == 5 ? 0.62 : 0.35; }
 vec2 map(vec3 p) {
   p.xz = rot(-yawFor()) * p.xz;
   if (uIcon == 0) return truck(p);
   if (uIcon == 1) return fitting(p);
   if (uIcon == 2) return returns(p);
   if (uIcon == 3) return payment(p);
-  return gift(p);
+  if (uIcon == 4) return gift(p);
+  if (uIcon == 5) return quality(p);
+  return fabric(p);
 }
 vec3 calcNormal(vec3 p) {
   const float h = 0.0008; const vec2 k = vec2(1, -1);

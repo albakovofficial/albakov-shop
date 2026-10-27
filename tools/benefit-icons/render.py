@@ -5,7 +5,7 @@ from PIL import Image
 
 HERE = Path(sys.argv[1])
 OUT = Path(sys.argv[2]); OUT.mkdir(parents=True, exist_ok=True)
-NAMES = ['delivery', 'fitting', 'return', 'payment', 'gift']
+NAMES = ['delivery', 'fitting', 'return', 'payment', 'gift', 'quality', 'fabric']
 only = sys.argv[3].split(',') if len(sys.argv) > 3 else NAMES
 SIZE = int(sys.argv[4]) if len(sys.argv) > 4 else 900
 FINAL = 320  # 2x for a 160px icon
@@ -16,11 +16,11 @@ def fit(img):
     a = img.getchannel('A').point(lambda v: 255 if v > 24 else 0)
     l, t, r, b = a.getbbox()
     cx, cy = (l + r) / 2, (t + b) / 2
-    side = int(max(r - l, b - t) * 1.12)
+    side = int(max(r - l, b - t) * 1.24)
     x0, y0 = int(cx - side / 2), int(cy - side / 2)
     sq = Image.new('RGBA', (side, side), (0, 0, 0, 0))
     sq.paste(img.crop((max(x0, 0), max(y0, 0), min(x0 + side, img.width), min(y0 + side, img.height))), (max(-x0, 0), max(-y0, 0)))
-    fw = side * 0.06
+    fw = side * 0.13
     mask = Image.new('L', (side, side))
     px = mask.load()
     for y in range(side):

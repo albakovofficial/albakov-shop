@@ -775,7 +775,7 @@
       { k: 'editorialText', label: 'Текст', type: 'textarea' },
       { k: 'editorialImage', label: 'Фото', type: 'image' }
     ], {
-      benefits: { title: 'Преимущества', cols: [{ k: 'title', label: 'Заголовок' }, { k: 'text', label: 'Описание', flex: 2 }, { k: 'icon', label: 'Иконка', type: 'select', options: [['auto', 'Иконка: по тексту'], ['delivery', 'Доставка — грузовик'], ['fitting', 'Примерка — футболка'], ['return', 'Возврат — коробка'], ['payment', 'Оплата — карты'], ['gift', 'Подарок'], ['none', 'Без иконки']] }], get: function (s) { return s.home.benefits; }, set: function (s, v) { s.home.benefits = v; } }
+      benefits: { title: 'Преимущества', cols: [{ k: 'title', label: 'Заголовок' }, { k: 'text', label: 'Описание', flex: 2 }, { k: 'icon', label: 'Иконка', type: 'select', options: [['auto', 'Иконка: по тексту'], ['delivery', 'Доставка — грузовик'], ['quality', 'Качество — медаль'], ['fabric', 'Ткани — стопка тканей'], ['fitting', 'Примерка — футболка'], ['return', 'Возврат — коробка'], ['payment', 'Оплата — карты'], ['gift', 'Подарок'], ['none', 'Без иконки']] }], get: function (s) { return s.home.benefits; }, set: function (s, v) { s.home.benefits = v; } }
     }, function (s) { var o = s.home; o.announcement = s.announcement; return o; }, function (s, o) { s.announcement = o.announcement; delete o.announcement; s.home = Object.assign(s.home, o); });
   }
 

@@ -44,6 +44,7 @@ db.sessions = db.sessions || {};
 Pricing.migrateData(db, SEED); // цвета товаров, логотип — для данных, созданных до обновления
 db.secrets = db.secrets || {};
 db.waitlist = db.waitlist || [];
+db.tickets = db.tickets || [];
 if (!db.secrets.adminHash) {
   const pw = process.env.ADMIN_PASSWORD || crypto.randomBytes(6).toString('base64url');
   db.secrets.adminHash = hashPassword(pw);
@@ -87,6 +88,7 @@ const normPhone = (p) => { let d = String(p || '').replace(/\D/g, ''); if (d.len
 const validEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(s || '').trim());
 // bonusNews — свежие начисления, о которых покупатель ещё не знает (показываем уведомление)
 const publicUser = (u) => u && { id: u.id, firstName: u.firstName, lastName: u.lastName, phone: u.phone, email: u.email, createdAt: u.createdAt, bonus: u.bonus || 0,
+  supportUnread: db.tickets.filter((t) => t.userId === u.id && t.unreadUser).length,
   bonusNews: (u.bonusLog || []).filter((e) => !e.seen).slice(0, 5).map((e) => ({ id: e.id, amount: e.amount, type: e.type, orderNumber: e.orderNumber || '', note: e.note || '' })) };
 const userOf = (order) => order && order.userId ? db.users.find((u) => u.id === order.userId) || null : null;
 // Бонусы заказа после смены статуса или оплаты (начислить, вернуть, забрать)
@@ -387,6 +389,70 @@ function sendOrderMails(order) {
   Promise.allSettled(jobs).then((r) => r.forEach((x) => { if (x.status === 'rejected') console.error('Письмо о заказе не отправлено:', x.reason && x.reason.message); }));
 }
 
+/* ---------------- Поддержка: переписка покупателя с магазином ---------------- */
+const SUPPORT_TOPICS = ['Заказ', 'Доставка', 'Размер и посадка', 'Возврат и обмен', 'Другое'];
+const ticketText = (v) => String(v || '').replace(/\r\n?/g, '\n').trim().slice(0, 2000);
+// Покупателю — без служебных пометок магазина
+function ticketForUser(t) {
+  return { id: t.id, number: t.number, topic: t.topic, orderId: t.orderId || '', orderNumber: t.orderNumber || '', status: t.status, createdAt: t.createdAt, updatedAt: t.updatedAt,
+    unread: !!t.unreadUser, messages: t.messages.map((m) => ({ id: m.id, from: m.from, text: m.text, at: m.at })) };
+}
+function supportMail(t, kind) {
+  if (!mailReady()) return;
+  const cs = db.settings.contacts || {}, last = t.messages[t.messages.length - 1];
+  const to = kind === 'customer' ? t.email : (cs.email || mailCfg().fromEmail);
+  if (!to) return;
+  const url = kind === 'customer' ? `${PUBLIC_URL}/#/account?tab=support&id=${t.id}` : `${PUBLIC_URL}/#/admin?s=support&id=${t.id}`;
+  const m = Mail.renderSupport({ kind, store: db.settings.storeName, logo: brandLogo(), name: t.name, number: t.number, topic: t.topic, orderNumber: t.orderNumber, text: last.text, url, contacts: [cs.phone, cs.email].filter(Boolean).join(' · ') });
+  sendMail({ to, subject: m.subject, html: m.html, text: m.text }).catch((e) => console.error('Письмо поддержки не отправлено:', e.message));
+}
+function supportApi(req, p, M, body, u) {
+  const mine = () => db.tickets.filter((t) => t.userId === u.id);
+  if (!p[1] && M === 'GET') return { tickets: mine().sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map(ticketForUser), topics: SUPPORT_TOPICS };
+  if (!p[1] && M === 'POST') {
+    throttle(req, 'support', 30);
+    const text = ticketText(body.text); if (!text) fail(400, 'Напишите, чем мы можем помочь');
+    if (mine().filter((t) => t.status !== 'closed').length >= 20) fail(429, 'Открыто слишком много обращений. Продолжите одно из них');
+    const o = body.orderId ? db.orders.find((x) => x.id === body.orderId && x.userId === u.id) : null;
+    const now = new Date().toISOString();
+    db.ticketSeq = (db.ticketSeq || 1000) + 1;
+    const t = { id: uid('t'), number: String(db.ticketSeq), userId: u.id, name: [u.firstName, u.lastName].filter(Boolean).join(' '), email: u.email, phone: u.phone,
+      topic: SUPPORT_TOPICS.includes(body.topic) ? body.topic : (o ? 'Заказ' : 'Другое'), orderId: o ? o.id : '', orderNumber: o ? o.number : '',
+      status: 'open', createdAt: now, updatedAt: now, unreadUser: false, unreadShop: true, messages: [{ id: uid('m'), from: 'user', text, at: now }] };
+    db.tickets.push(t); save(); supportMail(t, 'shop');
+    return { ticket: ticketForUser(t) };
+  }
+  const t = p[1] && mine().find((x) => x.id === p[1]);
+  if (!t) fail(404, 'Обращение не найдено');
+  if (!p[2] && M === 'GET') { if (t.unreadUser) { t.unreadUser = false; save(); } return { ticket: ticketForUser(t) }; }
+  if (!p[2] && M === 'POST') {
+    throttle(req, 'support', 30);
+    const text = ticketText(body.text); if (!text) fail(400, 'Сообщение пустое');
+    const now = new Date().toISOString();
+    t.messages.push({ id: uid('m'), from: 'user', text, at: now }); t.status = 'open'; t.unreadShop = true; t.unreadUser = false; t.updatedAt = now;
+    save(); supportMail(t, 'shop');
+    return { ticket: ticketForUser(t) };
+  }
+  fail(404, 'Неизвестный запрос');
+}
+function supportAdminApi(p, M, body) {
+  if (!p[2] && M === 'GET') return { tickets: db.tickets.slice().sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)) };
+  const t = db.tickets.find((x) => x.id === p[2]); if (!t) fail(404, 'Обращение не найдено');
+  if (M === 'POST') {
+    const text = ticketText(body.text); if (!text) fail(400, 'Напишите ответ');
+    const now = new Date().toISOString();
+    t.messages.push({ id: uid('m'), from: 'shop', text, at: now }); t.status = 'answered'; t.unreadUser = true; t.unreadShop = false; t.updatedAt = now;
+    save(); supportMail(t, 'customer');
+    return { ticket: t, mailed: mailReady() };
+  }
+  if (M === 'PATCH') {
+    if (body.read) t.unreadShop = false;
+    if (body.status === 'closed' || body.status === 'open') t.status = body.status;
+    save(); return { ticket: t };
+  }
+  fail(404, 'Неизвестный запрос');
+}
+
 /* ---------------- Уведомления о поступлении ---------------- */
 function mailCfg() {
   const m = db.secrets.mail || {};
@@ -603,6 +669,8 @@ async function api(req, res, url, body) {
     }
   }
 
+  if (p[0] === 'support') { const u = user(); if (!u) fail(401, 'Войдите в личный кабинет'); return supportApi(req, p, M, body, u); }
+
   if (p[0] === 'quote' && M === 'POST') return { quote: quote(req, body) };
 
   if (p[0] === 'notify' && !p[1] && M === 'POST') return subscribe(req, body);
@@ -628,6 +696,7 @@ async function api(req, res, url, body) {
       const d = {}; for (const k of ['settings', ...COLLECTIONS, 'orders']) d[k] = db[k];
       d.orders = db.orders.map(orderView); d.users = db.users.map((u) => Object.assign(publicUser(u), { bonusLog: (u.bonusLog || []).slice(0, 100) }));
       d.waitlist = db.waitlist.map((w) => { const c = Object.assign({}, w); delete c.token; return c; });
+      d.supportNew = db.tickets.filter((t) => t.unreadShop).length;
       // Состояние ночных резервных копий (файл пишет tools/backup.js)
       try { d.backup = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'backup-status.json'), 'utf8')); } catch (e) { d.backup = null; }
       // Автообновление из GitHub (файл пишет deploy/autoupdate.sh)
@@ -635,6 +704,7 @@ async function api(req, res, url, body) {
       return { data: d };
     }
     if (p[1] === 'health' && M === 'GET') return { health: health() };
+    if (p[1] === 'support') return supportAdminApi(p, M, body);
     if (p[1] === 'password' && M === 'POST') {
       if (String(body.password || '').length < 8) fail(400, 'Пароль должен быть не короче 8 символов');
       if (!pwOk(body.password)) fail(400, 'Слишком длинный пароль');

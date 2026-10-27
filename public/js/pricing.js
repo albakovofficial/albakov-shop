@@ -81,6 +81,8 @@
     if (!st.bonus && seed && seed.settings.bonus) st.bonus = JSON.parse(JSON.stringify(seed.settings.bonus));
     // Блок о бонусах на главной (появился в ALBAKOV9)
     if (st.home && st.home.showBonus === undefined && seed && seed.settings.home) ['showBonus', 'bonusEyebrow', 'bonusTitle', 'bonusText'].forEach(function (k) { st.home[k] = seed.settings.home[k]; });
+    // Кнопка связи на всех страницах (13.11): включена по умолчанию
+    if (st.contacts && st.contacts.fab === undefined) st.contacts.fab = true;
     // Заголовок блока преимуществ (13.8): появляется у магазинов, где его ещё не было; пустой — скрыт
     if (st.home && st.home.benefitsTitle === undefined && seed && seed.settings.home) { st.home.benefitsEyebrow = seed.settings.home.benefitsEyebrow; st.home.benefitsTitle = seed.settings.home.benefitsTitle; }
     // Преимущества (13.9): стандартные «Примерка» и «Возврат 14 дней» меняем на «Качество» и «Премиум ткани»; свои тексты владельца не трогаем

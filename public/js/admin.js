@@ -1307,7 +1307,8 @@
       '<div class="adm-ph">' + Mail.PLACEHOLDERS.map(function (x) { return '<button type="button" class="chip" data-ph="' + esc(x[0]) + '" title="' + esc(x[1]) + '">' + esc(x[0]) + '<small>' + esc(x[1]) + '</small></button>'; }).join('') + '</div>' +
       '<div id="ltForm">' + formHtml(defs, tpl) + '</div>' +
       '<div class="adm-bar" style="position:static;background:none;padding-bottom:0"><button class="btn" id="ltSave">Сохранить текст</button><button class="btn ghost" id="ltReset" type="button">Вернуть стандартный</button><span class="form-error" id="ltErr"></span></div>' +
-      '<div class="adm-test"><h4 class="adm-sub">Проверить письмо</h4>' + ('<div class="promo-form"><input class="input" id="ltTo" type="email" placeholder="Ваша почта" aria-label="Почта для примера"><button type="button" class="btn ghost" id="ltTest">Отправить пример</button></div>' + (mail.ready ? '' : '<p class="muted" style="font-size:13px;margin-top:8px">Сначала настройте почту для отправки.</p>')) + '</div></div>' +
+      '<div class="adm-test"><h4 class="adm-sub">Проверить письмо</h4>' + ('<div class="promo-form"><input class="input" id="ltTo" type="email" placeholder="Ваша почта" aria-label="Почта для примера"><button type="button" class="btn ghost" id="ltTest">Отправить пример</button></div>' +
+        '<button type="button" class="btn ghost sm" id="ltTestAcc" style="margin-top:8px">Отправить письма регистрации: код и приветствие</button>' + (mail.ready ? '' : '<p class="muted" style="font-size:13px;margin-top:8px">Сначала настройте почту для отправки.</p>')) + '</div></div>' +
       '<div class="adm-preview"><div class="adm-preview-head"><span class="eyebrow">Так покупатель увидит письмо</span><div class="adm-preview-subj"><span class="muted">Тема:</span> <b id="pvSubj"></b></div></div><div id="pvBox" class="adm-preview-box"></div></div></div>';
     var box = $('#ltForm', body), host = $('#pvBox', body), shadow = host.attachShadow ? host.attachShadow({ mode: 'open' }) : host, lastField = null;
     function current() { return readForm(box, defs, Object.assign({}, tpl)); }
@@ -1334,6 +1335,12 @@
       if (bad.length) { $('#ltErr').textContent = 'Неизвестная подстановка ' + bad[0] + '. Используйте подстановки из списка выше.'; return; }
       var s2 = clone(DATA.settings); s2.notify = Object.assign({}, t, { enabled: tpl.enabled });
       try { await A().API.adminSave('settings', s2); await afterSave('Текст письма сохранён', '#/admin?s=notify&tab=letter'); } catch (e) { $('#ltErr').textContent = A().errMsg(e); }
+    });
+    var ta = $('#ltTestAcc', body); if (ta) ta.addEventListener('click', async function () {
+      var to = $('#ltTo').value.trim(); if (!to) { toast('Впишите почту, куда отправить пример', true); $('#ltTo').focus(); return; }
+      ta.disabled = true; var lbl = ta.textContent; ta.textContent = 'Отправляем…';
+      try { await A().API.adminMailTestAccount(to); toast('Отправили на ' + to + ' два письма: код подтверждения и «Добро пожаловать»'); } catch (e) { toast(A().errMsg(e), true); }
+      ta.disabled = false; ta.textContent = lbl;
     });
     var tb = $('#ltTest', body); if (tb) tb.addEventListener('click', async function () {
       tb.disabled = true; tb.textContent = 'Отправляем…';

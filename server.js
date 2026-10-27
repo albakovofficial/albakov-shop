@@ -707,6 +707,20 @@ async function api(req, res, url, body) {
         catch (e) { console.error('Пробное письмо не отправлено:', e.message); fail(502, e.message); }
         return {};
       }
+      // Пример писем регистрации: код подтверждения и «Добро пожаловать» — чтобы увидеть их в своём ящике
+      if (p[2] === 'test-account' && M === 'POST') {
+        if (!mailReady()) fail(400, 'Сначала заполните и сохраните настройки почты');
+        const to = String(body.to || '').trim(); if (!validEmail(to)) fail(400, 'Укажите почту, на которую отправить пример');
+        const b = Pricing.bonusConf(db.settings), cs = db.settings.contacts || {};
+        const code = String(crypto.randomInt(0, 1e6)).padStart(6, '0');
+        const mc = Mail.renderCode({ store: db.settings.storeName, logo: brandLogo(), code, minutes: VERIFY_MIN, name: '' });
+        const mw = Mail.renderWelcome({ store: db.settings.storeName, logo: brandLogo(), name: '', url: PUBLIC_URL + '/', bonusPercent: b.earn ? String(b.percent).replace('.', ',') : '', promo: welcomePromo(), contacts: [cs.phone, cs.email].filter(Boolean).join(' · ') });
+        try {
+          await sendMail({ to, subject: '[Пример] ' + mc.subject, html: mc.html, text: mc.text });
+          await sendMail({ to, subject: '[Пример] ' + mw.subject, html: mw.html, text: mw.text });
+        } catch (e) { console.error('Пример писем регистрации не отправлен:', e.message); fail(502, e.message); }
+        return {};
+      }
     }
     if (p[1] === 'settings' && M === 'PUT') {
       if (!body.value || typeof body.value !== 'object') fail(400, 'Пустые настройки');

@@ -60,7 +60,7 @@
   }
 
   /* --- Плашки товара: Новинка, Скидка, Хит --- */
-  var BADGE_ROWS = [['new', 'Новинка', 'Товар также появится в разделе «Новинки».'], ['sale', 'Скидка', 'Видна, только если у товара есть скидка — старая цена или акция. {n} заменится на размер скидки в процентах.'], ['hit', 'Хит продаж', '']];
+  var BADGE_ROWS = [['new', 'Новинка', 'Товар также появится в разделе «Новинки».'], ['sale', 'Скидка', 'Видна, только если у товара есть скидка — старая цена или акция. {n} заменится на размер скидки в процентах.'], ['hit', 'Хит продаж', 'Товар попадёт в блок «Хиты продаж» на главной. Самые продаваемые товары попадают туда сами (настройка в «Главной странице»).']];
   function badgeSample(k, text, p) {
     if (k !== 'sale') return text;
     var pr = Pricing.productPrice(p, DATA.promotions), n = pr.oldPrice ? Math.round((1 - pr.price / pr.oldPrice) * 100) : 15;
@@ -315,10 +315,53 @@
     var term = (q.q || '').toLowerCase();
     if (term) list = list.filter(function (x) { return JSON.stringify(cfg.row(x)).toLowerCase().indexOf(term) !== -1; });
     m.innerHTML = head(cfg.title, (cfg.searchable ? '<input class="input" id="cSearch" placeholder="Поиск" value="' + esc(q.q || '') + '" style="min-height:40px;width:200px">' : '') + '<a class="btn sm" href="#/admin?s=' + cfg.key + '&id=new">+ ' + esc(cfg.addLabel) + '</a>', cfg.sub) +
-      (list.length ? '<div class="table-wrap adm-table"><table class="sizes"><thead><tr>' + cfg.cols.map(function (c) { return '<th>' + esc(c) + '</th>'; }).join('') + '</tr></thead><tbody>' +
-        list.map(function (x) { return '<tr data-href="#/admin?s=' + cfg.key + '&id=' + esc(x.id) + '">' + cfg.row(x).map(function (c) { return '<td>' + c + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>'
+      (list.length ? '<div class="table-wrap adm-table"><table class="sizes' + (cfg.bulk ? ' adm-bulk-table' : '') + '"><thead><tr>' +
+        (cfg.bulk ? '<th class="adm-pick-cell"><label class="check adm-pick" title="Выбрать все"><input type="checkbox" id="pickAll" aria-label="Выбрать все"></label></th>' : '') +
+        cfg.cols.map(function (c) { return '<th>' + esc(c) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+        list.map(function (x) { return '<tr data-href="#/admin?s=' + cfg.key + '&id=' + esc(x.id) + '">' + (cfg.bulk ? '<td class="adm-pick-cell"><label class="check adm-pick"><input type="checkbox" data-pick="' + esc(x.id) + '" aria-label="Выбрать"></label></td>' : '') + cfg.row(x).map(function (c) { return '<td>' + c + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>' +
+        (cfg.bulk ? '<div class="adm-bar adm-bulk-bar" id="bulkBar" hidden><span class="adm-bulk-n" id="bulkN"></span><button class="btn ghost sm" id="bulkAll"></button><button class="btn ghost sm" id="bulkNone">Снять выбор</button><button class="btn sm" id="bulkDel"></button></div>' : '')
         : '<div class="empty"><h3>Пока пусто</h3><a class="btn ghost" href="#/admin?s=' + cfg.key + '&id=new">' + esc(cfg.addLabel) + '</a></div>');
     var cs = $('#cSearch'); if (cs) cs.addEventListener('change', function () { location.hash = '#/admin?s=' + cfg.key + '&q=' + encodeURIComponent(cs.value); });
+    if (cfg.bulk && list.length) bindBulk(m, cfg, list, q);
+  }
+  /* Выбор нескольких строк галочками и удаление выбранных (сейчас — в «Товарах») */
+  function bindBulk(m, cfg, list, q) {
+    var picks = $$('[data-pick]', m), all = $('#pickAll', m), bar = $('#bulkBar', m), del = $('#bulkDel', m), armed = false, timer = null;
+    var w = cfg.bulk;  // слова: { one, few, many } — «товар», «товара», «товаров»
+    var word = function (n) { return A().plural(n, w.one, w.few, w.many); };
+    function chosen() { return picks.filter(function (c) { return c.checked; }).map(function (c) { return c.getAttribute('data-pick'); }); }
+    function disarm() { armed = false; clearTimeout(timer); del.classList.remove('danger'); }
+    function sync() {
+      var n = chosen().length;
+      picks.forEach(function (c) { c.closest('tr').classList.toggle('picked', c.checked); });
+      all.checked = n === picks.length; all.indeterminate = n > 0 && n < picks.length;
+      bar.hidden = !n; disarm();
+      $('#bulkN', m).textContent = 'Выбрано: ' + n + ' из ' + picks.length;
+      var ba = $('#bulkAll', m); ba.hidden = n === picks.length; ba.textContent = 'Выбрать все ' + picks.length;
+      del.textContent = 'Удалить ' + n + ' ' + word(n);
+    }
+    // слушаем саму таблицу: она новая при каждой отрисовке, поэтому старые обработчики не копятся
+    $('.adm-bulk-table', m).addEventListener('change', function (e) {
+      if (e.target === all) { picks.forEach(function (c) { c.checked = all.checked; }); sync(); return; }
+      if (e.target.hasAttribute && e.target.hasAttribute('data-pick')) sync();
+    });
+    $('#bulkAll', m).addEventListener('click', function () { picks.forEach(function (c) { c.checked = true; }); sync(); });
+    $('#bulkNone', m).addEventListener('click', function () { picks.forEach(function (c) { c.checked = false; }); sync(); });
+    del.addEventListener('click', async function () {
+      var ids = chosen(); if (!ids.length) return;
+      if (!armed) {
+        armed = true; del.classList.add('danger');
+        del.textContent = 'Нажмите ещё раз — удалить ' + ids.length + ' ' + word(ids.length) + ' навсегда';
+        timer = setTimeout(sync, 4000);
+        return;
+      }
+      disarm(); del.disabled = true; del.textContent = 'Удаляю…';
+      try {
+        var n = await A().API.adminDeleteMany(cfg.key, ids);
+        await afterSave('Удалено: ' + n + ' ' + word(n), '#/admin?s=' + cfg.key + (q.q ? '&q=' + encodeURIComponent(q.q) : ''));
+      } catch (e) { del.disabled = false; sync(); toast(A().errMsg(e), true); }
+    });
+    sync();
   }
   function onOff(b) { return b ? '<span class="status done">Да</span>' : '<span class="status canceled">Нет</span>'; }
   function catOpts() { return DATA.categories.map(function (c) { return [c.id, c.name]; }); }
@@ -329,7 +372,8 @@
     var colorsState = [];
     collection(m, q, {
       key: 'products', prefix: 'p', title: 'Товары', newTitle: 'Новый товар', addLabel: 'Добавить товар', searchable: true,
-      sub: 'Нажмите на строку, чтобы изменить товар: цены, цвета, фото, размеры и остатки.',
+      bulk: { one: 'товар', few: 'товара', many: 'товаров' },
+      sub: 'Нажмите на строку, чтобы изменить товар: цены, цвета, фото, размеры и остатки. Галочками можно выбрать несколько товаров или все сразу и удалить их.',
       itemTitle: function (x) { return x.name; },
       view: function (x) { return '<a class="btn ghost sm" href="#/product/' + esc(x.slug) + '">Открыть на сайте</a>'; },
       blank: function () { return { name: '', slug: '', gender: 'women', categoryId: (DATA.categories[0] || {}).id || '', price: 0, compareAt: 0, tags: ['new'], description: '', composition: '', care: '', colors: [newColor(1, '#3a3734')], sizeChartId: (DATA.sizeCharts[0] || {}).id || '', active: true, createdAt: new Date().toISOString().slice(0, 10) }; },
@@ -706,10 +750,13 @@
       { section: 'Блоки' },
       { k: 'showCategories', label: 'Показывать категории', type: 'checkbox' },
       { k: 'showNew', label: 'Показывать новинки', type: 'checkbox' },
+      { k: 'showHits', label: 'Показывать хиты продаж', type: 'checkbox', hint: 'Товары с плашкой «Хит продаж» и самые продаваемые. Блок скрыт, пока хитов нет' },
       { k: 'showSale', label: 'Показывать текущую акцию', type: 'checkbox' },
       { k: 'showEditorial', label: 'Показывать блок о бренде', type: 'checkbox' },
       { k: 'showBenefits', label: 'Показывать преимущества', type: 'checkbox' },
       { k: 'showBonus', label: 'Показывать блок «Бонусная программа»', type: 'checkbox', hint: 'Блок скрывается сам, если бонусная программа выключена в разделе «Бонусы»' },
+      { section: 'Хиты продаж' },
+      { k: 'hitsAuto', label: 'Добавлять самые продаваемые автоматически', type: 'checkbox', wide: true, hint: 'По заказам за последние 90 дней — без отменённых и неоплаченных онлайн. Такие товары получают плашку «Хит продаж» сами. Вручную хит отмечается в карточке товара' },
       { section: 'Блок «Бонусная программа»' },
       { k: 'bonusEyebrow', label: 'Надзаголовок' },
       { k: 'bonusTitle', label: 'Заголовок', type: 'textarea', rows: 2, hint: '{n} — процент из раздела «Бонусы», *слово* — курсивом' },
@@ -1319,7 +1366,7 @@
   }
 
   /* Клик по строке таблицы */
-  document.addEventListener('click', function (e) { var tr = e.target.closest('tr[data-href]'); if (tr) location.hash = tr.getAttribute('data-href'); });
+  document.addEventListener('click', function (e) { if (e.target.closest('.adm-pick')) return; var tr = e.target.closest('tr[data-href]'); if (tr) location.hash = tr.getAttribute('data-href'); });
 
   window.Admin = { render: render };
 })();

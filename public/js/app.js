@@ -222,8 +222,18 @@
   /* ---------- Карточка товара ---------- */
   // Плашки товара: «Новинка», «Скидка 15%», «Хит продаж» — тексты и цвета из панели управления
   function badgeHtml(p, pr) {
+    // самые продаваемые получают плашку «Хит продаж» сами, без отметки в панели
+    if (isHit(p) && (p.tags || []).indexOf('hit') === -1) p = Object.assign({}, p, { tags: (p.tags || []).concat('hit') });
     return Pricing.badgesOf(p, pr, D.settings).map(function (b) { return '<span class="badge badge-' + b.key + '" style="--b:' + esc(b.color) + ';--bi:' + b.ink + '">' + esc(b.text) + '</span>'; });
   }
+  /* ---------- Хиты продаж: отмеченные в панели + самые продаваемые за 90 дней (порядок считает сервер) ---------- */
+  function hitRank(p) { var i = (D.hits || []).indexOf(p.id); return i === -1 ? Infinity : i; }
+  function isHit(p) { return (p.tags || []).indexOf('hit') !== -1 || hitRank(p) !== Infinity; }
+  // Сначала то, что лучше продаётся; отмеченные вручную без продаж — следом, по новизне
+  function hitList(list) {
+    return list.filter(isHit).sort(function (a, b) { return (hitRank(a) - hitRank(b)) || String(b.createdAt).localeCompare(String(a.createdAt)); });
+  }
+
   /* ---------- Бонусы: 1 бонус = 1 ₽ ---------- */
   function bonusWord(n) { return plural(n, 'бонус', 'бонуса', 'бонусов'); }
   function bonusNum(n) { return String(Math.round(n || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
@@ -436,6 +446,11 @@
       news = news.slice(0, 8);
       if (news.length) html += '<section class="section"><div class="wrap"><div class="section-head"><h2>Новинки' + (curGender() ? ' <em class="h-sub">' + GENDERS[curGender()].toLowerCase() + '</em>' : '') + '</h2><a class="link" href="#/catalog?tag=new">Смотреть все</a></div><div class="grid">' + news.map(card).join('') + '</div></div></section>';
     }
+    if (h.showHits !== false) {
+      var hits = hitList(gProducts()).slice(0, 8);
+      // на телефоне — лента, которую листают пальцем; на компьютере — сетка
+      if (hits.length) html += '<section class="section hits-sec"><div class="wrap"><div class="section-head"><h2>Хиты продаж' + (curGender() ? ' <em class="h-sub">' + GENDERS[curGender()].toLowerCase() + '</em>' : '') + '</h2><a class="link" href="#/catalog?tag=hit">Смотреть все</a></div><div class="grid hits">' + hits.map(card).join('') + '</div></div></section>';
+    }
     if (h.showBonus !== false) html += bonusBand(h);
     if (h.showSale !== false) {
       var ap = activePromos()[0];
@@ -451,23 +466,26 @@
     initSlider();
   }
 
-  /* Блок «Бонусная программа» на главной: тексты — в «Главной странице», процент — в разделе «Бонусы» */
+  /* Блок «Бонусная программа» на главной — коротко: процент, одна фраза, три шага, одна кнопка.
+     Тексты — в «Главной странице», процент — в разделе «Бонусы» */
   function bonusBand(h) {
     var c = bonusCfg(); if (!c.earn) return '';
     var pct = String(c.percent).replace('.', ','), u = API.user;
-    var title = esc(String(h.bonusTitle || 'Возвращаем *{n}%*\nбонусами').replace(/\{n\}/g, pct)).replace(/\*(.+?)\*/g, '<em>$1</em>').replace(/\n/g, '<br>');
-    var steps = [
-      ['Покупайте', 'Начисляем ' + pct + '% от суммы каждой покупки ' + (c.creditOn === 'done' ? 'после получения заказа' : 'сразу после оплаты') + '.'],
-      ['Копите', 'Баланс и история — в личном кабинете. О каждом начислении сообщим.'],
-      ['Оплачивайте', '1 бонус = 1 ₽. Списывайте при оформлении — хоть весь заказ.']
-    ];
-    var acts = u
-      ? '<p class="bb-bal">На вашем счёте <b>' + bonusNum(u.bonus) + ' ' + bonusWord(u.bonus || 0) + '</b></p><a class="btn" href="#/account?tab=bonus">Мой бонусный счёт</a>'
-      : '<a class="btn" href="#/account?tab=register">Присоединиться</a><a class="link" href="#/account">Уже есть аккаунт — войти</a>';
+    var title = esc(String(h.bonusTitle || 'Возвращаем бонусами').replace(/\{n\}/g, pct)).replace(/\*(.+?)\*/g, '<em>$1</em>').replace(/\n/g, '<br>');
+    var steps = ['Покупайте', 'Копите', 'Оплачивайте'];
+    var act = u
+      ? '<span class="bb-bal">На счёте <b>' + bonusNum(u.bonus) + ' ' + bonusWord(u.bonus || 0) + '</b></span><a class="btn" href="#/account?tab=bonus">Мой счёт</a>'
+      : '<a class="btn" href="#/account?tab=register">Присоединиться</a>';
     return '<section class="section bonus-sec"><div class="wrap"><div class="bonus-band">' +
-      '<div class="bb-main"><span class="eyebrow">' + esc(h.bonusEyebrow || 'Бонусная программа') + '</span><h2>' + title + '</h2>' + (h.bonusText ? '<p class="bb-text">' + esc(h.bonusText) + '</p>' : '') + '<div class="bb-acts">' + acts + '</div></div>' +
-      '<div class="bb-side"><div class="bb-coin" aria-hidden="true"><span>Б</span></div><ol class="bb-steps">' + steps.map(function (s, i) { return '<li><span class="bb-n">' + (i + 1) + '</span><div><h4>' + s[0] + '</h4><p>' + s[1] + '</p></div></li>'; }).join('') + '</ol></div>' +
-      '</div></div></section>';
+      '<div class="bb-pct" aria-hidden="true">' + pct + '<span>%</span></div>' +
+      '<div class="bb-main">' +
+        (h.bonusEyebrow ? '<span class="eyebrow">' + esc(h.bonusEyebrow) + '</span>' : '') +
+        '<h2><span class="sr">' + pct + '% — </span>' + title + '</h2>' +
+        (h.bonusText ? '<p class="bb-text">' + esc(h.bonusText) + '</p>' : '') +
+        '<ol class="bb-steps">' + steps.map(function (x, i) { return '<li><span class="bb-n">' + (i + 1) + '</span>' + x + '</li>'; }).join('') + '</ol>' +
+      '</div>' +
+      '<div class="bb-act">' + act + '</div>' +
+    '</div></div></section>';
   }
 
   /* ---------- Раздел закрыт: «скоро появится» ---------- */
@@ -487,7 +505,7 @@
   function catalog(v, parts, q) {
     var st = { cat: q.cat || '', tag: q.tag || '', sizes: q.size ? q.size.split(',') : [], colors: q.color ? q.color.split(',') : [], min: q.min || '', max: q.max || '', sale: q.sale === '1', sort: q.sort || 'popular', q: q.q || '' };
     var cat = D.categories.find(function (c) { return c.slug === st.cat; });
-    var title = st.q ? 'Поиск: ' + st.q : cat ? cat.name : st.tag === 'new' ? 'Новинки' : 'Каталог';
+    var title = st.q ? 'Поиск: ' + st.q : cat ? cat.name : st.tag === 'new' ? 'Новинки' : st.tag === 'hit' ? 'Хиты продаж' : 'Каталог';
     var gLabel = curGender() ? GENDERS[curGender()] : 'Вся коллекция';
     v.innerHTML = '<div class="wrap"><div class="page-head"><div class="crumbs"><a href="#/">Главная</a><span>/</span><a href="#/catalog">Каталог</a>' + (cat ? '<span>/</span><span>' + esc(cat.name) + '</span>' : '') + '</div><span class="eyebrow">' + esc(gLabel) + '</span><h1>' + esc(title) + '</h1></div>' +
       '<div class="catalog"><aside class="filters" id="filters"></aside><div><div class="toolbar"><span class="muted num" id="found"></span><div style="display:flex;gap:8px"><button class="btn ghost sm only-m" id="openFilters">' + 'Фильтры' + '</button><select class="select" id="sort" aria-label="Сортировка">' + Object.keys(SORTS).map(function (k) { return '<option value="' + k + '"' + (k === st.sort ? ' selected' : '') + '>' + SORTS[k] + '</option>'; }).join('') + '</select></div></div><div class="active-filters" id="activeFilters"></div><div class="grid three" id="results"></div></div></div></div>';
@@ -561,7 +579,7 @@
       var list = gProducts().filter(function (p) {
         var c = catById(p.categoryId);
         if (st.cat && (!c || c.slug !== st.cat)) return false;
-        if (st.tag && (p.tags || []).indexOf(st.tag) === -1) return false;
+        if (st.tag === 'hit' ? !isHit(p) : st.tag && (p.tags || []).indexOf(st.tag) === -1) return false;
         var cols = Pricing.colorsOf(p).filter(function (c) { return !st.colors.length || st.colors.indexOf(c.name.toLowerCase()) !== -1; });
         if (!cols.length) return false;
         if (st.sizes.length && !cols.some(function (c) { return (c.sizes || []).some(function (s) { return st.sizes.indexOf(s.size) !== -1 && s.stock > 0; }); })) return false;
@@ -572,6 +590,7 @@
         if (st.q) { var t = (p.name + ' ' + (p.description || '') + ' ' + colorNames(p) + ' ' + (c ? c.name : '')).toLowerCase(); if (t.indexOf(st.q.toLowerCase()) === -1) return false; }
         return true;
       });
+      if (st.tag === 'hit' && st.sort === 'popular') list = hitList(list);
       if (st.sort === 'new') list.sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); });
       if (st.sort === 'cheap') list.sort(function (a, b) { return priceOf(a).price - priceOf(b).price; });
       if (st.sort === 'expensive') list.sort(function (a, b) { return priceOf(b).price - priceOf(a).price; });
@@ -582,6 +601,7 @@
       var chips = [];
       if (cat) chips.push(['cat', cat.name]);
       if (st.tag === 'new') chips.push(['tag', 'Новинки']);
+      if (st.tag === 'hit') chips.push(['tag', 'Хиты продаж']);
       if (st.sale) chips.push(['sale', 'Со скидкой']);
       st.sizes.forEach(function (x) { chips.push(['size:' + x, 'Размер ' + x]); });
       st.colors.forEach(function (x) { chips.push(['color:' + x, x.charAt(0).toUpperCase() + x.slice(1)]); });

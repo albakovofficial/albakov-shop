@@ -1063,41 +1063,52 @@ input[type="range"] { accent-color: var(--accent); width: 100%; }
 .adm-bonus-calc { margin-top: 16px; }
 .adm-bonus-calc p { margin: 0; font-size: 15px; line-height: 1.6; }
 
-/* ---------- Главная: блок «Бонусная программа» — чёрная лента с монетой ---------- */
-.bonus-band { position: relative; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: clamp(32px, 6vw, 96px); align-items: center; padding: clamp(36px, 6vw, 88px); background: var(--text); color: var(--bg); }
-.bonus-band::before { content: ""; position: absolute; inset: 0; background: radial-gradient(60% 80% at 85% 20%, rgba(244, 241, 235, .08), transparent 70%); pointer-events: none; }
-.bonus-band .eyebrow { color: rgba(244, 241, 235, .68); }
-.bb-main { position: relative; display: grid; gap: 22px; justify-items: start; }
-.bb-main h2 { font-family: var(--serif); font-size: clamp(44px, 5vw, 76px); line-height: .98; letter-spacing: -.02em; }
-.bb-main h2 em { font-style: normal; white-space: nowrap; }
-.bb-text { max-width: 44ch; font-size: 16px; line-height: 1.7; color: rgba(244, 241, 235, .8); }
-.bb-acts { display: flex; align-items: center; gap: 14px 26px; flex-wrap: wrap; margin-top: 6px; }
-.bonus-band .btn { background: var(--bg); color: var(--text); border-color: var(--bg); }
-.bonus-band .btn:hover { background: var(--paper); border-color: var(--paper); color: var(--text); }
-.bonus-band .link { color: var(--bg); border-color: rgba(244, 241, 235, .4); }
-.bonus-band .link:hover { color: var(--bg); border-color: var(--bg); }
-.bb-bal { margin: 0; font-size: 15px; color: rgba(244, 241, 235, .8); }
-.bb-bal b { color: var(--bg); font-weight: 600; }
-.bb-side { position: relative; display: grid; gap: 28px; }
-.bb-coin { width: clamp(88px, 9vw, 124px); aspect-ratio: 1; border-radius: 50%; display: grid; place-items: center; background: radial-gradient(circle at 35% 30%, #fbf9f5, var(--bg) 55%, #d9d4ca); color: var(--text); box-shadow: inset 0 0 0 6px rgba(20, 20, 22, .08), 0 20px 50px -18px rgba(0, 0, 0, .7); animation: spin3d 9s ease-in-out infinite; justify-self: end; }
-.bb-coin span { font-family: var(--serif); font-size: clamp(40px, 4.4vw, 60px); line-height: 1; }
-.bb-steps { list-style: none; margin: 0; padding: 0; display: grid; border-top: 1px solid rgba(244, 241, 235, .2); }
-.bb-steps li { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 16px; padding: 18px 0; border-bottom: 1px solid rgba(244, 241, 235, .2); }
-.bb-n { font-family: var(--serif); font-style: normal; font-size: 30px; line-height: 1; color: rgba(244, 241, 235, .55); }
-.bb-steps h4 { font-family: var(--serif); font-size: 24px; line-height: 1.15; margin-bottom: 4px; }
-.bb-steps p { font-size: 14px; line-height: 1.55; color: rgba(244, 241, 235, .72); }
-@media (max-width: 860px) { .bonus-band { grid-template-columns: 1fr; } .bb-side { gap: 22px; } .bb-coin { width: 72px; justify-self: start; } .bb-coin span { font-size: 34px; } }
-@media (max-width: 520px) { .bonus-band { padding: 40px 24px; } .bb-main h2 { font-size: clamp(38px, 11vw, 46px); } .bb-acts .btn { width: 100%; } }
+/* ---------- Главная: блок «Бонусная программа» — коротко и спокойно ---------- */
+/* Крупный процент, одна фраза, три шага в строку, одна кнопка */
+.bonus-band { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: clamp(24px, 4vw, 64px); align-items: center; padding: clamp(28px, 4vw, 56px) clamp(24px, 4vw, 64px); background: var(--paper); border: 1px solid var(--line); }
+.bb-pct { font-family: var(--serif); font-weight: 300; font-size: clamp(88px, 11vw, 164px); line-height: .8; letter-spacing: -.04em; color: var(--text); white-space: nowrap; }
+.bb-pct span { font-size: .5em; letter-spacing: 0; margin-left: .04em; vertical-align: .62em; color: var(--muted); }
+.bb-main { display: grid; gap: 10px; justify-items: start; min-width: 0; }
+.bb-main .eyebrow { font-size: 14px; }
+.bb-main h2 { font-family: var(--serif); font-weight: 300; font-size: clamp(30px, 3.2vw, 46px); line-height: 1.05; letter-spacing: -.01em; }
+.bb-main h2 em { font-style: normal; }
+.bb-text { font-size: 15px; color: var(--muted); }
+.bb-steps { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px 22px; }
+.bb-steps li { display: inline-flex; align-items: center; gap: 10px; font-size: 14px; letter-spacing: .02em; color: var(--text); }
+.bb-steps li + li::before { content: ""; width: 14px; height: 1px; background: var(--line-strong); margin-right: 12px; }
+.bb-n { display: inline-grid; place-items: center; width: 24px; height: 24px; border: 1px solid var(--line-strong); border-radius: 50%; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.bb-act { display: grid; gap: 10px; justify-items: end; text-align: right; }
+.bb-bal { font-size: 14px; color: var(--muted); }
+.bb-bal b { color: var(--text); font-weight: 600; white-space: nowrap; }
+@media (max-width: 860px) {
+  .bonus-band { grid-template-columns: auto minmax(0, 1fr); row-gap: 22px; }
+  .bb-act { grid-column: 1 / -1; justify-items: stretch; text-align: left; }
+  .bb-act .btn { width: 100%; }
+}
+/* Телефон: процент и заголовок в одну строку, ниже — фраза, три шага в ряд и кнопка во всю ширину */
+@media (max-width: 520px) {
+  .bonus-band { padding: 24px 20px 20px; column-gap: 18px; row-gap: 4px; align-items: start; }
+  .bb-main { display: contents; }
+  .bb-pct { grid-row: 1 / span 2; align-self: center; font-size: 72px; }
+  .bb-main .eyebrow { grid-column: 2; align-self: end; font-size: 13px; }
+  .bb-main h2 { grid-column: 2; align-self: start; font-size: 26px; }
+  .bb-text, .bb-steps { grid-column: 1 / -1; }
+  .bb-text { margin-top: 14px; }
+  .bb-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 12px; padding-top: 14px; border-top: 1px solid var(--line); }
+  .bb-steps li + li::before { display: none; }
+  .bb-steps li { flex-direction: column; gap: 6px; font-size: 13px; letter-spacing: 0; text-align: center; }
+  .bb-act { margin-top: 16px; }
+}
 
 /* Montserrat: крупные заголовки — светлое начертание, чтобы шрифт не казался тяжёлым */
-.hero h1, .slide-title, .gate-title, .soon-title, .section-head h2, .page-head h1, .pinfo h1, .editorial h2, .success h1, .offline h1, .promo-band h3, .promo-band .pct, .bb-main h2, .bb-n, .empty h3, .prose h2, .drawer-head h3, .mnav a, .step h3 { font-weight: 300; }
+.hero h1, .slide-title, .gate-title, .soon-title, .section-head h2, .page-head h1, .pinfo h1, .editorial h2, .success h1, .offline h1, .promo-band h3, .promo-band .pct, .bb-main h2, .empty h3, .prose h2, .drawer-head h3, .mnav a, .step h3 { font-weight: 300; }
 .hero h1, .slide-title, .page-head h1, .section-head h2, .editorial h2, .success h1 { letter-spacing: -.02em; }
 
 /* Телефон: спокойные размеры заголовков — крупно, но не во весь экран */
 @media (max-width: 600px) {
   .hero h1 { font-size: clamp(34px, 9.6vw, 42px); line-height: 1.04; }
   .gate-title, .soon-title { font-size: clamp(36px, 10vw, 44px); }
-  .section-head h2, .editorial h2, .bb-main h2 { font-size: clamp(28px, 7.6vw, 32px); line-height: 1.08; }
+  .section-head h2, .editorial h2 { font-size: clamp(28px, 7.6vw, 32px); line-height: 1.08; }
   .page-head h1, .success h1 { font-size: clamp(30px, 8.4vw, 36px); line-height: 1.06; }
   .pinfo h1 { font-size: 26px; line-height: 1.12; }
   .promo-band h3 { font-size: 26px; }
@@ -1151,3 +1162,23 @@ input[type="range"] { accent-color: var(--accent); width: 100%; }
 .inst-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; margin-top: 8px; }
 .inst-btns .btn { padding: 0 14px; min-width: 0; }
 @media (max-width: 420px) { .inst-btns { grid-template-columns: 1fr; } }
+
+/* ---------- Админка: выбор нескольких товаров ---------- */
+.adm-bulk-table .adm-pick-cell { width: 44px; padding-right: 0; }
+.adm-pick { display: inline-flex; padding: 6px; margin: -6px; }
+.adm-pick input { margin: 0; }
+.adm-bulk-table input:indeterminate { background: var(--text); border-color: var(--text); }
+.adm-bulk-table input:indeterminate::after { content: ""; width: 8px; height: 1.5px; background: var(--bg); }
+.adm-bulk-table tr.picked td { background: var(--surface-2); }
+.adm-bulk-bar { gap: 8px 10px; }
+.adm-bulk-n { font-size: 14px; font-weight: 500; margin-right: 6px; }
+@media (max-width: 640px) { .adm-bulk-bar .btn { flex: 1 1 auto; } .adm-bulk-n { flex-basis: 100%; } }
+
+/* ---------- Главная: хиты продаж ---------- */
+/* Телефон: лента карточек, которую листают пальцем */
+@media (max-width: 760px) {
+  .grid.hits { display: flex; gap: 10px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scroll-padding-inline: max(var(--gutter), env(safe-area-inset-left, 0px));
+    margin-inline: calc(-1 * max(var(--gutter), env(safe-area-inset-left, 0px))); padding-inline: max(var(--gutter), env(safe-area-inset-left, 0px)); padding-bottom: 4px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .grid.hits::-webkit-scrollbar { display: none; }
+  .grid.hits > .card { flex: 0 0 46%; scroll-snap-align: start; position: relative; } /* скрытые подписи внутри карточки не вылезают за ленту */
+}

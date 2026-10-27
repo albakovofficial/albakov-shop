@@ -98,8 +98,24 @@ const pwOk = (pw) => typeof pw === 'string' && pw.length <= 200;
 
 // ЮKassa подключена: выбран провайдер и есть оба ключа
 function payReady() { const p = db.settings.payment || {}, k = yk(); return p.provider === 'yookassa' && !!(k.shopId && k.secret); }
+// Хиты продаж: товары, которых больше всего купили за 90 дней (без отменённых и неоплаченных онлайн-заказов).
+// Наружу уходит только порядок товаров — без количества продаж. Выключается в «Главной странице» панели.
+const HITS_DAYS = 90;
+function hitIds() {
+  const home = (db.settings && db.settings.home) || {};
+  if (home.hitsAuto === false) return [];
+  const since = Date.now() - HITS_DAYS * 864e5, sold = new Map();
+  for (const o of db.orders) {
+    if (o.status === 'canceled' || Date.parse(o.createdAt) < since) continue;
+    if (o.payment && o.payment.method === 'online' && o.payment.status !== 'paid') continue;
+    for (const i of o.items || []) sold.set(i.productId, (sold.get(i.productId) || 0) + (Number(i.qty) || 0));
+  }
+  const live = new Set(db.products.filter((p) => p.active !== false).map((p) => p.id));
+  return [...sold].filter(([id, n]) => n > 0 && live.has(id)).sort((a, b) => b[1] - a[1]).slice(0, 24).map(([id]) => id);
+}
 function publicState() {
   return {
+    hits: hitIds(),
     payReady: payReady(),
     mailReady: mailReady(),
     settings: db.settings,
@@ -622,6 +638,14 @@ async function api(req, res, url, body) {
     }
     if (COLLECTIONS.includes(p[1])) {
       const arr = db[p[1]];
+      // Удаление нескольких записей сразу (в панели — «Удалить выбранные»)
+      if (p[2] === 'delete-many' && M === 'POST') {
+        const ids = body.ids;
+        if (!Array.isArray(ids) || !ids.length || ids.length > 5000 || ids.some((x) => typeof x !== 'string')) fail(400, 'Не выбрано, что удалить');
+        const drop = new Set(ids), before = arr.length;
+        db[p[1]] = arr.filter((x) => !drop.has(x.id));
+        save(); return { deleted: before - db[p[1]].length };
+      }
       if (!p[2] && M === 'PUT') { if (!Array.isArray(body.value)) fail(400, 'Нужен список'); if (p[1] === 'products') body.value.forEach(Pricing.migrateProduct); db[p[1]] = body.value; save(); return p[1] === 'products' ? { notify: await processWaitlist() } : {}; }
       if (p[2] && M === 'PUT') {
         const item = body.value; if (!item || item.id !== p[2]) fail(400, 'Неверные данные');

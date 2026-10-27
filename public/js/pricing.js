@@ -81,6 +81,13 @@
     if (!st.bonus && seed && seed.settings.bonus) st.bonus = JSON.parse(JSON.stringify(seed.settings.bonus));
     // Блок о бонусах на главной (появился в ALBAKOV9)
     if (st.home && st.home.showBonus === undefined && seed && seed.settings.home) ['showBonus', 'bonusEyebrow', 'bonusTitle', 'bonusText'].forEach(function (k) { st.home[k] = seed.settings.home[k]; });
+    // Хиты продаж на главной (появились в 13.4): блок включён, самые продаваемые добавляются сами
+    if (st.home && st.home.showHits === undefined) { st.home.showHits = true; st.home.hitsAuto = true; }
+    // Короткий блок бонусов (13.4): стандартные длинные тексты меняем на новые, свои тексты владельца не трогаем
+    if (st.home && seed && seed.settings.home) {
+      if (st.home.bonusTitle === 'Возвращаем *{n}%*\nбонусами') st.home.bonusTitle = seed.settings.home.bonusTitle;
+      if (st.home.bonusText === 'С каждой покупки начисляем бонусы на ваш счёт в личном кабинете. 1 бонус = 1 ₽ — ими можно оплатить следующий заказ хоть целиком.') st.home.bonusText = seed.settings.home.bonusText;
+    }
     // Светлая тема: старые стандартные логотип и слайды меняем на новые
     if (st.brand) { if (st.brand.mark) st.brand.mark.src = freshImg(st.brand.mark.src, seed); if (st.brand.word) st.brand.word.src = freshImg(st.brand.word.src, seed); }
     if (st.slider && st.slider.slides) st.slider.slides.forEach(function (x) { x.image = freshImg(x.image, seed); });

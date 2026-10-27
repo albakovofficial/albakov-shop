@@ -71,6 +71,7 @@
     async adminMailSave(m) { await call('POST', 'api/admin/mail', { mail: m }); },
     async adminMailTest(to) { await call('POST', 'api/admin/mail/test', { to: to }); },
     async adminDelete(name, id) { await call('DELETE', 'api/admin/' + name + '/' + encodeURIComponent(id)); return true; },
+    async adminDeleteMany(name, ids) { return (await call('POST', 'api/admin/' + name + '/delete-many', { ids: ids })).deleted; },
     async adminOrder(id, patch) { var r = await call('PATCH', 'api/admin/orders/' + encodeURIComponent(id), patch); r.order.notify = r.notify; return r.order; },
     async adminPassword(pw) { await call('POST', 'api/admin/password', { password: pw }); },
     async adminSecret(secret) { return (await call('POST', 'api/admin/payment-secret', secret === undefined ? {} : { secret: secret })); },

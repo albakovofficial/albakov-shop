@@ -293,7 +293,7 @@
   window.addEventListener('resize', syncHeaderH);
 
   /* ---------- 3D: наклон за курсором (только мышь) ---------- */
-  var TILT_SEL = '.card .ph, .cat-ph, .promo-band, .editorial .media';
+  var TILT_SEL = '.card .ph, .cat-ph, .promo-band';
   function initTilt() {
     if (!(window.matchMedia && matchMedia('(hover: hover) and (pointer: fine)').matches)) return;
     var cur = null;
@@ -453,14 +453,13 @@
     if (h.showBonus !== false) html += bonusBand(h);
     if (h.showSale !== false) {
       var ap = activePromos()[0];
-      if (ap) html += '<section class="section"><div class="wrap"><a class="promo-band" href="#/sale"><div><span class="eyebrow">Акция' + (ap.endsAt ? ' до ' + esc(fmtDate(ap.endsAt)) : '') + '</span><h3 style="margin-top:12px">' + esc(ap.title) + '</h3><p>' + esc(ap.description || '') + '</p></div><div class="pct">' + (ap.type === 'percent' ? '−' + ap.value + '%' : '−' + fmt(ap.value)) + '</div></a></div></section>';
+      if (ap) html += saleBand(ap);
     }
-    if (h.showEditorial !== false && h.editorialTitle) {
-      html += '<section class="section"><div class="wrap editorial"><div class="media"><img src="' + esc(h.editorialImage || Art.make(h.editorialArt)) + '" alt="" loading="lazy"></div><div><span class="eyebrow">' + esc(h.editorialEyebrow || '') + '</span><h2>' + esc(h.editorialTitle) + '</h2><p>' + esc(h.editorialText || '') + '</p></div></div></section>';
-    }
+    if (h.showEditorial !== false && h.editorialTitle) html += atelierBlock(h);
     if (h.showBenefits !== false && (h.benefits || []).length) html += benefitsBlock(h);
     v.innerHTML = html;
     initSlider();
+    initHomeBlocks(v);
   }
 
   /* Блок «Преимущества» на главной: карточки с объёмными иконками.
@@ -484,7 +483,7 @@
     var cards = h.benefits.map(function (b, i) {
       var ic = benefitIcon(b);
       return '<div class="benefit' + (ic ? '' : ' no-ico') + '" style="--i:' + i + (ic ? ';--glow:' + BENEFIT_ICONS[ic] : '') + '">' +
-        (ic ? '<div class="benefit-ico"><img src="img/benefits/' + ic + '.webp?v=13.9.0" alt="" width="160" height="160" loading="lazy" decoding="async"></div>' : '') +
+        (ic ? '<div class="benefit-ico"><img src="img/benefits/' + ic + '.webp?v=13.10.0" alt="" width="160" height="160" loading="lazy" decoding="async"></div>' : '') +
         '<div class="benefit-body"><h3>' + glue(b.title) + '</h3>' + (b.text ? '<p>' + glue(b.text) + '</p>' : '') + '</div></div>';
     }).join('');
     return '<section class="section benefits-sec"><div class="wrap">' + head + '<div class="benefits">' + cards + '</div></div></section>';
@@ -496,20 +495,113 @@
     var c = bonusCfg(); if (!c.earn) return '';
     var pct = String(c.percent).replace('.', ','), u = API.user;
     var title = esc(String(h.bonusTitle || 'Возвращаем бонусами').replace(/\{n\}/g, pct)).replace(/\*(.+?)\*/g, '<em>$1</em>').replace(/\n/g, '<br>');
-    var steps = ['Покупайте', 'Копите', 'Оплачивайте'];
+    var steps = [
+      ['Покупайте', pct + '% от суммы заказа возвращаем бонусами'],
+      ['Копите', 'Бонусы приходят на счёт ' + (c.creditOn === 'done' ? 'после получения заказа' : 'после оплаты заказа')],
+      ['Оплачивайте', 'Тратьте на следующие покупки, хоть все сразу']
+    ];
+    var bal = u ? (u.bonus || 0) : 0;
     var act = u
-      ? '<span class="bb-bal">На счёте <b>' + bonusNum(u.bonus) + ' ' + bonusWord(u.bonus || 0) + '</b></span><a class="btn" href="#/account?tab=bonus">Мой счёт</a>'
-      : '<a class="btn" href="#/account?tab=register">Присоединиться</a>';
-    return '<section class="section bonus-sec"><div class="wrap"><div class="bonus-band">' +
-      '<div class="bb-pct" aria-hidden="true">' + pct + '<span>%</span></div>' +
-      '<div class="bb-main">' +
+      ? '<a class="btn" href="#/account?tab=bonus">Открыть бонусный счёт</a>'
+      : '<a class="btn" href="#/account?tab=register">Присоединиться</a><span class="loyal-note">Регистрация займёт минуту</span>';
+    var b = D.settings.brand || {}, mark = b.mark && b.mark.src ? '<img class="lc-mark" src="' + esc(b.mark.src) + '" alt="" width="' + (b.mark.w || 1) + '" height="' + (b.mark.h || 1) + '">' : '<span class="lc-word">' + esc(D.settings.storeName || '') + '</span>';
+    var holder = u ? [u.firstName, u.lastName].filter(Boolean).join(' ') : '';
+    var cardHtml = '<div class="loyal-card" aria-hidden="true"><i class="lc-sheen"></i>' +
+      '<div class="lc-top">' + mark + '<span class="lc-label">Бонусный счёт</span></div>' +
+      '<div class="lc-pct">' + pct + '<span>%</span></div>' +
+      '<div class="lc-bottom"><span class="lc-holder">' + esc(holder || 'Ваше имя') + '</span><span class="lc-bal"><b>' + bonusNum(bal) + '</b> ' + bonusWord(bal) + '</span></div>' +
+    '</div>';
+    return '<section class="section loyal-sec"><div class="wrap"><div class="loyal">' +
+      '<div class="loyal-copy">' +
         (h.bonusEyebrow ? '<span class="eyebrow">' + esc(h.bonusEyebrow) + '</span>' : '') +
         '<h2><span class="sr">' + pct + '% — </span>' + title + '</h2>' +
-        (h.bonusText ? '<p class="bb-text">' + esc(h.bonusText) + '</p>' : '') +
-        '<ol class="bb-steps">' + steps.map(function (x, i) { return '<li><span class="bb-n">' + (i + 1) + '</span>' + x + '</li>'; }).join('') + '</ol>' +
+        (h.bonusText ? '<p class="loyal-rate">' + esc(h.bonusText) + '</p>' : '') +
+        '<ol class="loyal-steps">' + steps.map(function (x, i) { return '<li><span class="ls-n">' + (i + 1) + '</span><b>' + x[0] + '</b><span>' + esc(x[1]) + '</span></li>'; }).join('') + '</ol>' +
+        '<div class="loyal-act">' + act + '</div>' +
       '</div>' +
-      '<div class="bb-act">' + act + '</div>' +
+      '<div class="loyal-visual">' + cardHtml + '</div>' +
     '</div></div></section>';
+  }
+
+  /* Акция на главной: тёмная полоса, крупная скидка, обратный отсчёт и товары, на которые она действует */
+  function saleBand(ap) {
+    var off = ap.type === 'percent' ? '−' + ap.value + '<span>%</span>' : '−' + fmt(ap.value);
+    var items = gProducts().filter(function (p) { return p.active !== false && totalStock(p) > 0; }).map(function (p) { return { p: p, pr: priceOf(p) }; })
+      .filter(function (x) { return x.pr.oldPrice && x.pr.promotion && x.pr.promotion.id === ap.id; }).slice(0, 3);
+    if (!items.length) items = gProducts().filter(function (p) { return p.active !== false; }).map(function (p) { return { p: p, pr: priceOf(p) }; }).filter(function (x) { return x.pr.oldPrice; }).slice(0, 3);
+    var ends = ap.endsAt ? new Date(ap.endsAt + 'T23:59:59').getTime() : 0;
+    var timer = ends ? '<div class="sale-timer" data-ends="' + ends + '" role="timer" aria-label="До конца акции">' +
+      [['d', 'дней'], ['h', 'часов'], ['m', 'минут'], ['s', 'секунд']].map(function (u) { return '<span class="st-cell"><b data-u="' + u[0] + '">00</b><i data-l="' + u[0] + '">' + u[1] + '</i></span>'; }).join('') + '</div>' : '';
+    var tiles = items.map(function (x) {
+      var c0 = shownColor(x.p), img = (c0.images && c0.images[0]) || Art.make(c0.art);
+      return '<a class="sale-item" href="#/product/' + esc(x.p.slug) + '"><span class="si-ph"><img src="' + esc(img) + '" alt="" loading="lazy"></span>' +
+        '<span class="si-name">' + esc(x.p.name) + '</span><span class="si-price"><b>' + fmt(x.pr.price) + '</b><s>' + fmt(x.pr.oldPrice) + '</s></span></a>';
+    }).join('');
+    return '<section class="section sale-sec"><div class="wrap"><div class="sale' + (tiles ? '' : ' no-items') + '">' +
+      '<div class="sale-copy">' +
+        '<span class="sale-when">Акция' + (ap.endsAt ? ' до ' + esc(fmtDate(ap.endsAt).replace(/ \d{4} г\.$/, '')) : '') + '</span>' +
+        '<div class="sale-off' + (ap.type === 'percent' ? '' : ' is-money') + '" aria-hidden="true">' + off + '</div>' +
+        '<h2>' + esc(ap.title) + '</h2>' +
+        (ap.description ? '<p>' + esc(ap.description) + '</p>' : '') +
+        '<div class="sale-foot">' + timer + '<a class="btn sale-btn" href="#/sale">Смотреть товары со скидкой</a></div>' +
+      '</div>' +
+      (tiles ? '<div class="sale-items">' + tiles + '</div>' : '') +
+    '</div></div></section>';
+  }
+
+  /* «Ателье»: фото во всю левую половину экрана, заголовок заходит на фото и меняет цвет на его фоне */
+  function atelierBlock(h) {
+    var about = (D.pages || []).some(function (p) { return p.slug === 'about'; });
+    return '<section class="section atelier-sec"><div class="wrap atelier">' +
+      '<figure class="atelier-media" data-reveal><img src="' + esc(h.editorialImage || Art.make(h.editorialArt)) + '" alt="" loading="lazy"></figure>' +
+      '<div class="atelier-copy">' +
+        (h.editorialEyebrow ? '<span class="eyebrow">' + esc(h.editorialEyebrow) + '</span>' : '') +
+        '<h2>' + esc(h.editorialTitle) + '</h2>' +
+        (h.editorialText ? '<p>' + esc(h.editorialText) + '</p>' : '') +
+        '<span class="atelier-seam" data-reveal aria-hidden="true"></span>' +
+        (about ? '<a class="link" href="#/page/about">О бренде</a>' : '') +
+      '</div>' +
+    '</div></section>';
+  }
+
+  /* Оживление блоков главной: появление фото и шва при прокрутке, отсчёт акции, блик на бонусной карте */
+  var saleTick = null;
+  function initHomeBlocks(v) {
+    // следим за секцией целиком: обрезанный (ещё невидимый) элемент наблюдатель не замечает
+    var secs = $$('[data-reveal]', v).map(function (el) { return el.closest('section'); }).filter(function (s, i, a) { return s && a.indexOf(s) === i; });
+    if ('IntersectionObserver' in window && secs.length) {
+      var io = new IntersectionObserver(function (es) {
+        es.forEach(function (e) { if (e.isIntersecting) { $$('[data-reveal]', e.target).forEach(function (el) { el.classList.add('in'); }); io.unobserve(e.target); } });
+      }, { threshold: .2 });
+      secs.forEach(function (s) { $$('[data-reveal]', s).forEach(function (el) { el.classList.add('pre'); }); io.observe(s); });
+    }
+    clearInterval(saleTick);
+    var t = $('.sale-timer', v);
+    if (t) {
+      var end = Number(t.getAttribute('data-ends'));
+      var forms = { d: ['день', 'дня', 'дней'], h: ['час', 'часа', 'часов'], m: ['минута', 'минуты', 'минут'], s: ['секунда', 'секунды', 'секунд'] };
+      var tick = function () {
+        if (!document.body.contains(t)) { clearInterval(saleTick); return; }
+        var left = Math.max(0, Math.floor((end - Date.now()) / 1000));
+        var vals = { d: Math.floor(left / 86400), h: Math.floor(left % 86400 / 3600), m: Math.floor(left % 3600 / 60), s: left % 60 };
+        Object.keys(vals).forEach(function (k) {
+          $('[data-u="' + k + '"]', t).textContent = (vals[k] < 10 ? '0' : '') + vals[k];
+          $('[data-l="' + k + '"]', t).textContent = plural(vals[k], forms[k][0], forms[k][1], forms[k][2]);
+        });
+      };
+      tick(); saleTick = setInterval(tick, 1000);
+    }
+    var card = $('.loyal-card', v), vis = card && card.parentNode;
+    if (card && window.matchMedia && matchMedia('(hover: hover) and (pointer: fine)').matches) {
+      vis.addEventListener('pointermove', function (e) {
+        var r = card.getBoundingClientRect(), x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+        card.style.setProperty('--rx', ((.5 - y) * 14).toFixed(2) + 'deg');
+        card.style.setProperty('--ry', ((x - .5) * 18).toFixed(2) + 'deg');
+        card.style.setProperty('--sx', (x * 100).toFixed(1) + '%');
+        card.classList.add('live');
+      });
+      vis.addEventListener('pointerleave', function () { card.classList.remove('live'); card.style.removeProperty('--rx'); card.style.removeProperty('--ry'); card.style.removeProperty('--sx'); });
+    }
   }
 
   /* ---------- Раздел закрыт: «скоро появится» ---------- */

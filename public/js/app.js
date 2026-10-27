@@ -1180,10 +1180,10 @@
     catch (e) {
       root.innerHTML = '<div class="offline"><img src="img/logo-wordmark.png" alt="' + 'ALBAKOV' + '"><h1>Магазин временно недоступен</h1><p>Не удалось связаться с сервером. Проверьте интернет и обновите страницу — обычно это занимает минуту.</p><button class="btn" id="reloadBtn">Обновить страницу</button></div>';
       document.getElementById('reloadBtn').addEventListener('click', function () { location.reload(); });
+      splashOut();
       return;
     }
     API = c.api; D = c.data;
-    intro();
     window.App = { API: API, D: D, plural: plural, slideHtml: slideHtml, slidePromo: slidePromo, slideVisible: slideVisible, hashPath: hashPath, brandHtml: brandHtml, brandMode: brandMode, esc: esc, fmt: fmt, md: md, toast: toast, errMsg: errMsg, imgOf: imgOf, refresh: refresh, go: go, openModal: openModal, closePanels: closePanels, fmtPhone: fmtPhone, fmtDate: fmtDate, STATUS: STATUS, PAY: PAY, chartTable: chartTable };
     renderShell();
     document.addEventListener('click', function (e) {
@@ -1234,16 +1234,20 @@
     setTimeout(showBonusNews, 2300); // после заставки
     // Первый заход на главную: предложить выбрать раздел
     if (genderChoice === null && gatewayCfg().enabled !== false && !parseHash().parts[0]) showGateway();
+    requestAnimationFrame(splashOut);
   }
   /* Заставка при первом заходе за сеанс: логотип проявляется, линия прорисовывается, затем открывается сайт */
-  function intro() {
-    var seen = false; try { seen = sessionStorage.getItem('albakov:intro') === '1'; sessionStorage.setItem('albakov:intro', '1'); } catch (e) {}
-    if (seen) return;
-    var el = document.createElement('div'); el.className = 'intro'; el.setAttribute('aria-hidden', 'true');
-    el.innerHTML = brandHtml(D.settings, 'desktop', 'brand-intro', (D.settings.brand && D.settings.brand.word && D.settings.brand.word.src) ? 'word' : 'text') + '<span class="intro-line"></span>';
-    document.body.appendChild(el);
-    setTimeout(function () { el.classList.add('out'); }, 1300);
-    setTimeout(function () { el.remove(); }, 2100);
+  /* Заставка из index.html: убираем, когда магазин отрисован.
+     При первом заходе за сессию даём анимации знака доиграть (не меньше 1,4 с с начала загрузки),
+     при переходах и обновлениях страницы — уходит почти сразу */
+  function splashOut() {
+    var el = document.getElementById('splash'); if (!el || el.classList.contains('leave')) return;
+    var first = true; try { first = sessionStorage.getItem('albakov:intro') !== '1'; sessionStorage.setItem('albakov:intro', '1'); } catch (e) {}
+    var wait = Math.max(0, (first ? 1400 : 250) - performance.now());
+    setTimeout(function () {
+      el.classList.add('done');
+      setTimeout(function () { el.classList.add('leave'); setTimeout(function () { el.remove(); }, 950); }, 280);
+    }, wait);
   }
   document.addEventListener('DOMContentLoaded', boot);
 })();

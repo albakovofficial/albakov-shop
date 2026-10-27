@@ -869,13 +869,6 @@ input[type="range"] { accent-color: var(--accent); width: 100%; }
 /* Смена страницы */
 #view.view-in { animation: viewIn .45s ease both; }
 @keyframes viewIn { from { opacity: 0; } }
-/* Заставка */
-.intro { position: fixed; inset: 0; z-index: 300; background: var(--bg); display: grid; place-content: center; justify-items: center; gap: 22px; transition: opacity .8s ease, visibility 0s linear .8s; }
-.intro.out { opacity: 0; visibility: hidden; }
-.brand-intro { --mh: calc(40px * var(--bs, 1)); animation: introLogo 1.3s var(--ease) both; }
-@keyframes introLogo { from { opacity: 0; letter-spacing: .6em; filter: blur(6px); transform: perspective(700px) rotateX(75deg) scale(.96); } }
-.intro-line { width: 160px; height: 1px; background: var(--accent); transform-origin: left; animation: introLine 1.1s .2s var(--ease) both; }
-@keyframes introLine { from { transform: scaleX(0); } }
 /* Шапка: при прокрутке становится ниже и плотнее */
 .header.scrolled { background: color-mix(in srgb, var(--bg) 96%, transparent); box-shadow: 0 10px 30px rgba(20, 20, 22, .07); }
 .header.scrolled .wrap { height: 58px; }

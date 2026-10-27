@@ -14,16 +14,37 @@
 <meta name="apple-mobile-web-app-title" content="ALBAKOV">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="preload" href="fonts/montserrat-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="css/app.css?v=13.4.0">
+<link rel="stylesheet" href="css/app.css?v=13.5.0">
+<style>
+/* Заставка при входе: показывается сразу, ещё до загрузки стилей и скриптов магазина.
+   Знак AV прорисовывается слева направо, под ним надпись и тонкая линия загрузки.
+   Когда магазин готов, линия дотягивается до конца, и заставка уезжает вверх, как занавес. */
+html{background:#f4f1eb}
+#splash{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;background:#f4f1eb;transition:transform .85s cubic-bezier(.76,0,.24,1)}
+#splash .sp{display:grid;justify-items:center;transition:opacity .35s ease,transform .6s cubic-bezier(.2,.7,.2,1)}
+#splash .sp-mark{width:64px;height:auto;animation:spMark 1.05s cubic-bezier(.65,0,.35,1) both}
+#splash .sp-word{width:132px;height:auto;margin-top:22px;animation:spWord .9s .4s cubic-bezier(.2,.7,.2,1) both}
+#splash .sp-line{position:relative;width:132px;height:1px;margin-top:26px;background:rgba(20,20,20,.12);overflow:hidden;animation:spFade .6s .55s both}
+#splash .sp-line i{position:absolute;inset:0;background:#141414;transform-origin:left;transform:scaleX(0);animation:spLoad 2.6s .6s cubic-bezier(.25,.7,.3,1) forwards}
+#splash.done .sp-line i{animation:none;transform:scaleX(1);transition:transform .28s ease}
+#splash.leave{transform:translateY(-100%)}
+#splash.leave .sp{opacity:0;transform:translateY(-28px)}
+@keyframes spMark{from{clip-path:inset(0 100% 0 0);transform:scale(.96)}to{clip-path:inset(0 0 0 0);transform:none}}
+@keyframes spWord{from{opacity:0;transform:translateY(8px)}}
+@keyframes spFade{from{opacity:0}}
+@keyframes spLoad{to{transform:scaleX(.82)}}
+@media (prefers-reduced-motion:reduce){#splash *{animation:none!important}#splash{transition:opacity .3s ease}#splash.leave{transform:none;opacity:0}}
+</style>
 </head>
 <body>
-<div id="app"><div class="loader"><img src="img/logo-mark.png" alt="" width="55" height="48" style="opacity:.6"></div></div>
-<script src="js/pricing.js?v=13.4.0"></script>
-<script src="js/mail.js?v=13.4.0"></script>
-<script src="js/art.js?v=13.4.0"></script>
-<script src="js/store.js?v=13.4.0"></script>
-<script src="js/install.js?v=13.4.0"></script>
-<script src="js/app.js?v=13.4.0"></script>
-<script src="js/admin.js?v=13.4.0"></script>
+<div id="splash" aria-hidden="true"><div class="sp"><img class="sp-mark" src="img/logo-mark.png" alt="" width="64" height="56"><img class="sp-word" src="img/logo-wordmark.png" alt="" width="132" height="13"><span class="sp-line"><i></i></span></div></div>
+<div id="app"></div>
+<script src="js/pricing.js?v=13.5.0"></script>
+<script src="js/mail.js?v=13.5.0"></script>
+<script src="js/art.js?v=13.5.0"></script>
+<script src="js/store.js?v=13.5.0"></script>
+<script src="js/install.js?v=13.5.0"></script>
+<script src="js/app.js?v=13.5.0"></script>
+<script src="js/admin.js?v=13.5.0"></script>
 </body>
 </html>

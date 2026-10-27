@@ -131,6 +131,7 @@
   function rowHtml(cols, r) {
     return '<div class="adm-row" data-id="' + esc(r.id || uid('r')) + '">' + cols.map(function (c) {
       if (c.type === 'checkbox') return '<label class="check" title="' + esc(c.label) + '"><input type="checkbox" data-c="' + c.k + '"' + (r[c.k] ? ' checked' : '') + '> ' + esc(c.label) + '</label>';
+      if (c.type === 'select') return '<select class="select" data-c="' + c.k + '" aria-label="' + esc(c.label) + '" title="' + esc(c.label) + '" style="flex:' + (c.flex || 1) + '">' + c.options.map(function (o) { return '<option value="' + esc(o[0]) + '"' + ((r[c.k] || c.options[0][0]) === o[0] ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') + '</select>';
       return '<input class="input' + (c.type === 'number' ? ' num' : '') + '" ' + (c.type === 'number' ? 'type="number" min="0" ' : '') + 'data-c="' + c.k + '" placeholder="' + esc(c.label) + '" aria-label="' + esc(c.label) + '" value="' + esc(r[c.k] == null ? '' : r[c.k]) + '" style="flex:' + (c.flex || 1) + '">';
     }).join('') + '<span class="adm-row-tools"><button type="button" data-up title="Выше">↑</button><button type="button" data-down title="Ниже">↓</button><button type="button" data-rm title="Удалить">✕</button></span></div>';
   }
@@ -152,7 +153,7 @@
       var o = { id: row.getAttribute('data-id') };
       cols.forEach(function (c) { var i = $('[data-c="' + c.k + '"]', row); o[c.k] = c.type === 'checkbox' ? i.checked : c.type === 'number' ? Number(i.value || 0) : i.value.trim(); });
       return o;
-    }).filter(function (o) { return cols.some(function (c) { return c.type !== 'checkbox' && c.type !== 'number' && o[c.k]; }); });
+    }).filter(function (o) { return cols.some(function (c) { return c.type !== 'checkbox' && c.type !== 'number' && c.type !== 'select' && o[c.k]; }); });
   }
 
   /* --- Кнопка удаления с подтверждением на месте --- */
@@ -765,13 +766,16 @@
       { k: 'bonusEyebrow', label: 'Надзаголовок' },
       { k: 'bonusTitle', label: 'Заголовок', type: 'textarea', rows: 2, hint: '{n} — процент из раздела «Бонусы», *слово* — курсивом' },
       { k: 'bonusText', label: 'Текст', type: 'textarea', rows: 3 },
+      { section: 'Блок «Преимущества»' },
+      { k: 'benefitsEyebrow', label: 'Надзаголовок' },
+      { k: 'benefitsTitle', label: 'Заголовок', hint: 'Оставьте пустым, чтобы показать только карточки. Тексты карточек и их иконки — в списке «Преимущества»' },
       { section: 'Блок о бренде' },
       { k: 'editorialEyebrow', label: 'Надзаголовок' },
       { k: 'editorialTitle', label: 'Заголовок' },
       { k: 'editorialText', label: 'Текст', type: 'textarea' },
       { k: 'editorialImage', label: 'Фото', type: 'image' }
     ], {
-      benefits: { title: 'Преимущества', cols: [{ k: 'title', label: 'Заголовок' }, { k: 'text', label: 'Описание', flex: 2 }], get: function (s) { return s.home.benefits; }, set: function (s, v) { s.home.benefits = v; } }
+      benefits: { title: 'Преимущества', cols: [{ k: 'title', label: 'Заголовок' }, { k: 'text', label: 'Описание', flex: 2 }, { k: 'icon', label: 'Иконка', type: 'select', options: [['auto', 'Иконка: по тексту'], ['delivery', 'Доставка — грузовик'], ['quality', 'Качество — медаль'], ['fabric', 'Ткани — стопка тканей'], ['fitting', 'Примерка — футболка'], ['return', 'Возврат — коробка'], ['payment', 'Оплата — карты'], ['gift', 'Подарок'], ['none', 'Без иконки']] }], get: function (s) { return s.home.benefits; }, set: function (s, v) { s.home.benefits = v; } }
     }, function (s) { var o = s.home; o.announcement = s.announcement; return o; }, function (s, o) { s.announcement = o.announcement; delete o.announcement; s.home = Object.assign(s.home, o); });
   }
 

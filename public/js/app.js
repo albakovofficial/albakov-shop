@@ -117,7 +117,7 @@
       '<aside class="drawer left" id="menuDrawer" aria-label="Меню"><div class="drawer-head"><a class="logo" href="#/" aria-label="' + esc(s.storeName) + '">' + brandHtml(s, 'mobile', 'brand-drawer') + '</a><button class="icon-btn" data-act="close">' + ICON.close + '</button></div>' +
         '<div class="drawer-body">' + genderTabs('gtabs-drawer') + '<nav class="mnav">' + navLinks() + '<a href="#/account">Личный кабинет</a></nav>' +
         '<div class="mnav-sub">' + sortedCats().map(function (c) { return '<a href="#/catalog?cat=' + esc(c.slug) + '">' + esc(c.name) + '</a>'; }).join('') + '</div>' +
-        socialsHtml() + '</div></aside>' +
+        appMenuHtml() + socialsHtml() + '</div></aside>' +
       '<aside class="drawer right" id="cartDrawer" aria-label="Корзина"><div class="drawer-head"><h3>Корзина</h3><button class="icon-btn" data-act="close">' + ICON.close + '</button></div><div class="drawer-body" id="cartBody"></div><div class="drawer-foot" id="cartFoot"></div></aside>' +
       '<div class="modal" id="modal" role="dialog" aria-modal="true"><div class="modal-box"><button class="icon-btn modal-close" data-act="close">' + ICON.close + '</button><div id="modalBody"></div></div></div>' +
       '<div class="toast-wrap" aria-live="polite"></div>' +
@@ -172,7 +172,8 @@
     return '<footer class="footer">' + footerMark() + '<div class="wrap footer-top">' +
       '<div><a class="logo logo-foot" href="#/" aria-label="' + esc(s.storeName) + '">' + brandHtml(s, 'desktop', 'brand-foot') + '</a><p class="muted" style="margin-top:16px;max-width:34ch">' + esc(s.tagline || '') + '</p>' + socialsHtml() + '</div>' +
       '<div><h4>Магазин</h4><ul>' + sortedCats().map(function (x) { return '<li><a href="#/catalog?cat=' + esc(x.slug) + '">' + esc(x.name) + '</a></li>'; }).join('') + '<li><a href="#/sale">Акции</a></li></ul></div>' +
-      '<div><h4>Покупателям</h4><ul>' + pages('help') + '<li><a href="#/sizes">Таблица размеров</a></li><li><a href="#/account">Личный кабинет</a></li>' + pages('brand') + '</ul></div>' +
+      '<div><h4>Покупателям</h4><ul>' + pages('help') + '<li><a href="#/sizes">Таблица размеров</a></li><li><a href="#/account">Личный кабинет</a></li>' + pages('brand') +
+        '<li data-inst="installed-hide"' + (window.Install && Install.isInstalled() ? ' hidden' : '') + '><button class="foot-btn" data-act="install">Приложение на телефон</button></li></ul></div>' +
       '<div><h4>Контакты</h4><ul>' +
         (c.phone ? '<li><a href="tel:' + esc(c.phone.replace(/[^\d+]/g, '')) + '" class="copyable">' + esc(c.phone) + '</a></li>' : '') +
         (c.email ? '<li><a href="mailto:' + esc(c.email) + '" class="copyable">' + esc(c.email) + '</a></li>' : '') +
@@ -181,6 +182,30 @@
       '</div><div class="wrap footer-bottom"><span>© ' + new Date().getFullYear() + ' ' + esc(s.storeName) + (s.legal ? '. ' + esc(s.legal) : '') + '</span>' +
       '<span style="display:flex;gap:18px;flex-wrap:wrap">' + D.pages.filter(function (p) { return p.inFooter && p.group === 'legal'; }).map(function (p) { return '<a href="#/page/' + esc(p.slug) + '">' + esc(p.title) + '</a>'; }).join('') + (API.isAdmin ? '<a href="#/admin">Управление</a>' : '') + '</span></div></footer>';
   }
+
+  /* ---------- Приложение: значок на экране «Домой» (логика — в install.js) ---------- */
+  function appMenuHtml() {
+    if (!window.Install) return '';
+    return '<div class="mnav-app">' +
+      '<button class="mnav-app-btn" data-act="install" data-inst="offer"' + (Install.canOffer() ? '' : ' hidden') + '><img src="img/icon-192.png" alt="" width="36" height="36"><span><b>Приложение ALBAKOV</b><small>Значок на экране «Домой»</small></span></button>' +
+      '<button class="mnav-app-btn" data-act="share-shop"><span class="mnav-app-ic" aria-hidden="true">' + Install.IC.share + '</span><span><b>Поделиться магазином</b><small>Отправить ссылку друзьям</small></span></button>' +
+    '</div>';
+  }
+  function installBannerHtml() {
+    if (!window.Install || !Install.isMobile) return '';
+    return '<div class="wrap"><div class="inst-banner" data-inst="banner"' + (Install.showBanner() ? '' : ' hidden') + '>' +
+      '<img src="img/icon-192.png" alt="" width="44" height="44">' +
+      '<div class="inst-banner-text"><b>Приложение ALBAKOV</b><span>Открывается на весь экран</span></div>' +
+      '<button class="inst-banner-btn" data-act="install">Установить</button>' +
+      '<button class="inst-banner-x" data-act="install-hide" aria-label="Скрыть">' + ICON.close + '</button></div></div>';
+  }
+  function syncInstall() {
+    if (!window.Install) return;
+    $$('[data-inst="offer"]').forEach(function (el) { el.hidden = !Install.canOffer(); });
+    $$('[data-inst="banner"]').forEach(function (el) { el.hidden = !Install.showBanner(); });
+    $$('[data-inst="installed-hide"]').forEach(function (el) { el.hidden = Install.isInstalled(); });
+  }
+  document.addEventListener('install:change', syncInstall);
 
   function openPanel(id) { closePanels(); $('#' + id).classList.add('open'); $('#scrim').classList.add('open'); document.body.style.overflow = 'hidden'; }
   function closePanels() { $$('.drawer.open, .modal.open, .scrim.open').forEach(function (e) { e.classList.remove('open'); }); document.body.style.overflow = ''; }
@@ -399,6 +424,7 @@
       (h.heroText ? '<p>' + esc(h.heroText) + '</p>' : '') +
       (h.heroCta ? '<div><a class="btn" href="' + esc(safeUrl(h.heroLink || '#/catalog')) + '">' + esc(h.heroCta) + '</a></div>' : '') +
       '</div><div class="hero-media"><img src="' + esc(heroImg) + '" alt=""></div></section>';
+    html += installBannerHtml();
     if (h.showCategories !== false && D.categories.length) {
       html += '<section class="section"><div class="wrap"><div class="section-head"><h2>Категории</h2><a class="link" href="#/catalog">Весь каталог</a></div><div class="cats">' +
         sortedCats().filter(function (c) { return gProducts().some(function (p) { return p.categoryId === c.id; }); }).map(function (c) { return '<a class="cat" href="#/catalog?cat=' + esc(c.slug) + '"><span class="cat-ph"><img src="' + esc(c.image || Art.make(c.art)) + '" alt="" loading="lazy"></span><span class="cat-cap"><span class="cat-name">' + esc(c.name) + '</span><svg class="cat-go" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15M14 7l5 5-5 5"/></svg></span></a>'; }).join('') + '</div></div></section>';
@@ -1147,6 +1173,9 @@
         if (act === 'cart') openCart();
         if (act === 'search') openSearch();
         if (act === 'close') closePanels();
+        if (act === 'install' && window.Install) { closePanels(); Install.open(); }
+        if (act === 'share-shop' && window.Install) Install.share();
+        if (act === 'install-hide' && window.Install) { Install.hideBanner(); syncInstall(); }
       }
       if (e.target.id === 'scrim' || e.target.id === 'modal') closePanels();
       var qa = e.target.closest('[data-qa]');

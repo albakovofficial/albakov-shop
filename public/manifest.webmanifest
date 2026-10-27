@@ -1,0 +1,25 @@
+{
+  "id": "/",
+  "name": "ALBAKOV",
+  "short_name": "ALBAKOV",
+  "description": "Интернет-магазин одежды ALBAKOV",
+  "lang": "ru",
+  "dir": "ltr",
+  "start_url": "/?source=app",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f4f1eb",
+  "theme_color": "#f4f1eb",
+  "categories": ["shopping", "lifestyle"],
+  "icons": [
+    { "src": "/img/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/img/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/img/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Каталог", "url": "/#/catalog", "icons": [{ "src": "/img/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Корзина", "url": "/#/cart", "icons": [{ "src": "/img/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Мои заказы", "url": "/#/account", "icons": [{ "src": "/img/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

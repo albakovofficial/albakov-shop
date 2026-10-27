@@ -9,7 +9,7 @@
   var DATA = null;
 
   var SECTIONS = [
-    ['overview', 'Обзор'], ['orders', 'Заказы'], ['products', 'Товары'], ['categories', 'Категории'], ['sizeCharts', 'Размерные сетки'],
+    ['overview', 'Обзор'], ['orders', 'Заказы'], ['support', 'Поддержка'], ['products', 'Товары'], ['categories', 'Категории'], ['sizeCharts', 'Размерные сетки'],
     ['promotions', 'Акции'], ['promocodes', 'Промокоды'], ['bonus', 'Бонусы'], ['customers', 'Покупатели'], ['notify', 'Сообщить о поступлении'], ['sections', 'Разделы: женщинам / мужчинам'], ['brand', 'Логотип и название'], ['slider', 'Слайдер на главной'], ['home', 'Главная страница'], ['pages', 'Страницы'],
     ['menu', 'Меню, контакты, соцсети'], ['payment', 'Оплата, касса, доставка'], ['settings', 'Настройки']
   ];
@@ -193,11 +193,11 @@
     if (ticket !== renderTicket || !document.body.contains(v)) return; // пока грузились данные, открылась другая страница
     var s = q.s || 'overview';
     v.innerHTML = '<div class="adm"><aside class="adm-side"><div class="adm-brand"><span class="eyebrow">Управление</span><b class="serif">' + esc(A().D.settings.storeName) + '</b></div><nav>' +
-      SECTIONS.map(function (x) { return '<a href="#/admin?s=' + x[0] + '"' + (x[0] === s ? ' class="on"' : '') + '>' + x[1] + (x[0] === 'orders' ? newOrdersBadge() : '') + (x[0] === 'notify' ? waitBadge() : '') + '</a>'; }).join('') +
+      SECTIONS.map(function (x) { return '<a href="#/admin?s=' + x[0] + '"' + (x[0] === s ? ' class="on"' : '') + '>' + x[1] + (x[0] === 'orders' ? newOrdersBadge() : '') + (x[0] === 'support' && DATA.supportNew ? ' <span class="adm-badge">' + DATA.supportNew + '</span>' : '') + (x[0] === 'notify' ? waitBadge() : '') + '</a>'; }).join('') +
       '</nav><div class="adm-side-foot"><a href="#/" class="muted">← В магазин</a><button class="muted" id="admOut">Выйти</button></div></aside><section class="adm-main" id="admMain"></section></div>';
     $('#admOut').addEventListener('click', async function () { await API.adminLogout(); DATA = null; location.hash = '#/'; await A().refresh(); });
     var main = $('#admMain');
-    var fn = { overview: overview, orders: orders, products: products, categories: categories, sizeCharts: sizeCharts, promotions: promotions, promocodes: promocodes, bonus: bonusSection, customers: customers, notify: notifySection, sections: sectionsSettings, brand: brandSection, slider: sliderSection, home: homeSettings, pages: pages, menu: menuSettings, payment: paymentSettings, settings: generalSettings }[s] || overview;
+    var fn = { overview: overview, orders: orders, support: supportSection, products: products, categories: categories, sizeCharts: sizeCharts, promotions: promotions, promocodes: promocodes, bonus: bonusSection, customers: customers, notify: notifySection, sections: sectionsSettings, brand: brandSection, slider: sliderSection, home: homeSettings, pages: pages, menu: menuSettings, payment: paymentSettings, settings: generalSettings }[s] || overview;
     fn(main, q);
   }
   function waitBadge() { var n = (DATA.waitlist || []).filter(function (w) { return w.status === 'waiting' || w.status === 'failed'; }).length; return n ? ' <span class="adm-badge muted-badge">' + n + '</span>' : ''; }
@@ -818,7 +818,10 @@
     settingsForm(m, 'Меню, контакты, соцсети', 'Пункты верхнего меню, контакты в подвале и ссылки на социальные сети. Порядок меняется стрелками.', [
       { section: 'Контакты' },
       { k: 'phone', label: 'Телефон' }, { k: 'email', label: 'Электронная почта' },
-      { k: 'address', label: 'Адрес' }, { k: 'hours', label: 'Часы работы' }
+      { k: 'address', label: 'Адрес' }, { k: 'hours', label: 'Часы работы' },
+      { section: 'Кнопка связи' },
+      { k: 'fab', label: 'Показывать кнопку связи на всех страницах', type: 'checkbox', wide: true, hint: 'Круглая кнопка в правом нижнем углу: чат поддержки, Telegram из соцсетей, WhatsApp, телефон и почта' },
+      { k: 'whatsapp', label: 'WhatsApp', hint: 'Номер для кнопки связи, например +7 999 000-00-00. Пусто — WhatsApp не показывается' }
     ], {
       nav: { title: 'Верхнее меню', hint: 'Ссылки: #/catalog, #/catalog?cat=адрес-категории, #/sale, #/sizes, #/page/адрес-страницы или полный адрес сайта', cols: [{ k: 'label', label: 'Название' }, { k: 'link', label: 'Ссылка', flex: 2 }], get: function (s) { return s.nav; }, set: function (s, v) { s.nav = v; } },
       socials: { title: 'Социальные сети', hint: 'Например: Telegram — https://t.me/ваш_канал', cols: [{ k: 'name', label: 'Название' }, { k: 'url', label: 'Ссылка', flex: 2 }], get: function (s) { return s.socials; }, set: function (s, v) { s.socials = v; } }
@@ -890,7 +893,7 @@
     settingsForm(m, 'Настройки', '', [
       { k: 'storeName', label: 'Название магазина', hint: 'Логотип меняется в разделе «Логотип и название»' },
       { k: 'tagline', label: 'Слоган' },
-      { k: 'legal', label: 'Реквизиты продавца', wide: true, hint: 'Например: ИП Фамилия Имя Отчество, ИНН 000000000000, ОГРНИП 000000000000000. Показываются в подвале и подставляются в оферту, политику обработки персональных данных и согласие' },
+      { k: 'legal', label: 'Реквизиты продавца', wide: true, hint: 'Например: ИП Фамилия Имя Отчество, ИНН 000000000000, ОГРНИП 000000000000000. Показываются в подвале, в колонке «Контакты», и подставляются в оферту, политику обработки персональных данных и согласие' },
       { k: 'footerNote', label: 'Примечание о ценах', wide: true },
       { section: 'Плашки на карточках товаров' },
       { k: 'bt_new', label: '«Новинка» — текст' }, { k: 'bc_new', label: '«Новинка» — цвет', type: 'color' },
@@ -1241,6 +1244,75 @@
     return '<div class="adm-wait-note"><b>Этот товар ' + (list.length % 10 === 1 && list.length % 100 !== 11 ? 'ждёт ' : 'ждут ') + list.length + ' ' + plural(list.length, 'покупатель', 'покупателя', 'покупателей') + ':</b> ' +
       Object.keys(groups).map(function (k) { return esc(k) + ' — ' + groups[k]; }).join(', ') +
       '. Пополните остаток нужного цвета и размера и нажмите «Сохранить» — письма уйдут автоматически.</div>';
+  }
+
+  /* ================= Поддержка: переписка с покупателями ================= */
+  var SUP_STATE = { open: 'Ждёт ответа', answered: 'Отвечено', closed: 'Закрыто' };
+  function supTime(iso) {
+    var d = new Date(iso), t = d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    return d.toDateString() === new Date().toDateString() ? t : d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) + ', ' + t;
+  }
+  var supPoll = null;
+  async function supportSection(m, q) {
+    clearInterval(supPoll);
+    m.innerHTML = head('Поддержка', '', 'Вопросы покупателей из личного кабинета. Ответ сразу появится у покупателя в кабинете, а если настроена почта — придёт ему и письмом.') + '<div class="loader" style="min-height:200px">…</div>';
+    var list;
+    try { list = await A().API.adminSupport(); } catch (e) { m.lastElementChild.outerHTML = '<p class="form-error">' + esc(A().errMsg(e)) + '</p>'; return; }
+    if (!document.body.contains(m)) return;
+    var f = q.f || 'active';
+    var inF = function (t, k) { return k === 'all' ? true : k === 'closed' ? t.status === 'closed' : t.status !== 'closed'; };
+    var shown = list.filter(function (t) { return inF(t, f); });
+    var cur = q.id ? list.find(function (t) { return t.id === q.id; }) : null;
+    var filters = [['active', 'Открытые'], ['closed', 'Закрытые'], ['all', 'Все']].map(function (x) {
+      return '<a class="adm-chip' + (f === x[0] ? ' on' : '') + '" href="#/admin?s=support&f=' + x[0] + '">' + x[1] + ' <span>' + list.filter(function (t) { return inF(t, x[0]); }).length + '</span></a>';
+    }).join('');
+    var items = shown.length ? shown.map(function (t) {
+      var last = t.messages[t.messages.length - 1];
+      return '<a class="sup-item' + (cur && cur.id === t.id ? ' on' : '') + (t.unreadShop ? ' unread' : '') + '" href="#/admin?s=support&f=' + f + '&id=' + esc(t.id) + '">' +
+        '<span class="si-top"><b>' + esc(t.name || 'Покупатель') + '</b><time>' + esc(supTime(t.updatedAt)) + '</time></span>' +
+        '<span class="si-sub">№ ' + esc(t.number) + ' · ' + esc(t.topic) + (t.orderNumber ? ' · заказ ' + esc(t.orderNumber) : '') + '</span>' +
+        '<span class="si-text">' + (last.from === 'shop' ? 'Вы: ' : '') + esc(last.text.slice(0, 80)) + '</span>' +
+        '<span class="si-state s-' + t.status + '">' + SUP_STATE[t.status] + '</span></a>';
+    }).join('') : '<p class="muted" style="padding:18px 4px;font-size:14px">' + (f === 'closed' ? 'Закрытых обращений нет.' : 'Новых вопросов нет. Когда покупатель напишет из кабинета, обращение появится здесь.') + '</p>';
+    var pane = cur ? '<div class="sup-thread adm-thread">' +
+        '<header class="st-head"><div><b>' + esc(cur.name || 'Покупатель') + ' · ' + esc(cur.topic) + '</b><span>№ ' + esc(cur.number) + (cur.orderNumber ? ' · <a href="#/admin?s=orders&id=' + esc(cur.orderId) + '">заказ № ' + esc(cur.orderNumber) + '</a>' : '') +
+          (cur.email ? ' · ' + esc(cur.email) : '') + (cur.phone ? ' · ' + esc(A().fmtPhone(cur.phone)) : '') + '</span></div>' +
+          '<button class="btn ghost sm" id="supToggle" type="button">' + (cur.status === 'closed' ? 'Открыть снова' : 'Закрыть обращение') + '</button></header>' +
+        '<div class="st-msgs" id="stMsgs">' + supMsgs(cur) + '</div>' +
+        '<form class="st-send" id="stSend"><textarea class="textarea" id="stText" rows="3" placeholder="Ответ покупателю" maxlength="2000" aria-label="Ответ покупателю"></textarea><button class="btn" id="stBtn">Ответить</button></form>' +
+        '<p class="st-note">Ctrl + Enter — отправить</p></div>'
+      : '<div class="sup-pick"><h3>' + (list.length ? 'Выберите обращение' : 'Обращений пока нет') + '</h3><p>Покупатели пишут из личного кабинета, со страницы заказа или через кнопку связи на сайте.</p></div>';
+    m.lastElementChild.outerHTML = '<div class="adm-sup"><div class="adm-chips">' + filters + '</div><div class="sup adm-sup-grid' + (cur ? ' has-pane' : '') + '"><aside class="sup-list"><div class="sup-items">' + items + '</div></aside><section class="sup-pane">' + pane + '</section></div></div>';
+    if (!cur) return;
+    var box = $('#stMsgs', m), ta = $('#stText', m), count = cur.messages.length;
+    box.scrollTop = box.scrollHeight;
+    if (cur.unreadShop) A().API.adminSupportPatch(cur.id, { read: true }).then(function () {
+      DATA.supportNew = Math.max(0, (DATA.supportNew || 1) - 1);
+      var it = $('.sup-item.on', m); if (it) it.classList.remove('unread');
+      var b = $('.adm-side a[href="#/admin?s=support"] .adm-badge'); if (b) { if (DATA.supportNew) b.textContent = DATA.supportNew; else b.remove(); }
+    }).catch(function () {});
+    var send = async function () {
+      var text = ta.value.trim(); if (!text) { ta.focus(); return; }
+      $('#stBtn', m).disabled = true;
+      try { var r = await A().API.adminSupportReply(cur.id, text); toast(r.mailed ? 'Ответ отправлен и продублирован на почту' : 'Ответ отправлен'); supportSection(m, q); return; }
+      catch (e) { toast(A().errMsg(e), true); }
+      $('#stBtn', m).disabled = false;
+    };
+    $('#stSend', m).addEventListener('submit', function (e) { e.preventDefault(); send(); });
+    ta.addEventListener('keydown', function (e) { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); } });
+    $('#supToggle', m).addEventListener('click', async function () {
+      try { await A().API.adminSupportPatch(cur.id, { status: cur.status === 'closed' ? 'open' : 'closed' }); supportSection(m, q); } catch (e) { toast(A().errMsg(e), true); }
+    });
+    supPoll = setInterval(async function () {
+      if (!document.body.contains(box)) { clearInterval(supPoll); return; }
+      if (document.hidden) return;
+      try { var all = await A().API.adminSupport(), t = all.find(function (x) { return x.id === cur.id; }); if (t && t.messages.length !== count) { count = t.messages.length; box.innerHTML = supMsgs(t); box.scrollTop = box.scrollHeight; } } catch (e) {}
+    }, 20000);
+  }
+  function supMsgs(t) {
+    return t.messages.map(function (x) {
+      return '<div class="msg ' + (x.from === 'shop' ? 'from-me' : 'from-shop') + '"><div class="msg-b">' + (x.from === 'shop' ? '' : '<span class="msg-who">' + esc(t.name || 'Покупатель') + '</span>') + '<p>' + esc(x.text) + '</p></div><time>' + esc(supTime(x.at)) + '</time></div>';
+    }).join('');
   }
 
   async function notifySection(m, q) {

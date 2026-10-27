@@ -121,8 +121,9 @@
       '<aside class="drawer right" id="cartDrawer" aria-label="Корзина"><div class="drawer-head"><h3>Корзина</h3><button class="icon-btn" data-act="close">' + ICON.close + '</button></div><div class="drawer-body" id="cartBody"></div><div class="drawer-foot" id="cartFoot"></div></aside>' +
       '<div class="modal" id="modal" role="dialog" aria-modal="true"><div class="modal-box"><button class="icon-btn modal-close" data-act="close">' + ICON.close + '</button><div id="modalBody"></div></div></div>' +
       '<div class="toast-wrap" aria-live="polite"></div>' +
+      fabHtml() +
       '<button class="to-top" id="toTop" aria-label="Наверх" hidden><svg viewBox="0 0 24 24"><path d="M6 14l6-6 6 6"/></svg></button>';
-    updateCartCount(); markBonusDot();
+    updateCartCount(); bindFab();
   }
   /* Логотип: знак, надпись или название текстом — отдельно для компьютера и телефона */
   function brandMode(s, where) {
@@ -166,6 +167,11 @@
       return '<li><a href="' + esc(safeUrl(x.url)) + '" target="_blank" rel="noopener"><span class="soc-ic" aria-hidden="true">' + SOC_ICON[socialKind(x)] + '</span><span>' + esc(x.name) + '</span></a></li>';
     }).join('') + '</ul></div>';
   }
+  // Реквизиты продавца — в колонке «Контакты», каждая часть с новой строки
+  function legalHtml(legal) {
+    var parts = String(legal || '').split(/\s*[,;]\s*/).filter(Boolean);
+    return parts.length ? '<div class="foot-legal"><span class="foot-legal-t">Продавец</span>' + parts.map(function (x) { return '<span>' + esc(x) + '</span>'; }).join('') + '</div>' : '';
+  }
   function footerHtml() {
     var s = D.settings, c = s.contacts || {};
     var pages = function (g) { return D.pages.filter(function (p) { return p.inFooter && (p.group || 'help') === g; }).map(function (p) { return '<li><a href="#/page/' + esc(p.slug) + '">' + esc(p.title) + '</a></li>'; }).join(''); };
@@ -178,8 +184,8 @@
         (c.phone ? '<li><a href="tel:' + esc(c.phone.replace(/[^\d+]/g, '')) + '" class="copyable">' + esc(c.phone) + '</a></li>' : '') +
         (c.email ? '<li><a href="mailto:' + esc(c.email) + '" class="copyable">' + esc(c.email) + '</a></li>' : '') +
         (c.address ? '<li class="muted">' + esc(c.address) + '</li>' : '') +
-        (c.hours ? '<li class="muted">' + esc(c.hours) + '</li>' : '') + '</ul></div>' +
-      '</div><div class="wrap footer-bottom"><span>© ' + new Date().getFullYear() + ' ' + esc(s.storeName) + (s.legal ? '. ' + esc(s.legal) : '') + '</span>' +
+        (c.hours ? '<li class="muted">' + esc(c.hours) + '</li>' : '') + '</ul>' + legalHtml(s.legal) + '</div>' +
+      '</div><div class="wrap footer-bottom"><span>© ' + new Date().getFullYear() + ' ' + esc(s.storeName) + '. Все права защищены</span>' +
       '<span style="display:flex;gap:18px;flex-wrap:wrap">' + D.pages.filter(function (p) { return p.inFooter && p.group === 'legal'; }).map(function (p) { return '<a href="#/page/' + esc(p.slug) + '">' + esc(p.title) + '</a>'; }).join('') + (API.isAdmin ? '<a href="#/admin">Управление</a>' : '') + '</span></div></footer>';
   }
 
@@ -277,6 +283,7 @@
     if ((name === '' || name === 'catalog' || name === 'sale') && gClosed(curGender())) fn = soonPage;
     fn(v, p, r.q);
     document.body.classList.toggle('hero-under', !!$('#view > .slider:first-child'));
+    var fab = $('#fab'); if (fab) { fab.hidden = fn === adminPage || (name === 'account' && r.q.tab === 'support'); fabSet(false); }
     syncHeaderH();
     v.classList.remove('view-in'); void v.offsetWidth; v.classList.add('view-in');
     if (!routeKeepScroll) window.scrollTo(0, 0);
@@ -453,7 +460,7 @@
     if (h.showBonus !== false) html += bonusBand(h);
     if (h.showSale !== false) {
       var ap = activePromos()[0];
-      if (ap) html += saleBand(ap);
+      if (ap) html += dealBand(ap);
     }
     if (h.showEditorial !== false && h.editorialTitle) html += atelierBlock(h);
     if (h.showBenefits !== false && (h.benefits || []).length) html += benefitsBlock(h);
@@ -483,7 +490,7 @@
     var cards = h.benefits.map(function (b, i) {
       var ic = benefitIcon(b);
       return '<div class="benefit' + (ic ? '' : ' no-ico') + '" style="--i:' + i + (ic ? ';--glow:' + BENEFIT_ICONS[ic] : '') + '">' +
-        (ic ? '<div class="benefit-ico"><img src="img/benefits/' + ic + '.webp?v=13.10.0" alt="" width="160" height="160" loading="lazy" decoding="async"></div>' : '') +
+        (ic ? '<div class="benefit-ico"><img src="img/benefits/' + ic + '.webp?v=13.11.0" alt="" width="160" height="160" loading="lazy" decoding="async"></div>' : '') +
         '<div class="benefit-body"><h3>' + glue(b.title) + '</h3>' + (b.text ? '<p>' + glue(b.text) + '</p>' : '') + '</div></div>';
     }).join('');
     return '<section class="section benefits-sec"><div class="wrap">' + head + '<div class="benefits">' + cards + '</div></div></section>';
@@ -504,13 +511,7 @@
     var act = u
       ? '<a class="btn" href="#/account?tab=bonus">Открыть бонусный счёт</a>'
       : '<a class="btn" href="#/account?tab=register">Присоединиться</a><span class="loyal-note">Регистрация займёт минуту</span>';
-    var b = D.settings.brand || {}, mark = b.mark && b.mark.src ? '<img class="lc-mark" src="' + esc(b.mark.src) + '" alt="" width="' + (b.mark.w || 1) + '" height="' + (b.mark.h || 1) + '">' : '<span class="lc-word">' + esc(D.settings.storeName || '') + '</span>';
-    var holder = u ? [u.firstName, u.lastName].filter(Boolean).join(' ') : '';
-    var cardHtml = '<div class="loyal-card" aria-hidden="true"><i class="lc-sheen"></i>' +
-      '<div class="lc-top">' + mark + '<span class="lc-label">Бонусный счёт</span></div>' +
-      '<div class="lc-pct">' + pct + '<span>%</span></div>' +
-      '<div class="lc-bottom"><span class="lc-holder">' + esc(holder || 'Ваше имя') + '</span><span class="lc-bal"><b>' + bonusNum(bal) + '</b> ' + bonusWord(bal) + '</span></div>' +
-    '</div>';
+    var cardHtml = loyalCardHtml(u, bal);
     return '<section class="section loyal-sec"><div class="wrap"><div class="loyal">' +
       '<div class="loyal-copy">' +
         (h.bonusEyebrow ? '<span class="eyebrow">' + esc(h.bonusEyebrow) + '</span>' : '') +
@@ -523,29 +524,54 @@
     '</div></div></section>';
   }
 
+  /* Бонусная карта: знак бренда, процент, имя и баланс. Одна и та же — на главной и в кабинете */
+  function loyalCardHtml(u, bal) {
+    var c = bonusCfg(), pct = String(c.percent).replace('.', ',');
+    var b = D.settings.brand || {}, mark = b.mark && b.mark.src ? '<img class="lc-mark" src="' + esc(b.mark.src) + '" alt="" width="' + (b.mark.w || 1) + '" height="' + (b.mark.h || 1) + '">' : '<span class="lc-word">' + esc(D.settings.storeName || '') + '</span>';
+    var holder = u ? [u.firstName, u.lastName].filter(Boolean).join(' ') : '';
+    return '<div class="loyal-card" aria-hidden="true"><i class="lc-sheen"></i>' +
+      '<div class="lc-top">' + mark + '<span class="lc-label">Бонусный счёт</span></div>' +
+      '<div class="lc-pct">' + (c.earn ? pct + '<span>%</span>' : '<span class="lc-sum">' + bonusNum(bal) + '</span>') + '</div>' +
+      '<div class="lc-bottom"><span class="lc-holder">' + esc(holder || 'Ваше имя') + '</span><span class="lc-bal"><b>' + bonusNum(bal) + '</b> ' + bonusWord(bal) + '</span></div>' +
+    '</div>';
+  }
+  // Наклон и блик карты за курсором (только мышь)
+  function bindCardTilt(card) {
+    var vis = card && card.parentNode;
+    if (!card || !(window.matchMedia && matchMedia('(hover: hover) and (pointer: fine)').matches)) return;
+    vis.addEventListener('pointermove', function (e) {
+      var r = card.getBoundingClientRect(), x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+      card.style.setProperty('--rx', ((.5 - y) * 14).toFixed(2) + 'deg');
+      card.style.setProperty('--ry', ((x - .5) * 18).toFixed(2) + 'deg');
+      card.style.setProperty('--sx', (x * 100).toFixed(1) + '%');
+      card.classList.add('live');
+    });
+    vis.addEventListener('pointerleave', function () { card.classList.remove('live'); card.style.removeProperty('--rx'); card.style.removeProperty('--ry'); card.style.removeProperty('--sx'); });
+  }
+
   /* Акция на главной: тёмная полоса, крупная скидка, обратный отсчёт и товары, на которые она действует */
-  function saleBand(ap) {
+  function dealBand(ap) {
     var off = ap.type === 'percent' ? '−' + ap.value + '<span>%</span>' : '−' + fmt(ap.value);
     var items = gProducts().filter(function (p) { return p.active !== false && totalStock(p) > 0; }).map(function (p) { return { p: p, pr: priceOf(p) }; })
       .filter(function (x) { return x.pr.oldPrice && x.pr.promotion && x.pr.promotion.id === ap.id; }).slice(0, 3);
     if (!items.length) items = gProducts().filter(function (p) { return p.active !== false; }).map(function (p) { return { p: p, pr: priceOf(p) }; }).filter(function (x) { return x.pr.oldPrice; }).slice(0, 3);
     var ends = ap.endsAt ? new Date(ap.endsAt + 'T23:59:59').getTime() : 0;
-    var timer = ends ? '<div class="sale-timer" data-ends="' + ends + '" role="timer" aria-label="До конца акции">' +
+    var timer = ends ? '<div class="deal-timer" data-ends="' + ends + '" role="timer" aria-label="До конца акции">' +
       [['d', 'дней'], ['h', 'часов'], ['m', 'минут'], ['s', 'секунд']].map(function (u) { return '<span class="st-cell"><b data-u="' + u[0] + '">00</b><i data-l="' + u[0] + '">' + u[1] + '</i></span>'; }).join('') + '</div>' : '';
     var tiles = items.map(function (x) {
       var c0 = shownColor(x.p), img = (c0.images && c0.images[0]) || Art.make(c0.art);
-      return '<a class="sale-item" href="#/product/' + esc(x.p.slug) + '"><span class="si-ph"><img src="' + esc(img) + '" alt="" loading="lazy"></span>' +
+      return '<a class="deal-item" href="#/product/' + esc(x.p.slug) + '"><span class="si-ph"><img src="' + esc(img) + '" alt="" loading="lazy"></span>' +
         '<span class="si-name">' + esc(x.p.name) + '</span><span class="si-price"><b>' + fmt(x.pr.price) + '</b><s>' + fmt(x.pr.oldPrice) + '</s></span></a>';
     }).join('');
-    return '<section class="section sale-sec"><div class="wrap"><div class="sale' + (tiles ? '' : ' no-items') + '">' +
-      '<div class="sale-copy">' +
-        '<span class="sale-when">Акция' + (ap.endsAt ? ' до ' + esc(fmtDate(ap.endsAt).replace(/ \d{4} г\.$/, '')) : '') + '</span>' +
-        '<div class="sale-off' + (ap.type === 'percent' ? '' : ' is-money') + '" aria-hidden="true">' + off + '</div>' +
+    return '<section class="section deal-sec"><div class="wrap"><div class="deal' + (tiles ? '' : ' no-items') + '">' +
+      '<div class="deal-copy">' +
+        '<span class="deal-when">Акция' + (ap.endsAt ? ' до ' + esc(fmtDate(ap.endsAt).replace(/ \d{4} г\.$/, '')) : '') + '</span>' +
+        '<div class="deal-off' + (ap.type === 'percent' ? '' : ' is-money') + '" aria-hidden="true">' + off + '</div>' +
         '<h2>' + esc(ap.title) + '</h2>' +
         (ap.description ? '<p>' + esc(ap.description) + '</p>' : '') +
-        '<div class="sale-foot">' + timer + '<a class="btn sale-btn" href="#/sale">Смотреть товары со скидкой</a></div>' +
+        '<div class="deal-foot">' + timer + '<a class="btn deal-btn" href="#/sale">Смотреть товары со скидкой</a></div>' +
       '</div>' +
-      (tiles ? '<div class="sale-items">' + tiles + '</div>' : '') +
+      (tiles ? '<div class="deal-items">' + tiles + '</div>' : '') +
     '</div></div></section>';
   }
 
@@ -565,7 +591,7 @@
   }
 
   /* Оживление блоков главной: появление фото и шва при прокрутке, отсчёт акции, блик на бонусной карте */
-  var saleTick = null;
+  var dealTick = null;
   function initHomeBlocks(v) {
     // следим за секцией целиком: обрезанный (ещё невидимый) элемент наблюдатель не замечает
     var secs = $$('[data-reveal]', v).map(function (el) { return el.closest('section'); }).filter(function (s, i, a) { return s && a.indexOf(s) === i; });
@@ -575,13 +601,13 @@
       }, { threshold: .2 });
       secs.forEach(function (s) { $$('[data-reveal]', s).forEach(function (el) { el.classList.add('pre'); }); io.observe(s); });
     }
-    clearInterval(saleTick);
-    var t = $('.sale-timer', v);
+    clearInterval(dealTick);
+    var t = $('.deal-timer', v);
     if (t) {
       var end = Number(t.getAttribute('data-ends'));
       var forms = { d: ['день', 'дня', 'дней'], h: ['час', 'часа', 'часов'], m: ['минута', 'минуты', 'минут'], s: ['секунда', 'секунды', 'секунд'] };
       var tick = function () {
-        if (!document.body.contains(t)) { clearInterval(saleTick); return; }
+        if (!document.body.contains(t)) { clearInterval(dealTick); return; }
         var left = Math.max(0, Math.floor((end - Date.now()) / 1000));
         var vals = { d: Math.floor(left / 86400), h: Math.floor(left % 86400 / 3600), m: Math.floor(left % 3600 / 60), s: left % 60 };
         Object.keys(vals).forEach(function (k) {
@@ -589,19 +615,9 @@
           $('[data-l="' + k + '"]', t).textContent = plural(vals[k], forms[k][0], forms[k][1], forms[k][2]);
         });
       };
-      tick(); saleTick = setInterval(tick, 1000);
+      tick(); dealTick = setInterval(tick, 1000);
     }
-    var card = $('.loyal-card', v), vis = card && card.parentNode;
-    if (card && window.matchMedia && matchMedia('(hover: hover) and (pointer: fine)').matches) {
-      vis.addEventListener('pointermove', function (e) {
-        var r = card.getBoundingClientRect(), x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
-        card.style.setProperty('--rx', ((.5 - y) * 14).toFixed(2) + 'deg');
-        card.style.setProperty('--ry', ((x - .5) * 18).toFixed(2) + 'deg');
-        card.style.setProperty('--sx', (x * 100).toFixed(1) + '%');
-        card.classList.add('live');
-      });
-      vis.addEventListener('pointerleave', function () { card.classList.remove('live'); card.style.removeProperty('--rx'); card.style.removeProperty('--ry'); card.style.removeProperty('--sx'); });
-    }
+    bindCardTilt($('.loyal-card', v));
   }
 
   /* ---------- Раздел закрыт: «скоро появится» ---------- */
@@ -1097,67 +1113,256 @@
           (o.bonusUsed ? '<div class="sum-row disc"><span>Оплачено бонусами</span><span>−' + fmt(o.bonusUsed) + '</span></div>' : '') +
           '<div class="sum-row total"><span>Итого</span><span>' + fmt(o.total) + '</span></div>' +
           (o.bonusEarn > 0 && o.status !== 'canceled' ? '<div class="sum-row bonus-earn"><span><i class="b-ic" aria-hidden="true">Б</i>' + (o.bonusCredited ? 'Начислено бонусов' : 'Начислим ' + (bonusCfg().creditOn === 'done' ? 'после получения' : 'после оплаты')) + '</span><span>+' + bonusNum(o.bonusEarn) + '</span></div>' : '') + '</div>' +
-        '<div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">' + (o.payUrl && o.payment.status === 'pending' ? '<a class="btn" href="' + esc(o.payUrl) + '">Оплатить заказ</a>' : '') + '<a class="btn ghost" href="#/catalog">Продолжить покупки</a>' + (API.user ? '<a class="btn ghost" href="#/account">Мои заказы</a>' : '') + '</div></div></div>';
+        '<div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">' + (o.payUrl && o.payment.status === 'pending' ? '<a class="btn" href="' + esc(o.payUrl) + '">Оплатить заказ</a>' : '') + '<a class="btn ghost" href="#/catalog">Продолжить покупки</a>' + (API.user ? '<a class="btn ghost" href="#/account">Мои заказы</a><a class="btn ghost" href="#/account?tab=support&new=1&order=' + esc(o.id) + '">Вопрос по заказу</a>' : '') + '</div></div></div>';
       if (API.user) refreshBonus(); // после оплаты бонусы могли прийти — обновим счёт и покажем уведомление
     } catch (e) { v.innerHTML = '<div class="wrap"><div class="empty"><h3>Заказ не найден</h3><p>' + esc(errMsg(e)) + '</p><a class="btn ghost" href="#/">На главную</a></div></div>'; }
   }
 
   /* ---------- Личный кабинет ---------- */
+  /* ---------- Личный кабинет ----------
+     Сверху — приветствие и бонусная карта, ниже — вкладки: заказы, бонусы, поддержка, профиль.
+     Заказы показываются со шкалой: принят → собирается → в пути → получен. */
+  var ORDER_STEPS = [['new', 'Принят'], ['processing', 'Собирается'], ['shipped', 'В пути'], ['done', 'Получен']];
+  var supportPoll = null;
   function account(v, parts, q) {
-    if (!API.user) return authPage(v, q.tab === 'register' ? 'register' : 'login', q.back);
-    var tab = q.tab || 'orders', u = API.user, bOn = bonusCfg().enabled || (u.bonus || 0) > 0;
+    clearInterval(supportPoll);
+    if (!API.user) return authPage(v, q.tab === 'register' ? 'register' : 'login', q.back || (q.tab === 'support' ? 'support' : ''));
+    var u = API.user, bOn = bonusCfg().enabled || (u.bonus || 0) > 0;
+    var tab = q.tab || 'orders';
     if (tab === 'bonus' && !bOn) tab = 'orders';
-    var tabBtn = function (k, label) { return '<button data-tab="' + k + '"' + (tab === k ? ' class="on"' : '') + '>' + label + '</button>'; };
-    v.innerHTML = '<div class="wrap"><div class="page-head"><span class="eyebrow">Личный кабинет</span><h1>' + esc(u.firstName) + ' ' + esc(u.lastName) + '</h1></div>' +
-      (bOn ? '<div id="bonusCard">' + bonusCardHtml(u) + '</div>' : '') + '<div class="account"><nav>' +
-      tabBtn('orders', 'Мои заказы') + (bOn ? tabBtn('bonus', 'Бонусы') : '') + tabBtn('profile', 'Личные данные') + '<button data-tab="logout">Выйти</button></nav><div id="accBody"></div></div></div>';
-    if (bOn) API.myBonus().then(function (r) {
-      if (!document.body.contains(v) || !$('#bonusCard')) return;
-      $('#bonusCard').innerHTML = bonusCardHtml(r.user); markBonusDot();
-      if (tab === 'bonus') { $('#accBody').innerHTML = bonusHistoryHtml(r.bonusLog); if (r.user.bonusNews.length) seenBonus(); }
+    if (['orders', 'bonus', 'support', 'profile'].indexOf(tab) === -1) tab = 'orders';
+    var since = '';
+    // «с октября 2026»: месяц в родительном падеже — берём его из полной даты
+    try { since = new Date(u.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }).replace(/^\d+\s/, '').replace(/ г\.$/, ''); } catch (e) {}
+    var tabs = [['orders', 'Заказы'], bOn ? ['bonus', 'Бонусы'] : null, ['support', 'Поддержка'], ['profile', 'Профиль']].filter(Boolean);
+    var focus = tab === 'support' && (q.id || q.new === '1');
+    v.innerHTML = '<div class="wrap acc' + (focus ? ' acc-focus' : '') + '">' +
+      '<section class="acc-hero">' +
+        '<div class="acc-hi"><span class="eyebrow">Личный кабинет</span><h1>' + glue('Здравствуйте, ' + (u.firstName || '')) + '</h1>' +
+          (since ? '<p class="acc-since">С нами с ' + esc(since) + '</p>' : '') +
+          '<div class="acc-facts" id="accFacts"></div></div>' +
+        (bOn ? '<div class="acc-card">' + loyalCardHtml(u, u.bonus || 0) + '</div>' : '') +
+      '</section>' +
+      '<nav class="acc-tabs" aria-label="Разделы кабинета">' + tabs.map(function (t) {
+        return '<a href="#/account?tab=' + t[0] + '"' + (t[0] === tab ? ' class="on" aria-current="page"' : '') + '>' + t[1] + (t[0] === 'support' && u.supportUnread ? '<i class="acc-dot" aria-label="Есть ответ"></i>' : '') + '</a>';
+      }).join('') + '<button class="acc-out" type="button" id="accOut">Выйти</button></nav>' +
+      '<div class="acc-body" id="accBody"><div class="loader" style="min-height:240px">…</div></div>' +
+    '</div>';
+    bindCardTilt($('.acc-card .loyal-card', v));
+    $('#accOut').addEventListener('click', async function () { await API.logout(); toast('Вы вышли из аккаунта'); go('#/'); });
+    var body = $('#accBody');
+    // Факты под приветствием: заказы и баланс, обновляются после загрузки
+    API.myOrders().then(function (list) {
+      var f = $('#accFacts'); if (!f || !document.body.contains(f)) return;
+      var active = list.filter(function (o) { return o.status !== 'done' && o.status !== 'canceled'; }).length;
+      f.innerHTML = '<a href="#/account?tab=orders"><b class="num">' + list.length + '</b><span>' + plural(list.length, 'заказ', 'заказа', 'заказов') + '</span></a>' +
+        (active ? '<a href="#/account?tab=orders"><b class="num">' + active + '</b><span>в пути и в работе</span></a>' : '') +
+        (bOn ? '<a href="#/account?tab=bonus"><b class="num">' + bonusNum(API.user.bonus || 0) + '</b><span>' + bonusWord(API.user.bonus || 0) + ' на счёте</span></a>' : '');
+      if (tab === 'orders') body.innerHTML = ordersHtml(list);
+    }).catch(function (e) { if (tab === 'orders') body.innerHTML = '<p class="form-error">' + esc(errMsg(e)) + '</p>'; });
+    // свежие данные покупателя: баланс, новые начисления, ответы поддержки
+    API.myBonus().then(function (r) {
+      if (!document.body.contains(body)) return;
+      markBonusDot();
+      if (!bOn) return;
+      if (tab === 'bonus') { body.innerHTML = bonusTabHtml(r.user, r.bonusLog); if (r.user.bonusNews.length) seenBonus(); }
       else showBonusNews();
     }).catch(function () {});
-    $$('.account nav button').forEach(function (b) { b.addEventListener('click', async function () {
-      var t = b.getAttribute('data-tab');
-      if (t === 'logout') { await API.logout(); toast('Вы вышли из аккаунта'); go('#/'); return; }
-      go('#/account?tab=' + t);
-    }); });
-    var body = $('#accBody');
-    if (tab === 'bonus') body.innerHTML = '<div class="loader" style="min-height:200px;font-size:22px">…</div>';
-    else if (tab === 'profile') {
-      body.innerHTML = '<form class="form" id="profForm" style="max-width:560px" novalidate><div class="row2">' +
-        '<label class="field"><span>Имя</span><input class="input" id="pf-first" value="' + esc(u.firstName) + '"></label>' +
-        '<label class="field"><span>Фамилия</span><input class="input" id="pf-last" value="' + esc(u.lastName) + '"></label></div>' +
-        '<label class="field"><span>Телефон</span><input class="input" id="pf-phone" type="tel" value="' + esc(fmtPhone(u.phone)) + '"></label>' +
-        '<label class="field"><span>Электронная почта</span><input class="input" id="pf-email" type="email" value="' + esc(u.email) + '"></label>' +
-        '<label class="field"><span>Новый пароль (если хотите сменить)</span><input class="input" id="pf-pass" type="password" autocomplete="new-password"></label>' +
-        '<p class="form-error" id="pfErr"></p><div><button class="btn">Сохранить</button></div></form>';
-      phoneMask($('#pf-phone'));
-      $('#profForm').addEventListener('submit', async function (e) {
-        e.preventDefault();
-        var f = { firstName: $('#pf-first').value, lastName: $('#pf-last').value, phone: $('#pf-phone').value, email: $('#pf-email').value, newPassword: $('#pf-pass').value };
-        var er = !f.firstName.trim() || !f.lastName.trim() ? 'Укажите имя и фамилию' : !validPhone(f.phone) ? 'Проверьте номер телефона' : !validEmail(f.email) ? 'Проверьте электронную почту' : f.newPassword && f.newPassword.length < 6 ? 'Пароль должен быть не короче 6 символов' : '';
-        if (er) { $('#pfErr').textContent = er; return; }
-        try { await API.updateProfile(f); toast('Данные сохранены'); go('#/account?tab=profile'); } catch (ex) { $('#pfErr').textContent = errMsg(ex); }
-      });
-    } else {
-      body.innerHTML = '<div class="loader" style="min-height:200px;font-size:22px">…</div>';
-      API.myOrders().then(function (list) {
-        body.innerHTML = list.length ? list.map(function (o) {
-          return '<a class="order-card" href="#/order/' + esc(o.id) + '" style="display:grid"><div class="order-top"><b>№ ' + esc(o.number) + '</b><span class="muted" style="font-size:14px">' + esc(fmtDate(o.createdAt)) + '</span></div>' +
-            '<div class="thumbs-row">' + o.items.map(function (i) { return '<img src="' + esc(i.image || Art.make(i.art)) + '" alt="">'; }).join('') + '</div>' +
-            '<div class="order-top"><span class="status ' + esc(o.status) + '">' + esc(STATUS[o.status] || o.status) + '</span><span class="num">' + fmt(o.total) + '</span></div></a>';
-        }).join('') : '<div class="empty" style="text-align:left;justify-items:start;padding-top:0"><h3>Заказов пока нет</h3><p>Здесь появится история покупок и статусы доставки.</p><a class="btn ghost" href="#/catalog">В каталог</a></div>';
-      }).catch(function (e) { body.innerHTML = '<p class="form-error">' + esc(errMsg(e)) + '</p>'; });
-    }
+    if (tab === 'profile') profileTab(body, u);
+    if (tab === 'support') supportTab(body, q);
   }
-  /* Бонусный счёт в кабинете: остаток крупно, правила одной строкой */
-  function bonusCardHtml(u) {
-    var c = bonusCfg(), n = u.bonus || 0;
-    return '<section class="bonus-card"><div class="bc-main"><span class="eyebrow">Бонусный счёт</span><div class="bc-sum"><b class="num">' + bonusNum(n) + '</b><span>' + bonusWord(n) + '</span></div><span class="bc-rub">= ' + fmt(n) + ' на следующие покупки</span></div>' +
-      '<div class="bc-side"><p>' + (c.earn ? 'Начисляем <b>' + c.percent + '%</b> от суммы покупки ' + (c.creditOn === 'done' ? 'после получения заказа' : 'после оплаты') + '.' : 'Начисление бонусов сейчас приостановлено.') + (c.enabled ? ' Оплачивайте бонусами до 100% заказа: 1 бонус = 1 ₽.' : '') + '</p>' +
-      '<div class="bc-acts">' + (c.enabled && n > 0 ? '<a class="btn sm" href="#/catalog">Потратить</a>' : '<a class="btn sm" href="#/catalog">В каталог</a>') + '<a class="btn ghost sm" href="#/account?tab=bonus">История</a></div></div></section>';
+
+  function orderTrack(o) {
+    if (o.status === 'canceled') return '<div class="ao-track is-canceled"><span class="ao-state">Отменён</span></div>';
+    var at = Math.max(0, ORDER_STEPS.findIndex(function (s) { return s[0] === o.status; }));
+    return '<div class="ao-track" style="--done:' + at + '" aria-label="Статус: ' + esc(ORDER_STEPS[at][1]) + '"><ol>' + ORDER_STEPS.map(function (s, i) {
+      return '<li class="' + (i < at ? 'is-done' : i === at ? 'is-now' : '') + '"><i></i><span>' + s[1] + '</span></li>';
+    }).join('') + '</ol></div>';
   }
+  function ordersHtml(list) {
+    if (!list.length) return '<div class="acc-empty"><h3>Заказов пока нет</h3><p>Здесь появятся ваши покупки и статус доставки каждой из них.</p><a class="btn" href="#/catalog">Перейти в каталог</a></div>';
+    return '<div class="acc-orders">' + list.map(function (o) {
+      var n = o.items.reduce(function (s, i) { return s + (i.qty || 1); }, 0);
+      var pay = o.payment && o.payment.status === 'pending' && o.payment.method === 'online' && o.status !== 'canceled' ? '<span class="ao-pay">Ожидает оплаты</span>' : '';
+      var thumbs = o.items.slice(0, 3).map(function (i) { return '<img src="' + esc(i.image || Art.make(i.art)) + '" alt="" loading="lazy">'; }).join('') + (o.items.length > 3 ? '<em>+' + (o.items.length - 3) + '</em>' : '');
+      return '<a class="acc-order" href="#/order/' + esc(o.id) + '">' +
+        '<div class="ao-thumbs">' + thumbs + '</div>' +
+        '<div class="ao-main"><div class="ao-top"><b>Заказ № ' + esc(o.number) + '</b><span>' + esc(fmtDate(o.createdAt).replace(/ \d{4} г\.$/, '')) + '</span>' + pay + '</div>' + orderTrack(o) + '</div>' +
+        '<div class="ao-sum"><b class="num">' + fmt(o.total) + '</b><span>' + n + ' ' + plural(n, 'вещь', 'вещи', 'вещей') + '</span></div>' +
+      '</a>';
+    }).join('') + '</div>';
+  }
+
+  function bonusTabHtml(u, log) {
+    var c = bonusCfg(), n = u.bonus || 0, pct = String(c.percent).replace('.', ',');
+    var steps = [
+      ['Покупайте', c.earn ? pct + '% от суммы заказа возвращаем бонусами' : 'Начисление бонусов сейчас приостановлено'],
+      ['Копите', 'Бонусы приходят на счёт ' + (c.creditOn === 'done' ? 'после получения заказа' : 'после оплаты заказа')],
+      ['Оплачивайте', 'При оформлении заказа, хоть все сразу. 1 бонус = 1 ₽']
+    ];
+    return '<div class="acc-bonus">' + (c.enabled ? '<div class="ab-card">' + loyalCardHtml(u, n) + '</div>' : '') +
+      '<div class="ab-side"><div class="ab-bal"><span>На счёте</span><b class="num">' + bonusNum(n) + '</b><span>' + bonusWord(n) + ' = ' + fmt(n) + '</span></div>' +
+        '<ol class="loyal-steps ab-steps">' + steps.map(function (x, i) { return '<li><span class="ls-n">' + (i + 1) + '</span><b>' + x[0] + '</b><span>' + esc(x[1]) + '</span></li>'; }).join('') + '</ol>' +
+        '<a class="btn" href="#/catalog">' + (n > 0 ? 'Потратить бонусы' : 'Перейти в каталог') + '</a></div>' +
+      '<div class="ab-log"><h3>История</h3>' + (log && log.length ? bonusHistoryHtml(log) : '<p class="muted">Операций пока нет. Бонусы придут после первой покупки, и их можно сразу потратить на следующую.</p>') + '</div>' +
+    '</div>';
+  }
+
+  function profileTab(body, u) {
+    body.innerHTML = '<form class="acc-profile" id="profForm" novalidate>' +
+      '<fieldset><legend>Личные данные</legend><p>Подставляем их при оформлении заказа.</p><div class="row2">' +
+        '<label class="field"><span>Имя</span><input class="input" id="pf-first" autocomplete="given-name" value="' + esc(u.firstName) + '"></label>' +
+        '<label class="field"><span>Фамилия</span><input class="input" id="pf-last" autocomplete="family-name" value="' + esc(u.lastName) + '"></label></div>' +
+        '<div class="row2"><label class="field"><span>Телефон</span><input class="input" id="pf-phone" type="tel" autocomplete="tel" value="' + esc(fmtPhone(u.phone)) + '"></label>' +
+        '<label class="field"><span>Электронная почта</span><input class="input" id="pf-email" type="email" autocomplete="email" value="' + esc(u.email) + '"></label></div></fieldset>' +
+      '<fieldset><legend>Пароль</legend><p>Заполните, только если хотите сменить пароль.</p>' +
+        '<label class="field"><span>Новый пароль</span><input class="input" id="pf-pass" type="password" autocomplete="new-password" placeholder="Не короче 6 символов"></label></fieldset>' +
+      '<p class="form-error" id="pfErr"></p><div class="acc-profile-act"><button class="btn">Сохранить изменения</button><button class="btn ghost" type="button" id="pfOut">Выйти из аккаунта</button></div></form>';
+    phoneMask($('#pf-phone'));
+    $('#pfOut').addEventListener('click', async function () { await API.logout(); toast('Вы вышли из аккаунта'); go('#/'); });
+    $('#profForm').addEventListener('submit', async function (e) {
+      e.preventDefault();
+      var f = { firstName: $('#pf-first').value, lastName: $('#pf-last').value, phone: $('#pf-phone').value, email: $('#pf-email').value, newPassword: $('#pf-pass').value };
+      var er = !f.firstName.trim() || !f.lastName.trim() ? 'Укажите имя и фамилию' : !validPhone(f.phone) ? 'Проверьте номер телефона' : !validEmail(f.email) ? 'Проверьте электронную почту' : f.newPassword && f.newPassword.length < 6 ? 'Пароль должен быть не короче 6 символов' : '';
+      if (er) { $('#pfErr').textContent = er; return; }
+      try { await API.updateProfile(f); toast('Изменения сохранены'); go('#/account?tab=profile'); } catch (ex) { $('#pfErr').textContent = errMsg(ex); }
+    });
+  }
+
+  /* ---------- Поддержка в кабинете: список обращений и переписка ---------- */
+  var SUPPORT_STATE = { open: 'Ждёт ответа', answered: 'Есть ответ', closed: 'Закрыто' };
+  function msgTime(iso) {
+    var d = new Date(iso), now = new Date();
+    var t = d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    return d.toDateString() === now.toDateString() ? t : d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) + ', ' + t;
+  }
+  function supportHours() { var h = (D.settings.contacts || {}).hours; return h ? 'Отвечаем ' + h.charAt(0).toLowerCase() + h.slice(1) + '. ' : ''; }
+  async function supportTab(body, q) {
+    var r;
+    try { r = await API.support(); } catch (e) { body.innerHTML = '<p class="form-error">' + esc(errMsg(e)) + '</p>'; return; }
+    if (!document.body.contains(body)) return;
+    var list = r.tickets, topics = r.topics;
+    var cur = q.id ? list.find(function (t) { return t.id === q.id; }) : null;
+    var isNew = q.new === '1' || (!cur && !list.length);
+    var side = '<aside class="sup-list">' +
+      '<a class="btn block" href="#/account?tab=support&new=1">Новое обращение</a>' +
+      (list.length ? '<ul>' + list.map(function (t) {
+        var last = t.messages[t.messages.length - 1];
+        return '<li><a class="sup-item' + (cur && cur.id === t.id ? ' on' : '') + (t.unread ? ' unread' : '') + '" href="#/account?tab=support&id=' + esc(t.id) + '">' +
+          '<span class="si-top"><b>' + esc(t.topic) + (t.orderNumber ? ' · № ' + esc(t.orderNumber) : '') + '</b><time>' + esc(msgTime(t.updatedAt)) + '</time></span>' +
+          '<span class="si-text">' + (last.from === 'shop' ? 'Поддержка: ' : 'Вы: ') + esc(last.text.slice(0, 90)) + '</span>' +
+          '<span class="si-state s-' + t.status + '">' + SUPPORT_STATE[t.status] + '</span></a></li>';
+      }).join('') + '</ul>' : '') +
+    '</aside>';
+    var pane = cur ? threadHtml(cur) : isNew ? newTicketHtml(topics, q) : '<div class="sup-pick"><h3>Выберите обращение</h3><p>Или напишите новое — ответим здесь и продублируем ответ на почту.</p></div>';
+    body.innerHTML = '<div class="sup' + (cur || isNew ? ' has-pane' : '') + '">' + side + '<section class="sup-pane">' + pane + '</section></div>';
+    if (cur) bindThread(body, cur);
+    else if (isNew) bindNewTicket(body);
+  }
+  function threadHtml(t) {
+    return '<div class="sup-thread">' +
+      '<header class="st-head"><a class="st-back" href="#/account?tab=support" aria-label="Все обращения">←</a><div><b>' + esc(t.topic) + '</b><span>Обращение № ' + esc(t.number) +
+        (t.orderNumber ? ' · <a href="#/order/' + esc(t.orderId) + '">заказ № ' + esc(t.orderNumber) + '</a>' : '') + '</span></div><span class="si-state s-' + t.status + '">' + SUPPORT_STATE[t.status] + '</span></header>' +
+      '<div class="st-msgs" id="stMsgs">' + msgsHtml(t) + '</div>' +
+      '<form class="st-send" id="stSend"><textarea class="textarea" id="stText" rows="2" placeholder="Напишите сообщение" maxlength="2000" aria-label="Сообщение"></textarea>' +
+        '<button class="btn" id="stBtn">Отправить</button></form>' +
+      '<p class="st-note">' + supportHours() + 'Ответ придёт сюда и на почту.</p>' +
+    '</div>';
+  }
+  function msgsHtml(t) {
+    var store = D.settings.storeName || 'Магазин';
+    return t.messages.map(function (m) {
+      return '<div class="msg ' + (m.from === 'shop' ? 'from-shop' : 'from-me') + '"><div class="msg-b">' + (m.from === 'shop' ? '<span class="msg-who">' + esc(store) + '</span>' : '') +
+        '<p>' + esc(m.text) + '</p></div><time>' + esc(msgTime(m.at)) + '</time></div>';
+    }).join('');
+  }
+  function bindThread(body, t) {
+    var box = $('#stMsgs', body), ta = $('#stText', body);
+    box.scrollTop = box.scrollHeight;
+    var count = t.messages.length;
+    if (t.unread) API.supportGet(t.id).then(function () { if (API.user) { API.user.supportUnread = Math.max(0, (API.user.supportUnread || 1) - 1); markBonusDot(); } }).catch(function () {});
+    var send = async function () {
+      var text = ta.value.trim(); if (!text) { ta.focus(); return; }
+      var btn = $('#stBtn', body); btn.disabled = true;
+      try { var nt = await API.supportSend(t.id, text); ta.value = ''; box.innerHTML = msgsHtml(nt); count = nt.messages.length; box.scrollTop = box.scrollHeight; }
+      catch (e) { toast(errMsg(e)); }
+      btn.disabled = false; ta.focus();
+    };
+    $('#stSend', body).addEventListener('submit', function (e) { e.preventDefault(); send(); });
+    ta.addEventListener('keydown', function (e) { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); } });
+    // новые ответы магазина подгружаются сами, пока переписка открыта
+    supportPoll = setInterval(async function () {
+      if (!document.body.contains(box)) { clearInterval(supportPoll); return; }
+      if (document.hidden) return;
+      try { var nt = await API.supportGet(t.id); if (nt.messages.length !== count) { count = nt.messages.length; box.innerHTML = msgsHtml(nt); box.scrollTop = box.scrollHeight; } } catch (e) {}
+    }, 20000);
+  }
+  function newTicketHtml(topics, q) {
+    return '<form class="sup-new" id="supNew" novalidate><a class="st-back" href="#/account?tab=support" aria-label="Все обращения">←</a><h3>Новое обращение</h3>' +
+      '<p class="muted">' + supportHours() + 'Ответ придёт сюда и на почту.</p>' +
+      '<fieldset class="sup-topics"><legend>Тема</legend>' + topics.map(function (t, i) {
+        return '<label><input type="radio" name="sup-topic" value="' + esc(t) + '"' + ((q.order ? t === 'Заказ' : i === topics.length - 1) ? ' checked' : '') + '><span>' + esc(t) + '</span></label>';
+      }).join('') + '</fieldset>' +
+      '<label class="field" id="supOrderWrap"><span>Заказ</span><select class="select" id="supOrder"><option value="">Без заказа</option></select></label>' +
+      '<label class="field"><span>Сообщение</span><textarea class="textarea" id="supText" rows="5" maxlength="2000" placeholder="Опишите вопрос: что случилось и чем помочь"></textarea></label>' +
+      '<p class="form-error" id="supErr"></p><button class="btn" id="supBtn">Отправить</button></form>';
+  }
+  function bindNewTicket(body) {
+    var q = parseHash().q, sel = $('#supOrder', body);
+    API.myOrders().then(function (list) {
+      if (!list.length) { $('#supOrderWrap', body).hidden = true; return; }
+      sel.insertAdjacentHTML('beforeend', list.map(function (o) { return '<option value="' + esc(o.id) + '"' + (q.order === o.id ? ' selected' : '') + '>№ ' + esc(o.number) + ' от ' + esc(fmtDate(o.createdAt).replace(/ \d{4} г\.$/, '')) + ' — ' + fmt(o.total) + '</option>'; }).join(''));
+    }).catch(function () { $('#supOrderWrap', body).hidden = true; });
+    $('#supNew', body).addEventListener('submit', async function (e) {
+      e.preventDefault();
+      var text = $('#supText', body).value.trim(), topic = ($('input[name="sup-topic"]:checked', body) || {}).value;
+      if (!text) { $('#supErr', body).textContent = 'Напишите, чем мы можем помочь'; $('#supText', body).focus(); return; }
+      var btn = $('#supBtn', body); btn.disabled = true; btn.textContent = 'Отправляем…';
+      try { var t = await API.supportCreate({ topic: topic, orderId: sel.value, text: text }); toast('Сообщение отправлено'); go('#/account?tab=support&id=' + t.id); }
+      catch (ex) { $('#supErr', body).textContent = errMsg(ex); btn.disabled = false; btn.textContent = 'Отправить'; }
+    });
+  }
+
+  /* ---------- Кнопка связи на всех страницах ---------- */
+  var FAB_IC = {
+    chat: '<svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/><path d="M8 9.5h8M8 12.5h5"/></svg>',
+    tg: '<svg viewBox="0 0 24 24"><path d="M21 4L3 11l6 2.2M21 4l-3 16-9-6.8M21 4L9 13.2V19l3-3.4"/></svg>',
+    wa: '<svg viewBox="0 0 24 24"><path d="M4 20l1.3-3.9A8 8 0 1 1 8 18.8z"/><path d="M9 9.5c0 3 2.5 5.5 5.5 5.5l1-1.6-2-1-1 .9a3.6 3.6 0 0 1-1.8-1.8l.9-1-1-2z"/></svg>',
+    phone: '<svg viewBox="0 0 24 24"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a1 1 0 0 1-1 1A16 16 0 0 1 4 5a1 1 0 0 1 1-1z"/></svg>',
+    mail: '<svg viewBox="0 0 24 24"><path d="M3 6h18v12H3z"/><path d="M3 7l9 6 9-6"/></svg>'
+  };
+  function fabHtml() {
+    var c = D.settings.contacts || {};
+    if (c.fab === false) return '';
+    var tg = (D.settings.socials || []).find(function (x) { return x.url && socialKind(x) === 'telegram' && !/t\.me\/?$/.test(x.url); });
+    var wa = String(c.whatsapp || '').replace(/\D/g, '');
+    if (wa.length === 11 && wa[0] === '8') wa = '7' + wa.slice(1);
+    var row = function (href, ic, title, sub, ext) { return '<a class="fp-row" href="' + esc(href) + '"' + (ext ? ' target="_blank" rel="noopener"' : '') + '><span class="fp-ic">' + FAB_IC[ic] + '</span><span><b>' + esc(title) + '</b><small>' + esc(sub) + '</small></span></a>'; };
+    var rows = row('#/account?tab=support&new=1', 'chat', 'Написать в чат', 'Ответ придёт в кабинет и на почту') +
+      (tg ? row(safeUrl(tg.url), 'tg', 'Telegram', 'Написать в Telegram', true) : '') +
+      (wa.length >= 10 ? row('https://wa.me/' + wa, 'wa', 'WhatsApp', fmtPhone(wa), true) : '') +
+      (c.phone ? row('tel:' + c.phone.replace(/[^\d+]/g, ''), 'phone', 'Позвонить', c.phone) : '') +
+      (c.email ? row('mailto:' + c.email, 'mail', 'Почта', c.email) : '');
+    return '<div class="fab" id="fab"><div class="fab-panel" id="fabPanel" role="dialog" aria-label="Связаться с нами" hidden>' +
+      '<div class="fp-head"><b>Мы на связи</b>' + (c.hours ? '<span>' + esc(c.hours) + '</span>' : '') + '</div>' + rows + '</div>' +
+      '<button class="fab-btn" id="fabBtn" type="button" aria-expanded="false" aria-controls="fabPanel" aria-label="Связаться с нами">' + FAB_IC.chat + '<i class="fab-dot" hidden></i></button></div>';
+  }
+  function fabSet(open) {
+    var fab = $('#fab'), panel = $('#fabPanel'), btn = $('#fabBtn'); if (!fab) return;
+    panel.hidden = !open; btn.setAttribute('aria-expanded', open); fab.classList.toggle('open', open);
+  }
+  var fabBound = false;
+  function bindFab() {
+    markBonusDot();
+    if (fabBound) return; fabBound = true;
+    document.addEventListener('click', function (e) {
+      if (e.target.closest('#fabBtn')) { fabSet($('#fabPanel').hidden); return; }
+      var p = $('#fabPanel');
+      if (p && !p.hidden && (e.target.closest('#fabPanel a') || !e.target.closest('#fab'))) fabSet(false);
+    });
+    document.addEventListener('keydown', function (e) { var p = $('#fabPanel'); if (e.key === 'Escape' && p && !p.hidden) { fabSet(false); $('#fabBtn').focus(); } });
+  }
+
   var BONUS_TYPES = { earn: 'Начислено за заказ', spend: 'Оплата заказа', 'return': 'Возврат за отменённый заказ', revoke: 'Списано: заказ отменён', manual: 'Начисление от магазина' };
   function bonusHistoryHtml(log) {
     if (!log || !log.length) return '<div class="empty" style="text-align:left;justify-items:start;padding-top:0"><h3>Операций пока нет</h3><p>Бонусы придут после первой покупки — их можно сразу потратить на следующую.</p><a class="btn ghost" href="#/catalog">В каталог</a></div>';
@@ -1169,7 +1374,13 @@
     }).join('') + '</div>';
   }
   /* Уведомление о начислении: карточка в углу экрана, пока покупатель её не закроет */
-  function markBonusDot() { var a = $('#accLink'); if (a) a.classList.toggle('has-dot', !!(API.user && API.user.bonusNews && API.user.bonusNews.length)); }
+  function markBonusDot() {
+    var u = API.user, sup = !!(u && u.supportUnread);
+    var a = $('#accLink'); if (a) a.classList.toggle('has-dot', !!(u && ((u.bonusNews && u.bonusNews.length) || sup)));
+    var f = $('.fab-dot'); if (f) f.hidden = !sup;
+    var t = $('.acc-tabs a[href="#/account?tab=support"]');
+    if (t) { var d = $('.acc-dot', t); if (sup && !d) t.insertAdjacentHTML('beforeend', '<i class="acc-dot" aria-label="Есть ответ"></i>'); if (!sup && d) d.remove(); }
+  }
   function hideBonusNotice() { var el = $('.bonus-notice'); if (el) { el.classList.add('out'); setTimeout(function () { el.remove(); }, 400); } }
   async function seenBonus() { hideBonusNotice(); try { await API.bonusSeen(); } catch (e) {} markBonusDot(); }
   async function refreshBonus() { try { await API.myBonus(); markBonusDot(); showBonusNews(); } catch (e) {} }
@@ -1187,10 +1398,21 @@
     el.addEventListener('click', function (ev) { if (ev.target.closest('[data-bn-x],[data-bn-go]')) seenBonus(); });
     clearTimeout(noticeTimer); noticeTimer = setTimeout(function () { if (document.body.contains(el)) seenBonus(); }, 12000);
   }
+  function backTo(back) { return back === 'checkout' ? '#/checkout' : back === 'support' ? '#/account?tab=support&new=1' : '#/account'; }
+  // Справа от входа и регистрации: что даёт аккаунт
+  function authAside() {
+    var c = bonusCfg(), perks = [];
+    if (c.earn) perks.push(['Бонусы с каждой покупки', String(c.percent).replace('.', ',') + '% от суммы заказа возвращаются на счёт. 1 бонус = 1 ₽']);
+    perks.push(['Статус заказов', 'Видно, на каком этапе заказ: собирается, в пути или уже ждёт вас']);
+    perks.push(['Чат с поддержкой', 'Пишите по любому вопросу — ответ придёт в кабинет и на почту']);
+    perks.push(['Быстрое оформление', 'Имя, телефон и почта подставятся в заказ сами']);
+    return '<aside class="auth-aside">' + (c.earn ? '<div class="auth-card">' + loyalCardHtml(null, 0) + '</div>' : '') +
+      '<ul class="auth-perks">' + perks.map(function (x) { return '<li><b>' + esc(x[0]) + '</b><span>' + esc(x[1]) + '</span></li>'; }).join('') + '</ul></aside>';
+  }
   function authPage(v, mode, back, pre) {
     pre = pre || {};
-    var backQ = back === 'checkout' ? 'back=checkout' : '';
-    v.innerHTML = '<div class="wrap"><div class="page-head" style="text-align:center;justify-items:center"><span class="eyebrow">Личный кабинет</span><h1>' + (mode === 'login' ? 'Вход' : 'Регистрация') + '</h1>' + (backQ ? '<p class="muted" style="max-width:40ch">После входа вы вернётесь к оформлению заказа, а промокод подставится сам.</p>' : '') + '</div><div class="auth">' +
+    var backQ = back === 'checkout' || back === 'support' ? 'back=' + back : '';
+    v.innerHTML = '<div class="wrap auth-wrap"><div class="auth-main"><div class="page-head"><span class="eyebrow">Личный кабинет</span><h1>' + (mode === 'login' ? 'Вход' : 'Регистрация') + '</h1>' + (back === 'checkout' ? '<p class="muted" style="max-width:40ch">После входа вы вернётесь к оформлению заказа, а промокод подставится сам.</p>' : back === 'support' ? '<p class="muted" style="max-width:40ch">Войдите, чтобы написать в поддержку: ответ сохранится в кабинете и придёт на почту.</p>' : '') + '</div><div class="auth">' +
       '<div class="tabs"><button data-m="login"' + (mode === 'login' ? ' class="on"' : '') + '>Вход</button><button data-m="register"' + (mode === 'register' ? ' class="on"' : '') + '>Регистрация</button></div>' +
       (mode === 'login' ?
         '<form class="form" id="authForm" novalidate><label class="field"><span>Телефон или электронная почта</span><input class="input" id="lg-login" autocomplete="username"></label>' +
@@ -1205,7 +1427,7 @@
         '<label class="check"><input type="checkbox" id="rg-agree"' + (pre.consent ? ' checked' : '') + '> <span>Даю <a href="#/page/consent" data-page-modal="consent">согласие на обработку персональных данных</a></span></label>' +
         '<p class="form-error" id="authErr"></p><button class="btn block" id="rgBtn">Зарегистрироваться</button>' +
         '<p class="auth-note">Обрабатываем данные по <a href="#/page/privacy" data-page-modal="privacy">политике обработки персональных данных</a>. На почту придёт код из 6 цифр — он подтвердит, что адрес ваш.</p></form>') +
-      '<p class="muted" style="font-size:14px;text-align:center">' + (mode === 'login' ? 'Нет аккаунта? <button class="link" data-m="register">Зарегистрируйтесь</button>' : 'Уже есть аккаунт? <button class="link" data-m="login">Войдите</button>') + '</p></div></div>';
+      '<p class="muted auth-switch">' + (mode === 'login' ? 'Нет аккаунта? <button class="link" data-m="register">Зарегистрируйтесь</button>' : 'Уже есть аккаунт? <button class="link" data-m="login">Войдите</button>') + '</p></div></div>' + authAside() + '</div>';
     $$('[data-m]', v).forEach(function (b) { b.addEventListener('click', function () { go('#/account' + (b.getAttribute('data-m') === 'register' ? '?tab=register' + (backQ ? '&' + backQ : '') : (backQ ? '?' + backQ : ''))); }); });
     if (mode === 'register') phoneMask($('#rg-phone'));
     $('#authForm').addEventListener('submit', async function (e) {
@@ -1230,7 +1452,7 @@
           afterRegister(back, r.welcome, false);
           return;
         }
-        go(back === 'checkout' ? '#/checkout' : '#/account');
+        go(backTo(back));
       } catch (ex) { err.textContent = errMsg(ex); }
     });
   }
@@ -1310,7 +1532,7 @@
   function afterRegister(back, w, verified) {
     var u = API.user || {};
     markBonusDot();
-    go(back === 'checkout' ? '#/checkout' : '#/account');
+    go(backTo(back));
     w = w || {};
     var perks = '';
     if (w.bonusPercent) perks += '<div class="wl-perk"><b>' + esc(String(w.bonusPercent).replace('.', ',')) + '%</b><span>возвращаем бонусами<br>с каждой покупки</span></div>';

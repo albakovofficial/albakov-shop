@@ -204,7 +204,22 @@
     return { subject: subject, html: frame(ctx, subject, 'Бонусы с каждой покупки и личный кабинет', inner, footer), text: text };
   }
 
-  var api = { DEFAULT_NOTIFY: DEFAULT_NOTIFY, PLACEHOLDERS: PLACEHOLDERS, tplOf: tplOf, readyRequests: readyRequests, render: render, renderOrder: renderOrder, renderCode: renderCode, renderWelcome: renderWelcome };
+  /* Поддержка. kind: customer — ответ магазина покупателю; shop — новое сообщение покупателя магазину.
+     ctx: { kind, store, logo, name, number, topic, orderNumber, text, url, contacts } */
+  function renderSupport(ctx) {
+    var shop = ctx.kind === 'shop';
+    var subject = shop ? 'Обращение № ' + ctx.number + ' — ' + (ctx.name || 'покупатель') : 'Ответ поддержки ' + ctx.store + ' — обращение № ' + ctx.number;
+    var about = ctx.topic + (ctx.orderNumber ? ', заказ № ' + ctx.orderNumber : '');
+    var quote = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0 0;"><tr><td style="border-left:2px solid #141414;padding:4px 0 4px 18px;font-family:' + SANS + ';font-size:15px;line-height:1.65;color:#141414;white-space:pre-line;">' + esc(ctx.text) + '</td></tr></table>';
+    var inner = eyebrow(shop ? 'Новое сообщение' : 'Поддержка') + h1(shop ? (ctx.name || 'Покупатель') + ' пишет' : (ctx.name ? ctx.name + ', мы ответили' : 'Мы ответили')) +
+      para('Обращение № ' + esc(ctx.number) + ' · ' + esc(about), 'font-size:14px;color:#4A4A4F;margin:0;') + quote +
+      button(shop ? 'Ответить в панели' : 'Открыть переписку', ctx.url);
+    var footer = shop ? 'Письмо отправлено с сайта ' + esc(ctx.store) + '.' : 'Ответить можно в личном кабинете, в разделе «Поддержка».' + (ctx.contacts ? '<br>' + esc(ctx.contacts) : '');
+    var text = (shop ? (ctx.name || 'Покупатель') + ' пишет' : 'Ответ поддержки ' + ctx.store) + ' — обращение № ' + ctx.number + ' (' + about + ')\n\n' + ctx.text + '\n\n' + ctx.url;
+    return { subject: subject, html: frame(ctx, subject, String(ctx.text).slice(0, 90), inner, footer), text: text };
+  }
+
+  var api = { renderSupport: renderSupport, DEFAULT_NOTIFY: DEFAULT_NOTIFY, PLACEHOLDERS: PLACEHOLDERS, tplOf: tplOf, readyRequests: readyRequests, render: render, renderOrder: renderOrder, renderCode: renderCode, renderWelcome: renderWelcome };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Mail = api;
 })(this);

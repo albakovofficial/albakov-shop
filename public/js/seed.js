@@ -18,6 +18,8 @@
         phone: '+7 (495) 000-00-00',
         email: 'hello@albakov.ru',
         address: 'Москва, ул. Петровка, 21',
+        fab: true,
+        whatsapp: '',
         hours: 'Ежедневно 10:00–22:00'
       },
       socials: [

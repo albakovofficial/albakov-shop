@@ -139,7 +139,72 @@
     return { subject: subject, html: html, text: text };
   }
 
-  var api = { DEFAULT_NOTIFY: DEFAULT_NOTIFY, PLACEHOLDERS: PLACEHOLDERS, tplOf: tplOf, readyRequests: readyRequests, render: render, renderOrder: renderOrder };
+  /* Общая рамка писем об аккаунте: логотип, белая карточка, подпись снизу */
+  function frame(ctx, subject, preheader, inner, footer) {
+    var sans = "Montserrat,'Helvetica Neue',Arial,sans-serif";
+    return '<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>' + esc(subject) + '</title></head>' +
+      '<body style="margin:0;padding:0;background:#F4F1EB;">' +
+      '<div style="display:none;max-height:0;overflow:hidden;opacity:0">' + esc(preheader) + '</div>' +
+      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#F4F1EB;"><tr><td align="center" style="padding:40px 16px;">' +
+      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;">' +
+        '<tr><td align="center" style="padding:0 0 32px;font-family:' + sans + ';font-size:26px;letter-spacing:9px;color:#141414;">' +
+          (ctx.logo ? '<img src="' + esc(ctx.logo.src) + '" alt="' + esc(ctx.store) + '" height="18" style="display:inline-block;height:18px;width:auto;border:0;">' : esc(String(ctx.store || '').toUpperCase())) + '</td></tr>' +
+        '<tr><td style="background:#FFFFFF;border:1px solid #DDDAD3;padding:44px 40px 40px;">' + inner + '</td></tr>' +
+        '<tr><td style="padding:26px 8px 0;font-family:' + sans + ';font-size:13px;line-height:1.6;color:#626267;text-align:center;">' + footer + '</td></tr>' +
+      '</table></td></tr></table></body></html>';
+  }
+  var SANS = "Montserrat,'Helvetica Neue',Arial,sans-serif";
+  function eyebrow(t) { return '<div style="font-family:' + SANS + ';font-size:12px;letter-spacing:3px;text-transform:uppercase;color:#3B3B3F;text-align:center;">' + esc(t) + '</div>'; }
+  function h1(t) { return '<h1 style="margin:14px 0 14px;font-family:' + SANS + ';font-weight:300;font-size:32px;line-height:1.15;color:#141414;text-align:center;">' + esc(t) + '</h1>'; }
+  function para(t, extra) { return '<p style="margin:0 0 14px;font-family:' + SANS + ';font-size:15px;line-height:1.65;color:#2B2B2E;text-align:center;' + (extra || '') + '">' + t + '</p>'; }
+  function button(label, url) {
+    return '<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:28px auto 0;"><tr><td style="background:#141414;">' +
+      '<a href="' + esc(url) + '" style="display:inline-block;padding:16px 34px;font-family:' + SANS + ';font-size:13px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;color:#FFFFFF;text-decoration:none;">' + esc(label) + '</a></td></tr></table>';
+  }
+
+  /* Код подтверждения почты. ctx: { store, logo, code, minutes, name } */
+  function renderCode(ctx) {
+    var code = String(ctx.code), spaced = code.slice(0, 3) + ' ' + code.slice(3);
+    var subject = spaced + ' — код подтверждения ' + ctx.store;
+    var cells = code.split('').map(function (d) {
+      return '<td align="center" style="width:44px;height:56px;border:1px solid #BDBAB4;background:#F4F1EB;font-family:' + SANS + ';font-size:28px;font-weight:600;color:#141414;">' + esc(d) + '</td>';
+    });
+    var boxes = '<table role="presentation" cellpadding="0" cellspacing="6" border="0" align="center" style="margin:26px auto 22px;"><tr>' + cells.slice(0, 3).join('') + '<td style="width:10px;"></td>' + cells.slice(3).join('') + '</tr></table>';
+    var inner = eyebrow('Подтверждение почты') + h1(ctx.name ? ctx.name + ', ваш код' : 'Ваш код') +
+      para('Введите его на сайте, чтобы закончить регистрацию.') + boxes +
+      para('Код действует ' + ctx.minutes + ' минут.', 'font-size:14px;color:#4A4A4F;margin:0;');
+    var footer = 'Если вы не регистрировались на сайте ' + esc(ctx.store) + ', просто удалите это письмо — без кода аккаунт не создастся.';
+    var text = 'Код подтверждения: ' + code + '\nВведите его на сайте, чтобы закончить регистрацию. Код действует ' + ctx.minutes + ' минут.\n\nЕсли вы не регистрировались на сайте ' + ctx.store + ', просто удалите это письмо.';
+    return { subject: subject, html: frame(ctx, subject, 'Код: ' + spaced + '. Действует ' + ctx.minutes + ' минут.', inner, footer), text: text };
+  }
+
+  /* Письмо после регистрации. ctx: { store, logo, name, url, bonusPercent, promo: { code, text }, contacts } */
+  function renderWelcome(ctx) {
+    var subject = 'Добро пожаловать в ' + ctx.store;
+    var perks = [];
+    if (ctx.bonusPercent) perks.push(['Бонусы', 'Возвращаем ' + ctx.bonusPercent + '% с каждой покупки. 1 бонус = 1 ₽.']);
+    if (ctx.promo && ctx.promo.code) perks.push(['Первый заказ', ctx.promo.text]);
+    perks.push(['Личный кабинет', 'Заказы, бонусный счёт и данные для быстрого оформления.']);
+    var list = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:26px 0 0;border-top:1px solid #DDDAD3;">' +
+      perks.map(function (x) {
+        return '<tr><td style="padding:16px 0;border-bottom:1px solid #DDDAD3;font-family:' + SANS + ';">' +
+          '<div style="font-size:15px;font-weight:600;color:#141414;">' + esc(x[0]) + '</div>' +
+          '<div style="margin-top:4px;font-size:14px;line-height:1.55;color:#4A4A4F;">' + esc(x[1]) + '</div></td></tr>';
+      }).join('') + '</table>';
+    var promo = ctx.promo && ctx.promo.code
+      ? '<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:26px auto 0;"><tr><td align="center" style="border:1px dashed #141414;padding:14px 26px;font-family:' + SANS + ';">' +
+          '<div style="font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#4A4A4F;">Промокод</div>' +
+          '<div style="margin-top:6px;font-size:22px;font-weight:600;letter-spacing:5px;color:#141414;">' + esc(ctx.promo.code) + '</div></td></tr></table>'
+      : '';
+    var inner = eyebrow('Добро пожаловать') + h1(ctx.name ? 'Здравствуйте, ' + ctx.name + '!' : 'Здравствуйте!') +
+      para('Вы зарегистрировались в ' + esc(ctx.store) + '. Рады видеть вас среди наших покупателей.') +
+      promo + list + button('Перейти в магазин', ctx.url);
+    var footer = 'Вы получили это письмо, потому что зарегистрировались на сайте ' + esc(ctx.store) + '. Рассылок не будет — только письма о ваших заказах.' + (ctx.contacts ? '<br>' + esc(ctx.contacts) : '');
+    var text = 'Здравствуйте' + (ctx.name ? ', ' + ctx.name : '') + '!\n\nВы зарегистрировались в ' + ctx.store + '.\n\n' + perks.map(function (x) { return x[0] + ': ' + x[1]; }).join('\n') + (ctx.promo && ctx.promo.code ? '\nПромокод: ' + ctx.promo.code : '') + '\n\nМагазин: ' + ctx.url;
+    return { subject: subject, html: frame(ctx, subject, 'Бонусы с каждой покупки и личный кабинет', inner, footer), text: text };
+  }
+
+  var api = { DEFAULT_NOTIFY: DEFAULT_NOTIFY, PLACEHOLDERS: PLACEHOLDERS, tplOf: tplOf, readyRequests: readyRequests, render: render, renderOrder: renderOrder, renderCode: renderCode, renderWelcome: renderWelcome };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Mail = api;
 })(this);

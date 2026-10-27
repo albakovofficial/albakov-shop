@@ -42,7 +42,10 @@
   }
   var Server = {
     async init(state) { this.user = state.user || null; this.isAdmin = !!state.isAdmin; return state.data; },
-    async register(f) { this.user = (await call('POST', 'api/auth/register', f)).user; return this.user; },
+    // Ответ: { user, welcome } — аккаунт создан сразу; { pending } — на почту ушёл код, ждём его
+    async register(f) { var r = await call('POST', 'api/auth/register', f); if (r.user) this.user = r.user; return r; },
+    async verify(id, code) { var r = await call('POST', 'api/auth/verify', { id: id, code: code }); this.user = r.user; return r; },
+    async resendCode(id) { return await call('POST', 'api/auth/resend', { id: id }); },
     async login(l, p) { this.user = (await call('POST', 'api/auth/login', { login: l, password: p })).user; return this.user; },
     async logout() { await call('POST', 'api/auth/logout'); this.user = null; },
     async updateProfile(f) { this.user = (await call('PUT', 'api/me', f)).user; return this.user; },

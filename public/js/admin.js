@@ -224,7 +224,11 @@
     DATA.products.forEach(function (p) { Pricing.colorsOf(p).forEach(function (c) { (c.sizes || []).forEach(function (s) { if (s.stock <= 1) low.push({ p: p, c: c, s: s }); }); }); });
     var promosActive = DATA.promotions.filter(function (p) { return Pricing.inWindow(p, Date.now()); }).length;
     var codesActive = DATA.promocodes.filter(function (c) { return c.active; }).length;
+    // Реквизиты продавца подставляются в оферту, политику и согласие — без настоящих реквизитов документы недействительны
+    var legal = String(DATA.settings.legal || '');
+    var legalBad = !legal.trim() || /0{10}|Иванов И\. И\./.test(legal);
     m.innerHTML = head('Обзор') +
+      (legalBad ? '<div class="adm-alert"><b>Укажите реквизиты продавца.</b> Они подставляются в публичную оферту, политику обработки персональных данных и согласие. Сейчас там: «' + esc(legal || 'пусто') + '». <a class="link" href="#/admin?s=settings">Открыть настройки</a></div>' : '') +
       '<div class="adm-stats">' +
         stat('Новые заказы', newN, '#/admin?s=orders&f=new') + stat('Заказов сегодня', todayN, '#/admin?s=orders') + stat('Выручка, всего', fmt(revenue), '#/admin?s=orders') + stat('Покупателей', DATA.users.length, '#/admin?s=customers') +
         stat('Товаров в продаже', DATA.products.filter(function (p) { return p.active !== false; }).length, '#/admin?s=products') + stat('Активных акций', promosActive, '#/admin?s=promotions') + stat('Активных промокодов', codesActive, '#/admin?s=promocodes') +
@@ -870,7 +874,7 @@
           { k: 'title', label: 'Заголовок' }, { k: 'slug', label: 'Адрес', hint: 'Латиницей, заполнится сам' },
           { k: 'group', label: 'Где показать ссылку', type: 'select', options: [['help', 'Подвал: «Покупателям»'], ['brand', 'Подвал: «Покупателям», в конце'], ['legal', 'Нижняя строка подвала (юридическое)']] },
           { k: 'inFooter', label: 'Показывать ссылку в подвале', type: 'checkbox' },
-          { k: 'body', label: 'Текст', type: 'textarea', rows: 14, hint: 'Пустая строка — новый абзац. ## Заголовок. - пункт списка. **жирный**. [текст ссылки](https://адрес)' }
+          { k: 'body', label: 'Текст', type: 'textarea', rows: 14, hint: 'Пустая строка — новый абзац. ## Заголовок. - пункт списка. **жирный**. [текст ссылки](https://адрес). Подставляются сами: {продавец} — реквизиты из «Настроек», {адрес}, {почта}, {телефон} — из контактов, {магазин}, {сайт}' }
         ];
       },
       read: function (box, p) { p.slug = translit(p.slug || p.title); },
@@ -882,7 +886,7 @@
     settingsForm(m, 'Настройки', '', [
       { k: 'storeName', label: 'Название магазина', hint: 'Логотип меняется в разделе «Логотип и название»' },
       { k: 'tagline', label: 'Слоган' },
-      { k: 'legal', label: 'Реквизиты продавца в подвале', wide: true, hint: 'ИП или ООО, ИНН, ОГРН — обязательны для интернет-магазина' },
+      { k: 'legal', label: 'Реквизиты продавца', wide: true, hint: 'Например: ИП Фамилия Имя Отчество, ИНН 000000000000, ОГРНИП 000000000000000. Показываются в подвале и подставляются в оферту, политику обработки персональных данных и согласие' },
       { k: 'footerNote', label: 'Примечание о ценах', wide: true },
       { section: 'Плашки на карточках товаров' },
       { k: 'bt_new', label: '«Новинка» — текст' }, { k: 'bc_new', label: '«Новинка» — цвет', type: 'color' },

@@ -298,6 +298,7 @@ async function placeOrder(req, b) {
   if (!customer.firstName || !customer.lastName) fail(400, 'Укажите имя и фамилию');
   if (customer.phone.length !== 11) fail(400, 'Проверьте номер телефона');
   if (!validEmail(customer.email)) fail(400, 'Проверьте электронную почту');
+  if (!b.consent) fail(400, 'Нужно согласие на обработку персональных данных');
   const pay = db.settings.payment || {};
   const method = b.payment === 'online' ? 'online' : 'cod';
   if ((method === 'online' && !pay.online) || (method === 'cod' && !pay.cod)) fail(400, 'Этот способ оплаты недоступен');
@@ -315,7 +316,7 @@ async function placeOrder(req, b) {
   if (q.promo && q.promo.ok) { const pc = db.promocodes.find((x) => x.code === q.promo.code); if (pc) pc.used = (pc.used || 0) + 1; }
   db.orderSeq = (db.orderSeq || 100000) + 1;
   const order = {
-    id: uid('o'), number: String(db.orderSeq), token: crypto.randomBytes(16).toString('hex'), createdAt: new Date().toISOString(), userId: user ? user.id : null, customer,
+    id: uid('o'), number: String(db.orderSeq), token: crypto.randomBytes(16).toString('hex'), createdAt: new Date().toISOString(), userId: user ? user.id : null, customer, consentAt: new Date().toISOString(),
     items: q.lines.map((l) => ({ productId: l.productId, slug: l.slug, name: l.name, colorId: l.colorId, color: l.color, size: l.size, qty: l.qty, price: l.price, oldPrice: l.oldPrice, image: l.image, art: l.art })),
     subtotal: q.subtotal, saleDiscount: q.saleDiscount, promoCode: q.promo && q.promo.ok ? q.promo.code : '', promoDiscount: q.promoDiscount,
     delivery: Object.assign({}, q.delivery, { city: String(b.city || '').slice(0, 100), address: String(b.address || '').slice(0, 300) }), comment: String(b.comment || '').slice(0, 1000),
@@ -441,11 +442,12 @@ function subscribe(req, b) {
   if (inStock && size) fail(400, 'Этот размер уже в наличии — его можно добавить в корзину');
   const email = String(b.email || '').trim().toLowerCase();
   if (!validEmail(email)) fail(400, 'Проверьте электронную почту');
+  if (!b.consent) fail(400, 'Нужно согласие на обработку адреса почты');
   if (db.waitlist.filter((w) => w.email === email && w.status === 'waiting').length >= 30) fail(429, 'С этой почты уже оставлено много заявок');
   const dup = db.waitlist.find((w) => w.email === email && w.productId === p.id && w.colorId === c.id && w.size === size && (w.status === 'waiting' || w.status === 'failed'));
   if (!dup) {
     const u = currentUser(req);
-    db.waitlist.push({ id: uid('w'), token: crypto.randomBytes(12).toString('hex'), productId: p.id, colorId: c.id, size, email, userId: u ? u.id : null, createdAt: new Date().toISOString(), status: 'waiting' });
+    db.waitlist.push({ id: uid('w'), token: crypto.randomBytes(12).toString('hex'), productId: p.id, colorId: c.id, size, email, userId: u ? u.id : null, createdAt: new Date().toISOString(), status: 'waiting', consentAt: new Date().toISOString() });
     save();
   }
   return { already: !!dup };
@@ -454,6 +456,44 @@ function htmlPage(title, text) {
   const s = db.settings.storeName;
   return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title></head><body style="margin:0;background:#100f0e;color:#ece6dc;font-family:Arial,sans-serif;display:grid;place-items:center;min-height:100vh;padding:16px;box-sizing:border-box"><div style="max-width:440px;text-align:center"><div style="font-family:Georgia,serif;letter-spacing:8px;font-size:24px;margin-bottom:32px">${s.toUpperCase()}</div><h1 style="font-family:Georgia,serif;font-weight:400;font-size:34px;margin:0 0 14px">${title}</h1><p style="color:#9a9286;line-height:1.6">${text}</p><a href="${PUBLIC_URL}/" style="display:inline-block;margin-top:20px;color:#100f0e;background:#ece6dc;padding:14px 26px;text-decoration:none;font-size:12px;letter-spacing:2px;text-transform:uppercase">На сайт</a></div></body></html>`;
 }
+
+/* ---------------- Регистрация с подтверждением почты ---------------- */
+// Пока почта не подтверждена, аккаунта нет: данные формы ждут в памяти сервера 15 минут.
+// Код из 6 цифр храним только в виде отпечатка; 5 неверных попыток — нужен новый код;
+// новый код — не чаще раза в минуту и не больше 5 раз. Если почта магазина не настроена,
+// регистрация работает как раньше — сразу, без кода.
+const VERIFY_MIN = 15, VERIFY_TRIES = 5, VERIFY_RESEND_SEC = 60, VERIFY_SENDS = 5;
+const pendingRegs = new Map();
+const codeHash = (id, code) => crypto.createHash('sha256').update(id + ':' + code).digest('hex');
+function sweepPending() { const now = Date.now(); for (const [k, r] of pendingRegs) if (r.exp < now) pendingRegs.delete(k); }
+const maskEmail = (e) => { const [n, d] = String(e).split('@'); return (n.length <= 2 ? n[0] + '*' : n.slice(0, 2) + '*'.repeat(Math.min(6, n.length - 2))) + '@' + d; };
+async function sendCode(r) {
+  const code = String(crypto.randomInt(0, 1e6)).padStart(6, '0');
+  r.code = codeHash(r.id, code); r.tries = 0; r.sentAt = Date.now(); r.sends = (r.sends || 0) + 1; r.exp = Date.now() + VERIFY_MIN * 60e3;
+  const m = Mail.renderCode({ store: db.settings.storeName, logo: brandLogo(), code, minutes: VERIFY_MIN, name: r.f.firstName });
+  try { await sendMail({ to: r.f.email, subject: m.subject, html: m.html, text: m.text }); }
+  catch (e) { console.error('Письмо с кодом не отправлено:', e && e.message); fail(502, 'Не удалось отправить письмо с кодом. Проверьте адрес почты или попробуйте ещё раз чуть позже'); }
+}
+function welcomePromo() {
+  const now = Date.now();
+  const pc = (db.promocodes || []).find((x) => x.active !== false && x.firstOrderOnly && Pricing.inWindow(x, now) && (!x.limit || (x.used || 0) < x.limit));
+  if (!pc) return null;
+  const what = pc.type === 'percent' ? '−' + pc.value + '%' : pc.type === 'fixed' ? '−' + Pricing.format(pc.value) : 'Бесплатная доставка';
+  return { code: pc.code, text: what + ' на первый заказ' + (pc.minTotal ? ' от ' + Pricing.format(pc.minTotal) : '') + '. Введите промокод при оформлении.' };
+}
+function createUser(res, f, hash, extra) {
+  if (db.users.some((u) => u.email === f.email)) fail(409, 'Пользователь с такой почтой уже зарегистрирован');
+  if (db.users.some((u) => u.phone === f.phone)) fail(409, 'Пользователь с таким телефоном уже зарегистрирован');
+  const u = Object.assign({ id: uid('u'), hash, createdAt: new Date().toISOString() }, f, extra);
+  db.users.push(u); createSession(res, 'user', u.id); save();
+  if (mailReady()) {
+    const b = Pricing.bonusConf(db.settings), cs = db.settings.contacts || {};
+    const m = Mail.renderWelcome({ store: db.settings.storeName, logo: brandLogo(), name: u.firstName, url: PUBLIC_URL + '/', bonusPercent: b.earn ? String(b.percent).replace('.', ',') : '', promo: welcomePromo(), contacts: [cs.phone, cs.email].filter(Boolean).join(' · ') });
+    sendMail({ to: u.email, subject: m.subject, html: m.html, text: m.text }).catch((e) => console.error('Приветственное письмо не отправлено:', e && e.message));
+  }
+  return u;
+}
+function welcomeInfo() { const b = Pricing.bonusConf(db.settings); return { bonusPercent: b.earn ? b.percent : 0, promo: welcomePromo() }; }
 
 function orderView(o) { const c = Object.assign({}, o); delete c.token; return c; }
 
@@ -475,11 +515,47 @@ async function api(req, res, url, body) {
       if (!validEmail(f.email)) fail(400, 'Проверьте электронную почту');
       if (String(body.password || '').length < 6) fail(400, 'Пароль должен быть не короче 6 символов');
       if (!pwOk(body.password)) fail(400, 'Слишком длинный пароль');
+      if (!body.consent) fail(400, 'Нужно согласие на обработку персональных данных');
       if (db.users.some((u) => u.email === f.email)) fail(409, 'Пользователь с такой почтой уже зарегистрирован');
       if (db.users.some((u) => u.phone === f.phone)) fail(409, 'Пользователь с таким телефоном уже зарегистрирован');
-      const u = Object.assign({ id: uid('u'), hash: hashPassword(body.password), createdAt: new Date().toISOString() }, f);
-      db.users.push(u); createSession(res, 'user', u.id); save();
-      return { user: publicUser(u) };
+      // согласие на обработку персональных данных: когда дано и с какого адреса — для подтверждения по закону
+      const consent = { consentAt: new Date().toISOString(), consentIp: clientIp(req) };
+      if (!mailReady()) { const u = createUser(res, f, hashPassword(body.password), consent); return { user: publicUser(u), welcome: welcomeInfo() }; }
+      sweepPending();
+      for (const [k, r] of pendingRegs) if (r.f.email === f.email) pendingRegs.delete(k);
+      if (pendingRegs.size > 2000) fail(429, 'Слишком много регистраций. Попробуйте через несколько минут');
+      const r = { id: crypto.randomBytes(16).toString('hex'), f, hash: hashPassword(body.password), consent };
+      await sendCode(r);
+      pendingRegs.set(r.id, r);
+      return { pending: { id: r.id, email: maskEmail(f.email), minutes: VERIFY_MIN, resendIn: VERIFY_RESEND_SEC } };
+    }
+    if (p[1] === 'verify' && M === 'POST') {
+      throttle(req, 'verify', 40);
+      sweepPending();
+      const r = pendingRegs.get(String(body.id || ''));
+      if (!r) fail(410, 'Код устарел. Зарегистрируйтесь ещё раз — мы пришлём новый');
+      const code = String(body.code || '').replace(/\D/g, '');
+      if (code.length !== 6) fail(400, 'Введите все 6 цифр кода');
+      if (r.tries >= VERIFY_TRIES) fail(429, 'Слишком много неверных попыток. Запросите новый код');
+      if (!safeEqual(codeHash(r.id, code), r.code)) {
+        r.tries++;
+        const left = VERIFY_TRIES - r.tries;
+        fail(400, left > 0 ? 'Неверный код. Осталось попыток: ' + left : 'Слишком много неверных попыток. Запросите новый код');
+      }
+      pendingRegs.delete(r.id);
+      const u = createUser(res, r.f, r.hash, Object.assign({ emailVerifiedAt: new Date().toISOString() }, r.consent));
+      return { user: publicUser(u), welcome: welcomeInfo() };
+    }
+    if (p[1] === 'resend' && M === 'POST') {
+      throttle(req, 'resend', 20);
+      sweepPending();
+      const r = pendingRegs.get(String(body.id || ''));
+      if (!r) fail(410, 'Код устарел. Зарегистрируйтесь ещё раз — мы пришлём новый');
+      const wait = Math.ceil((r.sentAt + VERIFY_RESEND_SEC * 1000 - Date.now()) / 1000);
+      if (wait > 0) fail(429, 'Новый код можно запросить через ' + wait + ' с');
+      if (r.sends >= VERIFY_SENDS) fail(429, 'Код уже отправлялся несколько раз. Проверьте папку «Спам» или зарегистрируйтесь заново');
+      await sendCode(r);
+      return { resendIn: VERIFY_RESEND_SEC };
     }
     if (p[1] === 'login' && M === 'POST') {
       const tk = throttle(req, 'login');

@@ -188,7 +188,6 @@
     if (!window.Install) return '';
     return '<div class="mnav-app">' +
       '<button class="mnav-app-btn" data-act="install" data-inst="offer"' + (Install.canOffer() ? '' : ' hidden') + '><img src="img/icon-192.png" alt="" width="36" height="36"><span><b>Приложение ALBAKOV</b><small>Значок на экране «Домой»</small></span></button>' +
-      '<button class="mnav-app-btn" data-act="share-shop"><span class="mnav-app-ic" aria-hidden="true">' + Install.IC.share + '</span><span><b>Поделиться магазином</b><small>Отправить ссылку друзьям</small></span></button>' +
     '</div>';
   }
   function installBannerHtml() {
@@ -753,17 +752,18 @@
       '<form class="form" id="nfForm" novalidate>' +
         (opts.length > 1 ? '<label class="field"><span>Размер</span><select class="select" id="nf-size">' + opts.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (o[0] === pre ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') + '</select></label>' : '<p class="notify-size">Размер: <b>' + esc(pre || 'любой') + '</b></p>') +
         '<label class="field"><span>Электронная почта</span><input class="input" id="nf-email" type="email" autocomplete="email" placeholder="name@example.ru" value="' + esc(API.user ? API.user.email : '') + '"></label>' +
-        '<p class="form-error" id="nfErr"></p><button class="btn block" id="nfBtn">Сообщить мне</button>' +
-        '<p class="muted" style="font-size:13px;line-height:1.5">Нажимая кнопку, вы соглашаетесь на обработку адреса почты для этого уведомления согласно политике конфиденциальности.</p></form></div>');
+        '<label class="check"><input type="checkbox" id="nf-agree"> <span>Даю <a href="#/page/consent" data-page-modal="consent">согласие на обработку</a> адреса почты для этого уведомления</span></label>' +
+        '<p class="form-error" id="nfErr"></p><button class="btn block" id="nfBtn">Сообщить мне</button></form></div>');
     var f = $('#nfForm'), e = $('#nf-email'); if (!e.value) setTimeout(function () { e.focus(); }, 60);
     e.addEventListener('input', function () { e.classList.remove('invalid'); $('#nfErr').textContent = ''; });
     f.addEventListener('submit', async function (ev) {
       ev.preventDefault();
       var chosen = $('#nf-size') ? $('#nf-size').value : pre, email = e.value.trim();
       if (!validEmail(email)) { e.classList.add('invalid'); $('#nfErr').textContent = 'Проверьте электронную почту'; return; }
+      if (!$('#nf-agree').checked) { $('#nfErr').textContent = 'Нужно согласие на обработку адреса почты'; return; }
       var btn = $('#nfBtn'); btn.disabled = true; btn.textContent = 'Отправляем…';
       try {
-        var r = await API.subscribe({ productId: p.id, colorId: col.id, size: chosen, email: email });
+        var r = await API.subscribe({ productId: p.id, colorId: col.id, size: chosen, email: email, consent: true });
         $('#modalBody').innerHTML = '<div class="notify notify-done"><span class="notify-check" aria-hidden="true"></span><h3 class="serif">' + (r.already ? 'Вы уже в списке' : 'Готово, ждите письма') + '</h3>' +
           '<p class="muted">' + (r.already ? 'Заявка на этот товар уже оставлена.' : 'Мы сохранили вашу заявку.') + ' Как только «' + esc(p.name) + '» в цвете «' + esc(col.name) + '»' + (chosen ? ', размер ' + esc(chosen) + ',' : '') + ' появится в наличии, придёт письмо на <b>' + esc(email) + '</b>.</p>' +
           '<button class="btn ghost" data-act="close">Хорошо</button></div>';
@@ -878,7 +878,9 @@
       '</div><aside class="summary"><h3 class="serif" style="font-size:28px">Ваш заказ</h3><div id="coSum"></div>' +
         '<div class="promo-form"><input class="input" id="co-code" placeholder="Промокод" autocomplete="off" aria-label="Промокод"><button type="button" class="btn ghost" id="applyCode">Применить</button></div><div class="promo-msg" id="promoMsg"></div>' +
         '<div id="coBonus"></div><div id="coTotals" style="display:grid;gap:10px"></div>' +
-        '<label class="check"><input type="checkbox" id="co-agree"> <span>Согласен с <a href="#/page/offer" data-page-modal="offer">офертой</a> и даю согласие на обработку персональных данных по <a href="#/page/privacy" data-page-modal="privacy">политике конфиденциальности</a></span></label>' +
+        // Оферта и согласие на обработку персональных данных — отдельными галочками (согласие по 152-ФЗ даётся отдельно от других документов)
+        '<label class="check"><input type="checkbox" id="co-offer"> <span>Принимаю условия <a href="#/page/offer" data-page-modal="offer">публичной оферты</a></span></label>' +
+        '<label class="check"><input type="checkbox" id="co-agree"> <span>Даю <a href="#/page/consent" data-page-modal="consent">согласие на обработку персональных данных</a></span></label>' +
         '<p class="form-error" id="coErr"></p><button class="btn block" id="coSubmit" type="submit">Подтвердить заказ</button></aside></form></div>';
     phoneMask($('#co-phone'));
 
@@ -941,11 +943,12 @@
       if (needAddr) [['co-city'], ['co-addr']].forEach(function (x) { var el = $('#' + x[0]); el.classList.toggle('invalid', !el.value.trim()); if (!el.value.trim()) bad.push(1); });
       var err = $('#coErr');
       if (bad.length) { err.textContent = 'Заполните выделенные поля'; return; }
-      if (!$('#co-agree').checked) { err.textContent = 'Подтвердите согласие с офертой и обработкой данных'; return; }
+      if (!$('#co-offer').checked) { err.textContent = 'Примите условия публичной оферты'; return; }
+      if (!$('#co-agree').checked) { err.textContent = 'Нужно согласие на обработку персональных данных'; return; }
       err.textContent = '';
       var btn = $('#coSubmit'); btn.disabled = true; btn.textContent = 'Оформляем…';
       try {
-        var r = await API.placeOrder({ lines: Cart.get(), code: st.code, deliveryId: st.deliveryId, payment: st.payment, useBonus: st.useBonus, customer: f, city: needAddr ? $('#co-city').value.trim() : '', address: needAddr ? $('#co-addr').value.trim() : '', comment: $('#co-comment').value.trim() });
+        var r = await API.placeOrder({ lines: Cart.get(), code: st.code, deliveryId: st.deliveryId, payment: st.payment, useBonus: st.useBonus, customer: f, city: needAddr ? $('#co-city').value.trim() : '', address: needAddr ? $('#co-addr').value.trim() : '', comment: $('#co-comment').value.trim(), consent: true });
         Cart.clear();
         if (r.payUrl) { location.href = r.payUrl; return; }
         go('#/order/' + r.order.id);
@@ -1067,7 +1070,8 @@
     el.addEventListener('click', function (ev) { if (ev.target.closest('[data-bn-x],[data-bn-go]')) seenBonus(); });
     clearTimeout(noticeTimer); noticeTimer = setTimeout(function () { if (document.body.contains(el)) seenBonus(); }, 12000);
   }
-  function authPage(v, mode, back) {
+  function authPage(v, mode, back, pre) {
+    pre = pre || {};
     var backQ = back === 'checkout' ? 'back=checkout' : '';
     v.innerHTML = '<div class="wrap"><div class="page-head" style="text-align:center;justify-items:center"><span class="eyebrow">Личный кабинет</span><h1>' + (mode === 'login' ? 'Вход' : 'Регистрация') + '</h1>' + (backQ ? '<p class="muted" style="max-width:40ch">После входа вы вернётесь к оформлению заказа, а промокод подставится сам.</p>' : '') + '</div><div class="auth">' +
       '<div class="tabs"><button data-m="login"' + (mode === 'login' ? ' class="on"' : '') + '>Вход</button><button data-m="register"' + (mode === 'register' ? ' class="on"' : '') + '>Регистрация</button></div>' +
@@ -1075,13 +1079,15 @@
         '<form class="form" id="authForm" novalidate><label class="field"><span>Телефон или электронная почта</span><input class="input" id="lg-login" autocomplete="username"></label>' +
         '<label class="field"><span>Пароль</span><input class="input" id="lg-pass" type="password" autocomplete="current-password"></label><p class="form-error" id="authErr"></p><button class="btn block">Войти</button></form>'
       :
-        '<form class="form" id="authForm" novalidate><div class="row2"><label class="field"><span>Имя</span><input class="input" id="rg-first" autocomplete="given-name"></label>' +
-        '<label class="field"><span>Фамилия</span><input class="input" id="rg-last" autocomplete="family-name"></label></div>' +
-        '<label class="field"><span>Номер телефона</span><input class="input" id="rg-phone" type="tel" autocomplete="tel" placeholder="+7 (___) ___-__-__"></label>' +
-        '<label class="field"><span>Электронная почта</span><input class="input" id="rg-email" type="email" autocomplete="email"></label>' +
-        '<label class="field"><span>Пароль</span><input class="input" id="rg-pass" type="password" autocomplete="new-password" placeholder="Не короче 6 символов"></label>' +
-        '<label class="check"><input type="checkbox" id="rg-agree"> <span>Даю согласие на обработку персональных данных в соответствии с <a href="#/page/privacy" data-page-modal="privacy">политикой конфиденциальности</a></span></label>' +
-        '<p class="form-error" id="authErr"></p><button class="btn block">Зарегистрироваться</button></form>') +
+        '<form class="form" id="authForm" novalidate><div class="row2"><label class="field"><span>Имя</span><input class="input" id="rg-first" autocomplete="given-name" value="' + esc(pre.firstName || '') + '"></label>' +
+        '<label class="field"><span>Фамилия</span><input class="input" id="rg-last" autocomplete="family-name" value="' + esc(pre.lastName || '') + '"></label></div>' +
+        '<label class="field"><span>Номер телефона</span><input class="input" id="rg-phone" type="tel" autocomplete="tel" placeholder="+7 (___) ___-__-__" value="' + esc(pre.phone || '') + '"></label>' +
+        '<label class="field"><span>Электронная почта</span><input class="input" id="rg-email" type="email" autocomplete="email" value="' + esc(pre.email || '') + '"></label>' +
+        '<label class="field"><span>Пароль</span><input class="input" id="rg-pass" type="password" autocomplete="new-password" placeholder="Не короче 6 символов" value="' + esc(pre.password || '') + '"></label>' +
+        // Согласие на обработку персональных данных — отдельной галочкой и отдельным документом (152-ФЗ, ст. 9)
+        '<label class="check"><input type="checkbox" id="rg-agree"' + (pre.consent ? ' checked' : '') + '> <span>Даю <a href="#/page/consent" data-page-modal="consent">согласие на обработку персональных данных</a></span></label>' +
+        '<p class="form-error" id="authErr"></p><button class="btn block" id="rgBtn">Зарегистрироваться</button>' +
+        '<p class="auth-note">Обрабатываем данные по <a href="#/page/privacy" data-page-modal="privacy">политике обработки персональных данных</a>. На почту придёт код из 6 цифр — он подтвердит, что адрес ваш.</p></form>') +
       '<p class="muted" style="font-size:14px;text-align:center">' + (mode === 'login' ? 'Нет аккаунта? <button class="link" data-m="register">Зарегистрируйтесь</button>' : 'Уже есть аккаунт? <button class="link" data-m="login">Войдите</button>') + '</p></div></div>';
     $$('[data-m]', v).forEach(function (b) { b.addEventListener('click', function () { go('#/account' + (b.getAttribute('data-m') === 'register' ? '?tab=register' + (backQ ? '&' + backQ : '') : (backQ ? '?' + backQ : ''))); }); });
     if (mode === 'register') phoneMask($('#rg-phone'));
@@ -1099,19 +1105,131 @@
           var firstBad = checks.find(function (c) { return !c[1]; });
           if (firstBad) { err.textContent = { 'rg-first': 'Укажите имя', 'rg-last': 'Укажите фамилию', 'rg-phone': 'Укажите номер телефона полностью', 'rg-email': 'Проверьте электронную почту', 'rg-pass': 'Пароль должен быть не короче 6 символов' }[firstBad[0]]; return; }
           if (!$('#rg-agree').checked) { err.textContent = 'Нужно согласие на обработку персональных данных'; return; }
-          await API.register(f);
-          toast('Добро пожаловать, ' + API.user.firstName);
+          f.consent = true;
+          var btn = $('#rgBtn'); btn.disabled = true; btn.textContent = 'Отправляем код…';
+          var r;
+          try { r = await API.register(f); } finally { btn.disabled = false; btn.textContent = 'Зарегистрироваться'; }
+          if (r.pending) { codeStep(v, r.pending, f, back); return; }
+          afterRegister(back, r.welcome, false);
+          return;
         }
         go(back === 'checkout' ? '#/checkout' : '#/account');
       } catch (ex) { err.textContent = errMsg(ex); }
     });
   }
 
+  /* ---------- Подтверждение почты: код из 6 цифр ---------- */
+  function codeStep(v, pend, f, back) {
+    var cells = ''; for (var i = 0; i < 6; i++) cells += '<input class="code-cell" inputmode="numeric" pattern="[0-9]*" maxlength="6" aria-label="Цифра ' + (i + 1) + ' из 6"' + (i === 0 ? ' autocomplete="one-time-code"' : ' autocomplete="off"') + '>';
+    v.innerHTML = '<div class="wrap"><div class="page-head" style="text-align:center;justify-items:center"><span class="eyebrow">Регистрация</span><h1>Подтвердите почту</h1></div>' +
+      '<div class="auth code-step">' +
+        '<p class="code-lead">Отправили код из 6 цифр на <b>' + esc(pend.email) + '</b>. Код действует ' + pend.minutes + ' минут.</p>' +
+        '<form id="codeForm" novalidate><div class="code-cells" role="group" aria-label="Код из письма">' + cells + '</div>' +
+          '<p class="form-error" id="codeErr" aria-live="polite"></p><button class="btn block" id="codeBtn">Подтвердить</button></form>' +
+        '<div class="code-more"><button class="link" id="codeResend" type="button"></button><button class="link" id="codeBack" type="button">Изменить данные</button></div>' +
+        '<p class="auth-note">Письма нет? Проверьте папку «Спам» — иногда код попадает туда.</p>' +
+      '</div></div>';
+    var box = $$('.code-cell', v), err = $('#codeErr'), btn = $('#codeBtn'), rs = $('#codeResend'), busy = false, timer = null;
+    function code() { return box.map(function (c) { return c.value; }).join(''); }
+    function fill(from, digits) {
+      for (var k = 0; k < digits.length && from + k < 6; k++) box[from + k].value = digits[k];
+      var next = Math.min(5, from + digits.length); box[code().length >= 6 ? 5 : next].focus();
+      if (code().length === 6) submit();
+    }
+    function bad(msg, clear) {
+      err.textContent = msg;
+      var cc = $('.code-cells', v); cc.classList.remove('shake'); void cc.offsetWidth; cc.classList.add('shake');
+      if (clear) { box.forEach(function (c) { c.value = ''; }); box[0].focus(); }
+    }
+    box.forEach(function (c, i) {
+      c.addEventListener('input', function () {
+        var d = c.value.replace(/\D/g, ''); c.value = '';
+        err.textContent = '';
+        if (d) fill(i, d);
+      });
+      c.addEventListener('keydown', function (e) {
+        if (e.key === 'Backspace' && !c.value && i > 0) { box[i - 1].value = ''; box[i - 1].focus(); e.preventDefault(); }
+        if (e.key === 'ArrowLeft' && i > 0) box[i - 1].focus();
+        if (e.key === 'ArrowRight' && i < 5) box[i + 1].focus();
+      });
+      c.addEventListener('paste', function (e) {
+        var t = ((e.clipboardData || window.clipboardData).getData('text') || '').replace(/\D/g, '');
+        if (t) { e.preventDefault(); fill(t.length >= 6 ? 0 : i, t.slice(0, 6)); }
+      });
+      c.addEventListener('focus', function () { c.select(); });
+    });
+    async function submit() {
+      if (busy) return;
+      var c = code(); if (c.length < 6) { bad('Введите все 6 цифр из письма'); return; }
+      busy = true; btn.disabled = true; btn.textContent = 'Проверяем…';
+      try { var r = await API.verify(pend.id, c); clearInterval(timer); afterRegister(back, r.welcome, true); }
+      catch (ex) {
+        busy = false; btn.disabled = false; btn.textContent = 'Подтвердить';
+        bad(errMsg(ex), true);
+        if (ex.status === 410) { rs.hidden = true; }
+      }
+    }
+    $('#codeForm').addEventListener('submit', function (e) { e.preventDefault(); submit(); });
+    function countdown(sec) {
+      clearInterval(timer); var left = sec;
+      var tick = function () {
+        if (!document.body.contains(rs)) { clearInterval(timer); return; }
+        if (left <= 0) { rs.disabled = false; rs.textContent = 'Отправить код ещё раз'; clearInterval(timer); return; }
+        rs.disabled = true; rs.textContent = 'Новый код — через ' + left + ' с'; left--;
+      };
+      tick(); timer = setInterval(tick, 1000);
+    }
+    rs.addEventListener('click', async function () {
+      rs.disabled = true;
+      try { var r = await API.resendCode(pend.id); toast('Отправили новый код на ' + pend.email); err.textContent = ''; box.forEach(function (c) { c.value = ''; }); box[0].focus(); countdown(r.resendIn || 60); }
+      catch (ex) { err.textContent = errMsg(ex); rs.disabled = false; }
+    });
+    $('#codeBack').addEventListener('click', function () { clearInterval(timer); authPage(v, 'register', back, Object.assign({}, f)); });
+    countdown(pend.resendIn || 60);
+    setTimeout(function () { box[0].focus(); }, 60);
+  }
+
+  /* После регистрации: переход и окно «Добро пожаловать» — бонусы и промокод на первый заказ */
+  function afterRegister(back, w, verified) {
+    var u = API.user || {};
+    markBonusDot();
+    go(back === 'checkout' ? '#/checkout' : '#/account');
+    w = w || {};
+    var perks = '';
+    if (w.bonusPercent) perks += '<div class="wl-perk"><b>' + esc(String(w.bonusPercent).replace('.', ',')) + '%</b><span>возвращаем бонусами<br>с каждой покупки</span></div>';
+    if (w.promo && w.promo.code) perks += '<div class="wl-perk wl-code"><span>Промокод на первый заказ</span><button class="wl-copy" data-wl-copy="' + esc(w.promo.code) + '" title="Скопировать">' + esc(w.promo.code) + '<i>Скопировать</i></button><small>' + esc(w.promo.text) + '</small></div>';
+    setTimeout(function () {
+      openModal('<div class="welcome">' +
+        '<span class="wl-mark" aria-hidden="true"><img src="img/logo-mark.png" alt=""></span>' +
+        '<span class="eyebrow">Добро пожаловать</span>' +
+        '<h3>' + esc(u.firstName ? 'Здравствуйте, ' + u.firstName + '!' : 'Здравствуйте!') + '</h3>' +
+        '<p class="muted">' + (verified ? 'Почта подтверждена, аккаунт создан.' : 'Аккаунт создан.') + (D.mailReady ? ' Письмо с приветствием уже в вашем ящике.' : '') + '</p>' +
+        (perks ? '<div class="wl-perks">' + perks + '</div>' : '') +
+        '<div class="wl-btns">' + (back === 'checkout'
+          ? '<button class="btn block" data-act="close">Продолжить оформление</button>'
+          : '<a class="btn" href="#/catalog">За покупками</a><button class="btn ghost" data-act="close">Личный кабинет</button>') + '</div>' +
+      '</div>');
+      var cp = $('[data-wl-copy]');
+      if (cp) cp.addEventListener('click', function () {
+        var c = cp.getAttribute('data-wl-copy');
+        try { navigator.clipboard.writeText(c).then(function () { cp.classList.add('copied'); $('i', cp).textContent = 'Скопировано'; }, function () { toast('Промокод: ' + c); }); } catch (e) { toast('Промокод: ' + c); }
+      });
+      $$('.welcome a[href^="#/"]').forEach(function (a) { a.addEventListener('click', function () { closePanels(); }); });
+    }, 120);
+  }
+
   /* ---------- Текстовые страницы ---------- */
+  // В текстах страниц {продавец}, {адрес}, {почта}, {телефон}, {магазин}, {сайт} заменяются данными из «Настроек» и «Контактов»,
+  // поэтому оферта и политика всегда совпадают с реквизитами в подвале
+  function fillDoc(t) {
+    var s = D.settings || {}, c = s.contacts || {};
+    var map = { 'магазин': s.storeName, 'продавец': s.legal || s.storeName, 'почта': c.email, 'телефон': c.phone, 'адрес': c.address, 'сайт': location.host };
+    return String(t || '').replace(/\{(магазин|продавец|почта|телефон|адрес|сайт)\}/g, function (m, k) { return map[k] || '—'; });
+  }
   function textPage(v, parts) {
     var p = D.pages.find(function (x) { return x.slug === parts[1]; });
     if (!p) return notFound(v);
-    v.innerHTML = '<div class="wrap"><div class="page-head"><div class="crumbs"><a href="#/">Главная</a><span>/</span><span>' + esc(p.title) + '</span></div><h1>' + esc(p.title) + '</h1></div><article class="prose">' + md(p.body) +
+    v.innerHTML = '<div class="wrap"><div class="page-head"><div class="crumbs"><a href="#/">Главная</a><span>/</span><span>' + esc(p.title) + '</span></div><h1>' + esc(p.title) + '</h1></div><article class="prose">' + md(fillDoc(p.body)) +
       (p.slug === 'about' || p.slug === 'contacts' ? contactsBlock() : '') + '</article></div>';
   }
   function contactsBlock() {
@@ -1194,7 +1312,6 @@
         if (act === 'search') openSearch();
         if (act === 'close') closePanels();
         if (act === 'install' && window.Install) { closePanels(); Install.open(); }
-        if (act === 'share-shop' && window.Install) Install.share();
         if (act === 'install-hide' && window.Install) { Install.hideBanner(); syncInstall(); }
       }
       if (e.target.id === 'scrim' || e.target.id === 'modal') closePanels();
@@ -1212,7 +1329,7 @@
       var gb = e.target.closest('[data-gender]');
       if (gb) { var g = gb.getAttribute('data-gender'); setGender(curGender() === g ? 'all' : g); if (gb.closest('.drawer')) closePanels(); return; }
       var pm = e.target.closest('[data-page-modal]');
-      if (pm) { var pg = D.pages.find(function (x) { return x.slug === pm.getAttribute('data-page-modal'); }); if (pg) { e.preventDefault(); openModal('<h3 class="serif" style="font-size:34px;margin-bottom:18px">' + esc(pg.title) + '</h3><div class="prose" style="padding:0;font-size:15px">' + md(pg.body) + '</div>'); return; } }
+      if (pm) { var pg = D.pages.find(function (x) { return x.slug === pm.getAttribute('data-page-modal'); }); if (pg) { e.preventDefault(); openModal('<h3 class="serif" style="font-size:34px;margin-bottom:18px">' + esc(pg.title) + '</h3><div class="prose" style="padding:0;font-size:15px">' + md(fillDoc(pg.body)) + '</div>'); return; } }
       var link = e.target.closest('a[href^="#/"]'); if (link && link.getAttribute('href') === location.hash) { e.preventDefault(); route(); }
     });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closePanels(); });
@@ -1235,6 +1352,16 @@
     // Первый заход на главную: предложить выбрать раздел
     if (genderChoice === null && gatewayCfg().enabled !== false && !parseHash().parts[0]) showGateway();
     requestAnimationFrame(splashOut);
+    setTimeout(cookieNote, 1800);
+  }
+  /* Сообщение о cookie: один раз на устройстве. Сайт использует только необходимые cookie, без аналитики и рекламы */
+  function cookieNote() {
+    var k = 'albakov:cookies'; try { if (localStorage.getItem(k)) return; } catch (e) { return; }
+    if (/^#\/admin/.test(location.hash)) return;
+    var el = document.createElement('div'); el.className = 'cookie-note'; el.setAttribute('role', 'status');
+    el.innerHTML = '<p>Используем только необходимые cookie — для входа и корзины. <a href="#/page/privacy" data-page-modal="privacy">Подробнее</a></p><button class="btn sm" type="button">Понятно</button>';
+    document.body.appendChild(el);
+    $('button', el).addEventListener('click', function () { try { localStorage.setItem(k, '1'); } catch (e) {} el.classList.add('out'); setTimeout(function () { el.remove(); }, 400); });
   }
   /* Заставка при первом заходе за сеанс: логотип проявляется, линия прорисовывается, затем открывается сайт */
   /* Заставка из index.html: убираем, когда магазин отрисован.

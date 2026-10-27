@@ -88,6 +88,17 @@
       if (st.home.bonusTitle === 'Возвращаем *{n}%*\nбонусами') st.home.bonusTitle = seed.settings.home.bonusTitle;
       if (st.home.bonusText === 'С каждой покупки начисляем бонусы на ваш счёт в личном кабинете. 1 бонус = 1 ₽ — ими можно оплатить следующий заказ хоть целиком.') st.home.bonusText = seed.settings.home.bonusText;
     }
+    // Документы по 152-ФЗ (13.6): стандартные короткие заглушки политики и оферты меняем на полные тексты,
+    // добавляем отдельное «Согласие на обработку персональных данных». Тексты, которые владелец уже менял, не трогаем
+    if (d.pages && seed && seed.pages) {
+      var sp = function (slug) { return seed.pages.find(function (x) { return x.slug === slug; }); };
+      d.pages.forEach(function (pg) {
+        var body = String(pg.body || '');
+        if (pg.slug === 'privacy' && body.indexOf('Мы обрабатываем персональные данные (имя, фамилию, телефон, электронную почту, адрес доставки) только для исполнения заказов') === 0 && body.length < 600) { pg.body = sp('privacy').body; pg.title = sp('privacy').title; }
+        if (pg.slug === 'offer' && body.indexOf('Замените этот текст договором публичной оферты') === 0) pg.body = sp('offer').body;
+      });
+      if (!d.pages.some(function (pg) { return pg.slug === 'consent'; })) d.pages.push(JSON.parse(JSON.stringify(sp('consent'))));
+    }
     // Светлая тема: старые стандартные логотип и слайды меняем на новые
     if (st.brand) { if (st.brand.mark) st.brand.mark.src = freshImg(st.brand.mark.src, seed); if (st.brand.word) st.brand.word.src = freshImg(st.brand.word.src, seed); }
     if (st.slider && st.slider.slides) st.slider.slides.forEach(function (x) { x.image = freshImg(x.image, seed); });

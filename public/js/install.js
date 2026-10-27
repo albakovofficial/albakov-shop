@@ -68,25 +68,9 @@
       '<h3>ALBAKOV на экране «Домой»</h3>' +
       '<p class="muted">Магазин открывается одним нажатием и на весь экран — как обычное приложение. Скачивать из магазина приложений ничего не нужно.</p>' +
       '<ol class="inst-steps">' + steps.join('') + '</ol>' +
-      '<div class="inst-btns"><button class="btn ghost" data-act="share-shop">' + IC.share + 'Поделиться магазином</button><button class="btn" data-act="close">Понятно</button></div>' +
+      '<div class="inst-btns"><button class="btn" data-act="close">Понятно</button></div>' +
       '</div>');
   }
 
-  // Отправить ссылку на магазин: системное окно «Поделиться», а если его нет — скопировать ссылку
-  function share() {
-    var s = (app().D && app().D.settings) || {};
-    var url = location.origin + '/';
-    var title = s.storeName || 'ALBAKOV';
-    if (navigator.share) {
-      navigator.share({ title: title, text: title + (s.tagline ? ' — ' + s.tagline : ''), url: url }).catch(function (e) { if (e && e.name !== 'AbortError') copy(url); });
-      return;
-    }
-    copy(url);
-  }
-  function copy(url) {
-    try { navigator.clipboard.writeText(url).then(function () { toast('Ссылка на магазин скопирована'); }, function () { toast(url); }); }
-    catch (e) { toast(url); }
-  }
-
-  root.Install = { isIOS: isIOS, isMobile: isMobile, isInstalled: isInstalled, canOffer: canOffer, showBanner: showBanner, hideBanner: hideBanner, open: open, share: share, IC: IC };
+  root.Install = { isIOS: isIOS, isMobile: isMobile, isInstalled: isInstalled, canOffer: canOffer, showBanner: showBanner, hideBanner: hideBanner, open: open, IC: IC };
 })(this);

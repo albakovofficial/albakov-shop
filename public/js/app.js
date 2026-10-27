@@ -1369,7 +1369,10 @@
      при переходах и обновлениях страницы — уходит почти сразу */
   function splashOut() {
     var el = document.getElementById('splash'); if (!el || el.classList.contains('leave')) return;
-    var first = true; try { first = sessionStorage.getItem('albakov:intro') !== '1'; sessionStorage.setItem('albakov:intro', '1'); } catch (e) {}
+    try { sessionStorage.setItem('albakov:intro', '1'); } catch (e) {}
+    // при обновлении страницы заставка скрыта ещё до отрисовки (js/splash.js) — просто убираем её
+    if (document.documentElement.classList.contains('sp-skip')) { el.remove(); return; }
+    var first = true;
     var wait = Math.max(0, (first ? 1400 : 250) - performance.now());
     setTimeout(function () {
       el.classList.add('done');

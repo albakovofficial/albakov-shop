@@ -166,6 +166,11 @@
       return '<li><a href="' + esc(safeUrl(x.url)) + '" target="_blank" rel="noopener"><span class="soc-ic" aria-hidden="true">' + SOC_ICON[socialKind(x)] + '</span><span>' + esc(x.name) + '</span></a></li>';
     }).join('') + '</ul></div>';
   }
+  // Реквизиты продавца — в колонке «Контакты», каждая часть с новой строки
+  function legalHtml(legal) {
+    var parts = String(legal || '').split(/\s*[,;]\s*/).filter(Boolean);
+    return parts.length ? '<div class="foot-legal"><span class="foot-legal-t">Продавец</span>' + parts.map(function (x) { return '<span>' + esc(x) + '</span>'; }).join('') + '</div>' : '';
+  }
   function footerHtml() {
     var s = D.settings, c = s.contacts || {};
     var pages = function (g) { return D.pages.filter(function (p) { return p.inFooter && (p.group || 'help') === g; }).map(function (p) { return '<li><a href="#/page/' + esc(p.slug) + '">' + esc(p.title) + '</a></li>'; }).join(''); };
@@ -178,8 +183,8 @@
         (c.phone ? '<li><a href="tel:' + esc(c.phone.replace(/[^\d+]/g, '')) + '" class="copyable">' + esc(c.phone) + '</a></li>' : '') +
         (c.email ? '<li><a href="mailto:' + esc(c.email) + '" class="copyable">' + esc(c.email) + '</a></li>' : '') +
         (c.address ? '<li class="muted">' + esc(c.address) + '</li>' : '') +
-        (c.hours ? '<li class="muted">' + esc(c.hours) + '</li>' : '') + '</ul></div>' +
-      '</div><div class="wrap footer-bottom"><span>© ' + new Date().getFullYear() + ' ' + esc(s.storeName) + (s.legal ? '. ' + esc(s.legal) : '') + '</span>' +
+        (c.hours ? '<li class="muted">' + esc(c.hours) + '</li>' : '') + '</ul>' + legalHtml(s.legal) + '</div>' +
+      '</div><div class="wrap footer-bottom"><span>© ' + new Date().getFullYear() + ' ' + esc(s.storeName) + '. Все права защищены</span>' +
       '<span style="display:flex;gap:18px;flex-wrap:wrap">' + D.pages.filter(function (p) { return p.inFooter && p.group === 'legal'; }).map(function (p) { return '<a href="#/page/' + esc(p.slug) + '">' + esc(p.title) + '</a>'; }).join('') + (API.isAdmin ? '<a href="#/admin">Управление</a>' : '') + '</span></div></footer>';
   }
 
@@ -483,7 +488,7 @@
     var cards = h.benefits.map(function (b, i) {
       var ic = benefitIcon(b);
       return '<div class="benefit' + (ic ? '' : ' no-ico') + '" style="--i:' + i + (ic ? ';--glow:' + BENEFIT_ICONS[ic] : '') + '">' +
-        (ic ? '<div class="benefit-ico"><img src="img/benefits/' + ic + '.webp?v=13.10.1" alt="" width="160" height="160" loading="lazy" decoding="async"></div>' : '') +
+        (ic ? '<div class="benefit-ico"><img src="img/benefits/' + ic + '.webp?v=13.10.2" alt="" width="160" height="160" loading="lazy" decoding="async"></div>' : '') +
         '<div class="benefit-body"><h3>' + glue(b.title) + '</h3>' + (b.text ? '<p>' + glue(b.text) + '</p>' : '') + '</div></div>';
     }).join('');
     return '<section class="section benefits-sec"><div class="wrap">' + head + '<div class="benefits">' + cards + '</div></div></section>';

@@ -465,8 +465,13 @@ table.sizes tr:hover td { background: var(--surface-2); }
 .socials a:hover .soc-ic { transform: translateY(-2px); }
 .footer-bottom { border-top: 1px solid var(--line); padding-block: 22px; display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--dim); }
 .footer-bottom a:hover { color: var(--text); }
+.foot-legal { display: grid; gap: 4px; margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--line); font-size: 13px; line-height: 1.5; color: var(--muted); font-variant-numeric: tabular-nums; }
+.foot-legal span { overflow-wrap: anywhere; }
+.foot-legal span:not(.foot-legal-t) { white-space: nowrap; }
+@media (max-width: 340px) { .foot-legal span:not(.foot-legal-t) { white-space: normal; } }
+.foot-legal-t { margin-bottom: 4px; font-size: 12px; letter-spacing: .04em; color: var(--dim); }
 .copyable { user-select: all; }
-@media (max-width: 860px) { .footer-top { grid-template-columns: 1fr 1fr; } .footer-top > :first-child { grid-column: 1 / -1; } }
+@media (max-width: 860px) { .footer-top { grid-template-columns: 1fr 1fr; } .footer-top > :first-child, .footer-top > :last-child { grid-column: 1 / -1; } }
 
 /* ---------- Уведомления ---------- */
 .toast-wrap { position: fixed; z-index: 120; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: grid; gap: 8px; width: min(420px, calc(100vw - 32px)); }

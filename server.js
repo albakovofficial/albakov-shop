@@ -456,7 +456,9 @@ function supportAdminApi(p, M, body) {
 /* ---------------- Уведомления о поступлении ---------------- */
 function mailCfg() {
   const m = db.secrets.mail || {};
-  return { host: process.env.SMTP_HOST || m.host || '', port: Number(process.env.SMTP_PORT || m.port || 465), security: process.env.SMTP_SECURITY || m.security || 'ssl', user: process.env.SMTP_USER || m.user || '', pass: process.env.SMTP_PASS || m.pass || '', fromEmail: process.env.SMTP_FROM || m.fromEmail || m.user || '', fromName: m.fromName || db.settings.storeName };
+  return { host: process.env.SMTP_HOST || m.host || '', port: Number(process.env.SMTP_PORT || m.port || 465), security: process.env.SMTP_SECURITY || m.security || 'ssl', user: process.env.SMTP_USER || m.user || '', pass: process.env.SMTP_PASS || m.pass || '', fromEmail: process.env.SMTP_FROM || m.fromEmail || m.user || '', fromName: m.fromName || db.settings.storeName,
+    // ответы покупателей — на почту для связи (адрес отправителя может быть no-reply@)
+    replyTo: process.env.SMTP_REPLY_TO || m.replyTo || (db.settings.contacts || {}).email || '' };
 }
 const mailReady = () => { const c = mailCfg(); return !!(c.host && c.fromEmail); };
 const absUrl = (u) => !u ? '' : /^https?:/.test(u) ? u : /^data:/.test(u) ? '' : PUBLIC_URL + '/' + String(u).replace(/^\//, '');
@@ -759,11 +761,12 @@ async function api(req, res, url, body) {
       if (p[2] && M === 'DELETE') { db.waitlist = db.waitlist.filter((w) => w.id !== p[2]); save(); return {}; }
     }
     if (p[1] === 'mail') {
-      if (!p[2] && M === 'GET') { const c = mailCfg(); return { mail: { host: c.host, port: c.port, security: c.security, user: c.user, fromEmail: c.fromEmail, fromName: (db.secrets.mail || {}).fromName || '', hasPass: !!c.pass, ready: mailReady() } }; }
+      if (!p[2] && M === 'GET') { const c = mailCfg(); return { mail: { host: c.host, port: c.port, security: c.security, user: c.user, fromEmail: c.fromEmail, fromName: (db.secrets.mail || {}).fromName || '', replyTo: (db.secrets.mail || {}).replyTo || '', contactEmail: (db.settings.contacts || {}).email || '', hasPass: !!c.pass, ready: mailReady() } }; }
       if (!p[2] && M === 'POST') {
         const m = body.mail || {}, prev = db.secrets.mail || {};
         if (m.fromEmail && !validEmail(m.fromEmail)) fail(400, 'Проверьте адрес отправителя');
-        db.secrets.mail = { host: String(m.host || '').trim(), port: Number(m.port) || 465, security: ['ssl', 'starttls', 'none'].includes(m.security) ? m.security : 'ssl', user: String(m.user || '').trim(), pass: m.pass ? String(m.pass) : prev.pass || '', fromEmail: String(m.fromEmail || '').trim(), fromName: String(m.fromName || '').trim() };
+        if (m.replyTo && !validEmail(m.replyTo)) fail(400, 'Проверьте адрес для ответов');
+        db.secrets.mail = { host: String(m.host || '').trim(), port: Number(m.port) || 465, security: ['ssl', 'starttls', 'none'].includes(m.security) ? m.security : 'ssl', user: String(m.user || '').trim(), pass: m.pass ? String(m.pass) : prev.pass || '', fromEmail: String(m.fromEmail || '').trim(), fromName: String(m.fromName || '').trim(), replyTo: String(m.replyTo || '').trim().toLowerCase() };
         save(); return { ok: true };
       }
       if (p[2] === 'test' && M === 'POST') {

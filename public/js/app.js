@@ -458,11 +458,36 @@
     if (h.showEditorial !== false && h.editorialTitle) {
       html += '<section class="section"><div class="wrap editorial"><div class="media"><img src="' + esc(h.editorialImage || Art.make(h.editorialArt)) + '" alt="" loading="lazy"></div><div><span class="eyebrow">' + esc(h.editorialEyebrow || '') + '</span><h2>' + esc(h.editorialTitle) + '</h2><p>' + esc(h.editorialText || '') + '</p></div></div></section>';
     }
-    if (h.showBenefits !== false && (h.benefits || []).length) {
-      html += '<section class="section" style="padding-top:0;border-top:0"><div class="wrap"><div class="benefits">' + h.benefits.map(function (b) { return '<div class="benefit"><h4>' + esc(b.title) + '</h4><p>' + esc(b.text) + '</p></div>'; }).join('') + '</div></div></section>';
-    }
+    if (h.showBenefits !== false && (h.benefits || []).length) html += benefitsBlock(h);
     v.innerHTML = html;
     initSlider();
+  }
+
+  /* Блок «Преимущества» на главной: карточки с объёмными иконками.
+     Иконку можно выбрать в панели; если не выбрана — подбирается по заголовку, затем по описанию */
+  var BENEFIT_ICONS = { delivery: '#1ab248', fitting: '#ff8b74', 'return': '#7b61ff', payment: '#16b5a5', gift: '#f0587c' };
+  var BENEFIT_WORDS = [[/доставк|курьер|сдэк|отправ/, 'delivery'], [/примерк|подош|примерить/, 'fitting'], [/возврат|обмен|вернуть/, 'return'], [/оплат|карт|рассроч|сплит|долям/, 'payment'], [/подар|упаков/, 'gift']];
+  function benefitIcon(b) {
+    if (b.icon === 'none') return '';
+    if (BENEFIT_ICONS.hasOwnProperty(b.icon)) return b.icon;
+    var texts = [b.title, b.text];
+    for (var t = 0; t < texts.length; t++) {
+      var s = String(texts[t] || '').toLowerCase();
+      for (var i = 0; i < BENEFIT_WORDS.length; i++) if (BENEFIT_WORDS[i][0].test(s)) return BENEFIT_WORDS[i][1];
+    }
+    return '';
+  }
+  // Короткие предлоги и союзы («в», «у», «по»…) не остаются в конце строки — привязываем к следующему слову
+  function glue(s) { return esc(s).replace(/(^|[\s(«])([а-яёА-ЯЁ]{1,2})\s+/g, '$1$2\u00a0'); }
+  function benefitsBlock(h) {
+    var head = h.benefitsTitle ? '<div class="section-head"><div class="benefits-title">' + (h.benefitsEyebrow ? '<span class="eyebrow">' + esc(h.benefitsEyebrow) + '</span>' : '') + '<h2>' + glue(h.benefitsTitle) + '</h2></div></div>' : '';
+    var cards = h.benefits.map(function (b, i) {
+      var ic = benefitIcon(b);
+      return '<div class="benefit' + (ic ? '' : ' no-ico') + '" style="--i:' + i + (ic ? ';--glow:' + BENEFIT_ICONS[ic] : '') + '">' +
+        (ic ? '<div class="benefit-ico"><img src="img/benefits/' + ic + '.webp?v=13.8.0" alt="" width="160" height="160" loading="lazy" decoding="async"></div>' : '') +
+        '<div class="benefit-body"><h3>' + glue(b.title) + '</h3>' + (b.text ? '<p>' + glue(b.text) + '</p>' : '') + '</div></div>';
+    }).join('');
+    return '<section class="section benefits-sec"><div class="wrap">' + head + '<div class="benefits">' + cards + '</div></div></section>';
   }
 
   /* Блок «Бонусная программа» на главной — коротко: процент, одна фраза, три шага, одна кнопка.

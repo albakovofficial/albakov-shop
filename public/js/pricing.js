@@ -81,6 +81,8 @@
     if (!st.bonus && seed && seed.settings.bonus) st.bonus = JSON.parse(JSON.stringify(seed.settings.bonus));
     // Блок о бонусах на главной (появился в ALBAKOV9)
     if (st.home && st.home.showBonus === undefined && seed && seed.settings.home) ['showBonus', 'bonusEyebrow', 'bonusTitle', 'bonusText'].forEach(function (k) { st.home[k] = seed.settings.home[k]; });
+    // Заголовок блока преимуществ (13.8): появляется у магазинов, где его ещё не было; пустой — скрыт
+    if (st.home && st.home.benefitsTitle === undefined && seed && seed.settings.home) { st.home.benefitsEyebrow = seed.settings.home.benefitsEyebrow; st.home.benefitsTitle = seed.settings.home.benefitsTitle; }
     // Хиты продаж на главной (появились в 13.4): блок включён, самые продаваемые добавляются сами
     if (st.home && st.home.showHits === undefined) { st.home.showHits = true; st.home.hitsAuto = true; }
     // Короткий блок бонусов (13.4): стандартные длинные тексты меняем на новые, свои тексты владельца не трогаем

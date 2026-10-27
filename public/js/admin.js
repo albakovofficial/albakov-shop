@@ -1426,18 +1426,19 @@
   }
 
   function mailTab(body, mail) {
-    var PRESETS = { yandex: { host: 'smtp.yandex.ru', port: 465, security: 'ssl' }, mailru: { host: 'smtp.mail.ru', port: 465, security: 'ssl' } };
+    var PRESETS = { smtpbz: { host: 'connect.smtp.bz', port: 465, security: 'ssl' }, yandex: { host: 'smtp.yandex.ru', port: 465, security: 'ssl' }, mailru: { host: 'smtp.mail.ru', port: 465, security: 'ssl' } };
     var defs = [
       { k: 'host', label: 'Сервер исходящей почты (SMTP)', placeholder: 'smtp.yandex.ru' },
       { k: 'port', label: 'Порт', type: 'number' },
       { k: 'security', label: 'Шифрование', type: 'select', options: [['ssl', 'SSL (обычно порт 465)'], ['starttls', 'STARTTLS (обычно порт 587)'], ['none', 'Без шифрования (только для своего сервера)']] },
-      { k: 'user', label: 'Логин — адрес ящика', placeholder: 'shop@вашдомен.ru' },
+      { k: 'user', label: 'Логин', placeholder: 'Адрес ящика или логин из сервиса рассылки' },
       { k: 'pass', label: 'Пароль приложения', hint: mail.hasPass ? 'Пароль сохранён. Оставьте поле пустым, чтобы не менять.' : 'Создаётся в настройках безопасности почты. Обычный пароль от ящика не подойдёт.' },
       { k: 'fromEmail', label: 'Адрес отправителя', placeholder: 'Обычно совпадает с логином' },
-      { k: 'fromName', label: 'Имя отправителя', placeholder: DATA.settings.storeName }
+      { k: 'fromName', label: 'Имя отправителя', placeholder: DATA.settings.storeName },
+      { k: 'replyTo', label: 'Адрес для ответов', placeholder: mail.contactEmail || 'info@вашдомен.ru', hint: 'Куда попадёт ответ, если покупатель нажмёт «Ответить» в письме. Пусто — почта из «Контактов»' }
     ];
     body.innerHTML = '<div class="adm-card"><p class="muted" style="font-size:14px;max-width:70ch;margin-bottom:16px">Письма уходят с вашего почтового ящика. Лучше всего — ящик на домене магазина в <b>Яндекс 360</b> или <b>Mail.ru для бизнеса</b>, например <span class="copyable">shop@albakov.ru</span>: такие письма реже попадают в спам.</p>' +
-      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px"><span class="muted" style="font-size:14px;align-self:center">Заполнить для:</span><button type="button" class="btn ghost sm" data-preset="yandex">Яндекс 360</button><button type="button" class="btn ghost sm" data-preset="mailru">Mail.ru</button></div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px"><span class="muted" style="font-size:14px;align-self:center">Заполнить для:</span><button type="button" class="btn ghost sm" data-preset="smtpbz">SMTP.BZ</button><button type="button" class="btn ghost sm" data-preset="yandex">Яндекс 360</button><button type="button" class="btn ghost sm" data-preset="mailru">Mail.ru</button></div>' +
       '<div id="mlForm">' + formHtml(defs, Object.assign({}, mail, { pass: '' })) + '</div>' +
       '<div class="adm-bar" style="position:static;background:none;padding-bottom:0"><button class="btn" id="mlSave">Сохранить</button><span class="form-error" id="mlErr"></span></div></div>';
     var box = $('#mlForm', body);

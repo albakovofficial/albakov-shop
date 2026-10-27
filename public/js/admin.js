@@ -697,7 +697,7 @@
     return '<h4 class="adm-sub">Версия сайта</h4><div class="adm-list">' +
       '<div class="adm-li"><span>Работает</span><span>' + (u.commit ? esc((u.version ? 'v' + u.version + ' · ' : '') + u.commit) + (u.subject ? ' — ' + esc(u.subject) : '') : 'ещё не обновлялась') + '</span></div>' +
       (u.updatedAt ? '<div class="adm-li"><span>Установлена</span><span>' + when(u.updatedAt) + '</span></div>' : '') +
-      '<div class="adm-li"><span>Автообновление</span><span class="' + (u.checkError || stale ? 'bad' : '') + '">' + (u.checkError ? esc(u.checkError) : 'включено, проверка каждые 5 минут' + (u.checkedAt ? ' (последняя ' + when(u.checkedAt) + ')' : '')) + '</span></div></div>' +
+      '<div class="adm-li"><span>Автообновление</span><span class="' + (u.checkError || stale ? 'bad' : '') + '">' + (u.checkError ? esc(u.checkError) : 'включено, проверка каждую минуту' + (u.checkedAt ? ' (последняя ' + when(u.checkedAt) + ')' : '')) + '</span></div></div>' +
       (u.lastError ? '<p class="form-error" style="margin-top:8px">' + esc(u.lastError) + (u.failedAt ? ' · ' + when(u.failedAt) : '') + '. Сайт работает на прежней версии.</p>' : '');
   }
 

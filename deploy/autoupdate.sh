@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Автообновление магазина из закрытого репозитория GitHub (ветка release).
-# Служба albakov-update.timer запускает проверку каждые 5 минут. Вручную:
+# Служба albakov-update.timer запускает проверку каждую минуту. Вручную:
 #   sudo albakov-autoupdate            — проверить и установить новую версию сейчас
 #   sudo albakov-autoupdate --status   — какая версия работает, журнал последних обновлений
 #   sudo albakov-autoupdate --install  — установить службу (это делает autoupdate-setup.sh)
@@ -74,12 +74,13 @@ Nice=10
 UNIT
   cat > /etc/systemd/system/albakov-update.timer <<UNIT
 [Unit]
-Description=Проверка новой версии магазина ALBAKOV каждые 5 минут
+Description=Проверка новой версии магазина ALBAKOV каждую минуту
 
 [Timer]
-OnBootSec=3min
-OnUnitActiveSec=5min
-RandomizedDelaySec=30
+OnBootSec=1min
+OnUnitActiveSec=1min
+AccuracySec=1s
+RandomizedDelaySec=5
 Persistent=true
 
 [Install]
@@ -101,7 +102,7 @@ ROT
 case "${1:-}" in
   --install)
     install_self "$(readlink -f "${BASH_SOURCE[0]}")"
-    echo "Служба автообновления установлена: проверка каждые 5 минут (systemctl list-timers albakov-update.timer)"
+    echo "Служба автообновления установлена: проверка каждую минуту (systemctl list-timers albakov-update.timer)"
     exit 0 ;;
   --status)
     printf 'Репозиторий: %s (ветка %s)\n' "$REPO" "$BRANCH"
@@ -118,6 +119,13 @@ esac
 exec 9>/run/albakov-update.lock
 flock -n 9 || exit 0
 
+# Серверы, где проверка ещё раз в 5 минут, сами переходят на проверку каждую минуту
+if [ -x "$SELF" ] && ! grep -q '^OnUnitActiveSec=1min$' /etc/systemd/system/albakov-update.timer 2>/dev/null; then
+  install_self "$SELF" && log "Проверка обновлений теперь каждую минуту"
+fi
+# Сбой связи с GitHub пишем в журнал один раз, а не каждую минуту, пока он длится
+FETCH_FAIL="$STATE_DIR/fetch-failed"
+
 if [ ! -d "$SRC_DIR/.git" ]; then
   rm -rf "$SRC_DIR"
   if ! git clone --quiet --branch "$BRANCH" --single-branch "$REPO" "$SRC_DIR" 2>"$STATE_DIR/git.err"; then
@@ -126,8 +134,10 @@ if [ ! -d "$SRC_DIR/.git" ]; then
   chmod 700 "$SRC_DIR"
 fi
 if ! git -C "$SRC_DIR" fetch --quiet --prune origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" 2>"$STATE_DIR/git.err"; then
-  log "Не удалось проверить обновления: $(tail -n1 "$STATE_DIR/git.err")"; write_status error "Не удалось связаться с GitHub"; exit 1
+  [ -f "$FETCH_FAIL" ] || log "Не удалось проверить обновления: $(tail -n1 "$STATE_DIR/git.err")"
+  touch "$FETCH_FAIL"; write_status error "Не удалось связаться с GitHub"; exit 1
 fi
+[ -f "$FETCH_FAIL" ] && { rm -f "$FETCH_FAIL"; log "Связь с GitHub восстановлена"; }
 NEW="$(git -C "$SRC_DIR" rev-parse "refs/remotes/origin/$BRANCH")"
 CUR="$(cat "$STATE_DIR/deployed" 2>/dev/null || true)"
 FAILED="$(cat "$STATE_DIR/failed" 2>/dev/null || true)"

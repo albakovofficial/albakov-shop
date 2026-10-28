@@ -490,7 +490,7 @@
     var cards = h.benefits.map(function (b, i) {
       var ic = benefitIcon(b);
       return '<div class="benefit' + (ic ? '' : ' no-ico') + '" style="--i:' + i + (ic ? ';--glow:' + BENEFIT_ICONS[ic] : '') + '">' +
-        (ic ? '<div class="benefit-ico"><img src="img/benefits/' + ic + '.webp?v=13.20.0" alt="" width="160" height="160" loading="lazy" decoding="async"></div>' : '') +
+        (ic ? '<div class="benefit-ico"><img src="img/benefits/' + ic + '.webp?v=13.21.0" alt="" width="160" height="160" loading="lazy" decoding="async"></div>' : '') +
         '<div class="benefit-body"><h3>' + glue(b.title) + '</h3>' + (b.text ? '<p>' + glue(b.text) + '</p>' : '') + '</div></div>';
     }).join('');
     return '<section class="section benefits-sec"><div class="wrap">' + head + '<div class="benefits">' + cards + '</div></div></section>';
@@ -949,8 +949,8 @@
     });
   }
   /* Расчёт корзины. Товары, которых больше нет на сайте, убираем из корзины, чтобы они не висели в счётчике */
-  async function cartQuote(code, deliveryId, contact, useBonus) {
-    var lines = Cart.get(), q = await API.quote(lines, code, deliveryId, contact, useBonus);
+  async function cartQuote(code, deliveryId, contact, useBonus, extra) {
+    var lines = Cart.get(), q = await API.quote(lines, code, deliveryId, contact, useBonus, extra);
     var keep = lines.filter(function (l) { return q.lines.some(function (x) { return x.productId === l.productId && x.size === l.size && (!l.colorId || x.colorId === l.colorId); }); });
     if (keep.length !== lines.length) { Cart.set(keep); toast('Некоторых товаров больше нет в продаже — мы убрали их из корзины', true); }
     return q;
@@ -992,7 +992,7 @@
       '<p class="pvz-hint">Выберите свой населённый пункт из списка — область подставится сама. Например, Мурино и Кудрово — это Ленинградская область, а не Санкт-Петербург.</p></div>' +
       '<div class="pvz-pick" id="pvzPick" hidden></div></div>';
   }
-  function optIc(n) { return '<span class="opt-ic"><img src="img/benefits/' + n + '.webp?v=13.20.0" alt="" width="48" height="48" decoding="async"></span>'; }
+  function optIc(n) { return '<span class="opt-ic"><img src="img/benefits/' + n + '.webp?v=13.21.0" alt="" width="48" height="48" decoding="async"></span>'; }
   function coStep(n, id, title, hint, body) {
     return '<section class="cstep" id="cs-' + id + '"><header class="cstep-head"><span class="cstep-n" aria-hidden="true"><i>' + n + '</i><svg viewBox="0 0 24 24"><path d="m6 12.5 4 4 8-9"/></svg></span>' +
       '<div><h3>' + title + '</h3><p>' + hint + '</p></div></header><div class="cstep-body">' + body + '</div></section>';
@@ -1001,7 +1001,7 @@
     if (!Cart.get().length) { v.innerHTML = '<div class="wrap"><div class="empty"><h3>Корзина пуста</h3><a class="btn ghost" href="#/catalog">В каталог</a></div></div>'; return; }
     var s = D.settings, u = API.user || {}, methods = (s.delivery && s.delivery.methods) || [], pay = Object.assign({}, s.payment || {});
     if (!D.payReady) pay.online = false; // ЮKassa ещё не подключена — онлайн-оплату не предлагаем
-    var st = { deliveryId: methods[0] && methods[0].id, payment: pay.online ? 'online' : 'cod', code: '', useBonus: false, city: null, pvz: null };
+    var st = { deliveryId: methods[0] && methods[0].id, payment: pay.online ? 'online' : 'cod', code: '', useBonus: false, city: null, pvz: null, sumSeq: 0 };
     function curMethod() { return methods.find(function (x) { return x.id === st.deliveryId; }); }
     function pvzMode() { return !!(D.cdekReady && Pricing.isPvzMethod(curMethod())); }
     v.innerHTML = '<div class="wrap"><div class="page-head"><div class="crumbs"><a href="#/cart">Корзина</a><span>/</span><span>Оформление</span></div><h1>Оформление заказа</h1></div>' +
@@ -1069,21 +1069,28 @@
       [['buyer', buyer], ['deliv', deliv], ['pay', payOk && $('#payOpts').children.length]].forEach(function (x) { $('#cs-' + x[0]).classList.toggle('done', !!x[1]); });
     }
     async function drawSum() {
-      var contact = { email: $('#co-email').value, phone: $('#co-phone').value };
-      var q = await cartQuote(st.code, st.deliveryId, contact, st.useBonus);
+      var contact = { email: $('#co-email').value, phone: $('#co-phone').value }, my = ++st.sumSeq;
+      // цена СДЭК считается по городу выбранного пункта
+      var extra = pvzMode() && st.city ? { cityCode: st.city.code, pvzType: st.pvz ? st.pvz.type : 'pvz' } : null;
+      var q = await cartQuote(st.code, st.deliveryId, contact, st.useBonus, extra);
+      if (my !== st.sumSeq) return q;
+      st.q = q;
       $('#coSum').innerHTML = '<div class="mini-lines">' + q.lines.map(function (l) { return '<div class="mini-line"><img src="' + esc(l.image || Art.make(l.art)) + '" alt=""><div><div>' + esc(l.name) + '</div><div class="sub">' + (l.color ? esc(l.color) + ' · ' : '') + esc(l.size) + ' · ' + l.qty + ' шт.' + (l.problem ? ' · <span style="color:var(--danger)">' + esc(l.problem) + '</span>' : '') + '</div></div><span class="num">' + fmt(l.total) + '</span></div>'; }).join('') + '</div>';
       methods.forEach(function (m) {
         var el = $('[data-dp="' + m.id + '"]'); if (!el) return;
         var after = q.subtotal - q.promoDiscount, free = (m.freeFrom && after >= m.freeFrom) || (q.promo && q.promo.ok && q.promo.type === 'shipping');
+        var auto = m.priceAuto && Pricing.isPvzMethod(m) && D.cdekReady;
+        if (auto) { var cur = q.delivery && q.delivery.id === m.id; el.textContent = free ? 'Бесплатно' : cur && !q.delivery.pending ? (q.deliveryPrice ? fmt(q.deliveryPrice) : 'Бесплатно') : 'По тарифу СДЭК'; el.classList.toggle('calc', !free && !(cur && !q.delivery.pending)); return; }
         el.textContent = free || !m.price ? 'Бесплатно' : fmt(m.price);
       });
+      if (st.pvz && $('#pvzDeliv')) $('#pvzDeliv').innerHTML = delivLine(q);
       var msg = $('#promoMsg');
       if (q.promo && PROMO_REASONS[q.promo.reason]) { msg.className = 'promo-msg'; msg.innerHTML = promoPlaque(q.promo); }
       else if (q.promo) { msg.textContent = q.promo.message; msg.className = 'promo-msg ' + (q.promo.ok ? 'ok' : 'bad'); } else { msg.textContent = ''; msg.className = 'promo-msg'; }
       $('#coTotals').innerHTML = '<div class="sum-row"><span>Товары</span><span>' + fmt(q.baseTotal) + '</span></div>' +
         (q.saleDiscount ? '<div class="sum-row disc"><span>Скидка по акциям</span><span>−' + fmt(q.saleDiscount) + '</span></div>' : '') +
         (q.promoDiscount ? '<div class="sum-row disc"><span>Промокод ' + esc(q.promo.code) + '</span><span>−' + fmt(q.promoDiscount) + '</span></div>' : '') +
-        '<div class="sum-row"><span>Доставка</span><span>' + (q.delivery ? (q.deliveryPrice ? fmt(q.deliveryPrice) : 'Бесплатно') : '—') + '</span></div>' +
+        '<div class="sum-row"><span>Доставка' + (q.delivery && q.delivery.days ? ' <small class="muted">' + esc(q.delivery.days) + ' ' + plural(Number(String(q.delivery.days).split('–').pop()), 'день', 'дня', 'дней') + '</small>' : '') + '</span><span>' + (q.delivery ? (q.delivery.pending ? '<span class="muted">после выбора пункта</span>' : q.deliveryPrice ? fmt(q.deliveryPrice) : 'Бесплатно') : '—') + '</span></div>' +
         (q.bonusUsed ? '<div class="sum-row disc"><span>Оплата бонусами</span><span>−' + fmt(q.bonusUsed) + '</span></div>' : '') +
         '<div class="sum-row total"><span>К оплате</span><span>' + fmt(q.total) + '</span></div>' + earnRow(q);
       // Бонусный счёт: переключатель «списать», либо подсказка гостю
@@ -1111,7 +1118,7 @@
       }
       q.addEventListener('input', function () {
         clearTimeout(timer); var v = q.value.trim(), my = ++seq;
-        if (st.city) { st.city = null; st.pvz = null; $('#pvzPick').hidden = true; coProgress(); }
+        if (st.city) { st.city = null; st.pvz = null; st.q = null; $('#pvzPick').hidden = true; coProgress(); drawSum(); }
         if (v.length < 2) { close(); return; }
         timer = setTimeout(async function () {
           try { var r = await API.cdekCities(v); if (my !== seq) return; items = r; act = r.length ? 0 : -1; paint(); }
@@ -1127,17 +1134,17 @@
       sug.addEventListener('mousedown', function (e) { var li = e.target.closest('[data-i]'); if (li) { e.preventDefault(); pickCity(items[Number(li.dataset.i)]); } });
       q.addEventListener('blur', function () { setTimeout(close, 120); });
       $('#pvzBox').addEventListener('click', function (e) {
-        if (e.target.closest('[data-pvz-city]')) { st.city = null; st.pvz = null; q.value = ''; $('#pvzPick').hidden = true; $('#pvzCityBox').hidden = false; coProgress(); q.focus(); }
+        if (e.target.closest('[data-pvz-city]')) { st.city = null; st.pvz = null; drawSum(); q.value = ''; $('#pvzPick').hidden = true; $('#pvzCityBox').hidden = false; coProgress(); q.focus(); }
         if (e.target.closest('[data-pvz-change]')) { st.pvz = null; drawPoints(); coProgress(); }
       });
       $('#pvzBox').addEventListener('change', function (e) {
-        if (e.target.name === 'pvz') { st.pvz = (st.points || []).find(function (x) { return x.code === e.target.value; }) || null; $('#pvzBox').classList.remove('invalid'); pvzSave(); drawPoints(); coProgress(); }
+        if (e.target.name === 'pvz') { st.pvz = (st.points || []).find(function (x) { return x.code === e.target.value; }) || null; $('#pvzBox').classList.remove('invalid'); pvzSave(); drawPoints(); coProgress(); drawSum(); }
       });
       $('#pvzBox').addEventListener('input', function (e) { if (e.target.id === 'pvz-f') { st.filter = e.target.value; drawPoints(true); } });
       try { var saved = JSON.parse(localStorage.getItem(LS_PVZ) || 'null'); if (saved && saved.city && saved.city.code) pickCity(saved.city, saved.pvz); } catch (e) {}
     }
     async function pickCity(c, keep) {
-      st.city = c; st.pvz = null; st.points = null; st.filter = '';
+      st.city = c; st.pvz = null; st.points = null; st.filter = ''; st.q = null;
       $('#pvz-q').value = c.city; $('#pvzSug').hidden = true; $('#pvzCityBox').hidden = true;
       var box = $('#pvzPick'); box.hidden = false;
       box.innerHTML = cityChip() + '<div class="pvz-load">Загружаем пункты выдачи…</div>';
@@ -1146,7 +1153,7 @@
         st.points = pts;
         if (keep) st.pvz = pts.find(function (x) { return x.code === keep; }) || null;
         if (pts.length === 1 && !st.pvz) st.pvz = pts[0];
-        pvzSave(); drawPoints(); coProgress();
+        pvzSave(); drawPoints(); coProgress(); drawSum();
       } catch (e) { if (st.city === c) box.innerHTML = cityChip() + '<p class="form-error">' + esc(errMsg(e)) + '</p>'; }
     }
     // Примерка и частичный выкуп — если они включены в договоре со СДЭК
@@ -1154,6 +1161,10 @@
       var sv = (D.settings.cdek && D.settings.cdek.services) || {};
       if (!sv.partDeliv && !sv.tryOn) return '';
       return p.fitting && p.type !== 'postamat' ? '<span class="pvz-try">Можно примерить в пункте и забрать только то, что подошло' + (sv.partDeliv ? (st.payment === 'cod' ? ' — платите только за то, что берёте' : ' — за остальное вернём деньги') : '') + '</span>' : '<span class="pvz-try no">В этом пункте нет примерочной</span>';
+    }
+    function delivLine(q) {
+      var d = q && q.delivery; if (!d || d.pending) return 'Считаем стоимость доставки…';
+      return 'Доставка ' + (d.days ? d.days + ' ' + plural(Number(String(d.days).split('–').pop()), 'день', 'дня', 'дней') + ' · ' : '') + (d.price ? fmt(d.price) : 'бесплатно');
     }
     function codNow() { return st.payment === 'cod' && pvzMode(); }
     function codNote(p) {
@@ -1168,7 +1179,7 @@
       if (st.pvz) {
         var p = st.pvz;
         box.innerHTML = cityChip() + '<div class="pvz-chosen"><span class="pvz-ok" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m6 12.5 4 4 8-9"/></svg></span><div><small>' + (p.type === 'postamat' ? 'Постамат СДЭК' : 'Пункт выдачи СДЭК') + '</small><b>' + esc(p.address) + '</b>' +
-          '<span>' + esc([p.hours, p.metro ? 'м. ' + p.metro : ''].filter(Boolean).join(' · ')) + '</span>' + (p.note ? '<span class="pvz-note">' + esc(p.note) + '</span>' : '') + tryNote(p) + codNote(p) + '</div><button type="button" class="link" data-pvz-change>Изменить</button></div>';
+          '<span>' + esc([p.hours, p.metro ? 'м. ' + p.metro : ''].filter(Boolean).join(' · ')) + '</span>' + (p.note ? '<span class="pvz-note">' + esc(p.note) + '</span>' : '') + tryNote(p) + codNote(p) + '<span class="pvz-deliv" id="pvzDeliv">' + delivLine(st.q) + '</span></div><button type="button" class="link" data-pvz-change>Изменить</button></div>';
         return;
       }
       var all = pts.length, reset = st.codReset; st.codReset = false;
@@ -1222,7 +1233,7 @@
       err.textContent = '';
       var btn = $('#coSubmit'); btn.disabled = true; btn.textContent = st.payment === 'online' && !st.free ? 'Переходим к оплате…' : 'Оформляем…';
       try {
-        var r = await API.placeOrder({ lines: Cart.get(), code: st.code, deliveryId: st.deliveryId, payment: st.payment, useBonus: st.useBonus, customer: f, city: needAddr ? $('#co-city').value.trim() : '', address: needAddr ? $('#co-addr').value.trim() : '', pvz: pvzMode() && st.pvz ? st.pvz.code : '', cityCode: pvzMode() && st.city ? st.city.code : '', comment: $('#co-comment').value.trim(), consent: true });
+        var r = await API.placeOrder({ lines: Cart.get(), code: st.code, deliveryId: st.deliveryId, payment: st.payment, useBonus: st.useBonus, customer: f, city: needAddr ? $('#co-city').value.trim() : '', address: needAddr ? $('#co-addr').value.trim() : '', pvz: pvzMode() && st.pvz ? st.pvz.code : '', cityCode: pvzMode() && st.city ? st.city.code : '', pvzType: st.pvz ? st.pvz.type : '', comment: $('#co-comment').value.trim(), consent: true });
         Cart.clear();
         if (r.payUrl) { location.href = r.payUrl; return; }
         go('#/order/' + r.order.id);

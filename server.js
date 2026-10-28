@@ -439,14 +439,41 @@ function usedByCustomer(code, user, email, phone) {
   return db.orders.some((o) => o.promoCode && o.promoCode.toUpperCase() === String(code).toUpperCase() && o.status !== 'canceled' &&
     ((user && o.userId === user.id) || (email && o.customer.email === email) || (phone && o.customer.phone === phone)));
 }
-function quote(req, b) {
+// Цена доставки до пункта выдачи по тарифу СДЭК (+ наценка, округление до 10 ₽ вверх)
+async function cdekShipPrice(m, cityCode, type, count) {
+  const c = cdekCfg(), from = c.shipmentPoint && c.shipmentPoint.cityCode;
+  if (!from || !cityCode) return null;
+  const one = cdekPkg(), pkg = Object.assign({}, one, { weight: Math.min(30000, one.weight * Math.max(1, count)) });
+  const tariff = type === 'postamat' ? Number(c.tariffPostamat) || 368 : Number(c.tariff) || 136;
+  const r = await cdek.calc(from, cityCode, tariff, pkg);
+  return { price: Math.ceil((r.sum + Math.max(0, Number(m.markup) || 0)) / 10) * 10, days: r.max ? (r.min && r.min !== r.max ? r.min + '–' + r.max : String(r.max)) : '' };
+}
+// Расчёт корзины с ценой доставки СДЭК для выбранного города
+async function quoteFull(req, b, strict) {
+  const m = (db.settings.delivery.methods || []).find((x) => x.id === b.deliveryId);
+  const auto = !!(m && m.priceAuto && Pricing.isPvzMethod(m) && cdek.ready() && cdekCfg().shipmentPoint && cdekCfg().shipmentPoint.cityCode);
+  let extra = { cdekAuto: auto };
+  if (auto && b.cityCode) {
+    const count = (Array.isArray(b.lines) ? b.lines : []).reduce((s, l) => s + Math.max(1, Math.floor(Number(l.qty) || 1)), 0);
+    try { const p = await cdekShipPrice(m, b.cityCode, b.pvzType, count); if (p) extra = { cdekAuto: true, deliveryPrice: p.price, deliveryDays: p.days }; }
+    catch (e) {
+      console.error('СДЭК расчёт:', e.message);
+      // СДЭК не ответил: берём запасную цену из настроек способа
+      extra = { cdekAuto: true, deliveryPrice: Math.round(Number(m.price) || 0) };
+    }
+  }
+  if (auto && strict && typeof extra.deliveryPrice !== 'number') fail(400, 'Выберите пункт выдачи — по нему рассчитаем доставку');
+  return quote(req, b, extra);
+}
+function quote(req, b, extra) {
   const user = currentUser(req), c = b.contact || {};
   const email = String(c.email || '').trim().toLowerCase(), phone = normPhone(c.phone);
   return Pricing.calcCart(Array.isArray(b.lines) ? b.lines.slice(0, 100) : [], db, {
     code: b.code ? String(b.code).slice(0, 40) : '', deliveryId: b.deliveryId, registered: !!user,
     hasOrders: !!user && db.orders.some((o) => o.userId === user.id && o.status !== 'canceled'),
     usedByCustomer: b.code ? usedByCustomer(b.code, user, email, phone) : false,
-    bonusBalance: user ? user.bonus || 0 : 0, useBonus: !!(user && b.useBonus)
+    bonusBalance: user ? user.bonus || 0 : 0, useBonus: !!(user && b.useBonus),
+    cdekAuto: !!(extra && extra.cdekAuto), deliveryPrice: extra ? extra.deliveryPrice : undefined, deliveryDays: extra ? extra.deliveryDays : undefined
   });
 }
 async function placeOrder(req, b) {
@@ -461,7 +488,7 @@ async function placeOrder(req, b) {
   if ((method === 'online' && !pay.online) || (method === 'cod' && !pay.cod)) fail(400, 'Этот способ оплаты недоступен');
   // Без подключённой ЮKassa заказ «с онлайн-оплатой» повис бы неоплаченным — не принимаем такой
   if (method === 'online' && !payReady()) fail(400, 'Онлайн-оплата пока не подключена. Выберите оплату при получении.');
-  const q = quote(req, { lines: b.lines, code: b.code, deliveryId: b.deliveryId, contact: customer, useBonus: b.useBonus });
+  const q = await quoteFull(req, { lines: b.lines, code: b.code, deliveryId: b.deliveryId, contact: customer, useBonus: b.useBonus, cityCode: b.cityCode, pvzType: b.pvzType }, true);
   if (!q.lines.length) fail(400, 'Корзина пуста');
   if (!q.delivery) fail(400, 'Выберите способ доставки');
   const bad = q.lines.find((l) => l.problem); if (bad) fail(409, `${bad.name}: ${bad.problem.toLowerCase()}`);
@@ -475,6 +502,7 @@ async function placeOrder(req, b) {
     try { list = await cdek.points(b.cityCode); } catch (e) { fail(502, 'СДЭК сейчас не отвечает. Попробуйте оформить заказ через минуту.'); }
     pvz = list.find((x) => x.code === String(b.pvz));
     if (!pvz) fail(400, 'Этот пункт выдачи больше не работает — выберите другой');
+    if (Number(pvz.cityCode) !== Number(b.cityCode)) fail(400, 'Пункт выдачи не из выбранного города — выберите пункт заново');
     if (method === 'cod' && !pvz.cod) fail(400, 'В этом пункте нельзя оплатить при получении — выберите другой пункт или оплату онлайн');
   } else if (m && m.needsAddress !== false && (!String(b.city || '').trim() || !String(b.address || '').trim())) fail(400, 'Укажите город и адрес доставки');
 
@@ -856,7 +884,7 @@ async function api(req, res, url, body) {
 
   if (p[0] === 'support') { const u = user(); if (!u) fail(401, 'Войдите в личный кабинет'); return supportApi(req, p, M, body, u); }
 
-  if (p[0] === 'quote' && M === 'POST') return { quote: quote(req, body) };
+  if (p[0] === 'quote' && M === 'POST') return { quote: await quoteFull(req, body) };
   // Уведомление СДЭК о движении посылки. Статус перепроверяем через API
   if (p[0] === 'cdek' && p[1] === 'webhook' && M === 'POST') {
     const uuid = body && (body.uuid || (body.attributes && body.attributes.uuid));

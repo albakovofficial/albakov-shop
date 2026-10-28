@@ -246,7 +246,12 @@
     if (m) {
       var after = out.subtotal - out.promoDiscount;
       var free = freeShipping || (m.freeFrom && after >= m.freeFrom);
-      out.delivery = { id: m.id, name: m.name, price: free ? 0 : Math.round(m.price || 0), free: !!free };
+      // Цена по тарифу СДЭК приходит снаружи (opts.deliveryPrice); пока пункт не выбран — «рассчитаем после выбора»
+      var auto = m.priceAuto && isPvzMethod(m) && opts.cdekAuto, known = typeof opts.deliveryPrice === 'number';
+      var base = auto ? (known ? opts.deliveryPrice : 0) : m.price;
+      out.delivery = { id: m.id, name: m.name, price: free ? 0 : Math.round(base || 0), free: !!free };
+      if (auto && !known && !free) out.delivery.pending = true;
+      if (auto && opts.deliveryDays) out.delivery.days = opts.deliveryDays;
       out.deliveryPrice = out.delivery.price;
     }
     out.total = Math.max(0, out.subtotal - out.promoDiscount) + out.deliveryPrice;

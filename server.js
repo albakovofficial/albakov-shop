@@ -655,6 +655,7 @@ function embedImages(html) {
 }
 // В письмах покупателю: «отвечать не нужно, пишите на …» — адрес для связи из «Меню, контакты»
 Object.defineProperty(Mail.DEFAULTS, 'supportEmail', { get: () => (db.settings.contacts || {}).email || mailCfg().replyTo || '' });
+Object.defineProperty(Mail.DEFAULTS, 'siteUrl', { get: () => PUBLIC_URL });
 function sendMail(msg) { const e = embedImages(msg.html); return smtp.send(mailCfg(), Object.assign({}, msg, e)); }
 
 /* ---------------- Письма о заказе: покупателю и магазину ---------------- */

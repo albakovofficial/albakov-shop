@@ -98,7 +98,7 @@
     var heading = shop ? 'Заказ № ' + o.number : 'Спасибо, ' + c.firstName + '!';
     var lead = shop
       ? c.firstName + ' ' + c.lastName + ', ' + c.phone + ', ' + c.email + '. ' + ctx.payLabel + '.'
-      : 'Ваш заказ № ' + o.number + (paid ? ' оплачен и передан в сборку.' : ' принят.') + ' Мы свяжемся с вами по телефону, чтобы согласовать доставку.';
+      : 'Ваш заказ № ' + o.number + (paid ? ' оплачен и передан в сборку.' : ' принят.') + (o.delivery && !o.delivery.address ? ' Напишем на почту, когда заказ можно будет забрать.' : ' Как только передадим посылку в СДЭК, пришлём трек-номер для отслеживания.');
     var row = function (l, r, strong) { return '<tr><td style="padding:6px 0;font-family:' + sans + ';font-size:' + (strong ? 17 : 15) + 'px;color:' + (strong ? '#141414' : '#4A4A4F') + ';">' + esc(l) + '</td><td align="right" style="padding:6px 0;font-family:' + sans + ';font-size:' + (strong ? 17 : 15) + 'px;color:#141414;white-space:nowrap;">' + esc(r) + '</td></tr>'; };
     var items = o.items.map(function (i) {
       return '<tr>' + (i.image ? '<td style="padding:14px 0;border-bottom:1px solid #E3E6EA;" width="64"><img src="' + esc(i.image) + '" width="52" height="69" alt="" style="display:block;border:0;object-fit:cover;background:#ECE8E1;"></td>' : '') +

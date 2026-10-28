@@ -223,7 +223,26 @@ a.logo:hover .brand { opacity: .85; }
 .benefit h3 { font-family: var(--serif); font-weight: 400; font-size: clamp(22px, 1.9vw, 28px); line-height: 1.15; letter-spacing: -.01em; }
 .benefit p { color: var(--muted); font-size: 15px; line-height: 1.55; max-width: 34ch; }
 .benefit.no-ico { grid-template-rows: none; }
+/* Бенто: 4 колонки, первая карточка на две — с крупной иконкой сбоку */
+.benefits.bento { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.benefits.bento .benefit:first-child { grid-column: span 2; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: none; align-items: center; gap: clamp(12px, 2vw, 28px); background: linear-gradient(135deg, var(--surface), color-mix(in srgb, var(--glow, var(--surface)) 10%, var(--surface))); }
+.benefits.bento .benefit:first-child .benefit-ico { width: clamp(150px, 15vw, 220px); margin: -10px 0 -10px -10px; }
+.benefits.bento .benefit:first-child h3 { font-size: clamp(26px, 2.4vw, 36px); }
+.benefits.bento .benefit:first-child p { font-size: 16px; max-width: 40ch; }
+.benefits.bento .benefit-ico { width: clamp(104px, 8.5vw, 132px); }
+.benefits.bento .benefit h3 { font-size: clamp(20px, 1.6vw, 24px); }
+.benefits.bento .benefit p { font-size: 14px; }
+.benefits.bento .benefit:last-child:not(:first-child) { grid-column: span var(--span-lg, 1); }
+.benefit-more { margin-top: 6px; display: inline-flex; gap: 6px; align-items: center; font-size: 13px; letter-spacing: .02em; color: var(--text); border-bottom: 1px solid var(--line-strong); justify-self: start; padding-bottom: 2px; transition: gap .3s var(--ease), border-color .3s; }
+.benefit-more:hover { gap: 10px; border-color: var(--text); }
+@media (max-width: 1100px) { .benefits.bento { grid-template-columns: repeat(2, minmax(0, 1fr)); } .benefits.bento .benefit:last-child:not(:first-child) { grid-column: span var(--span-md, 1); } }
 @media (max-width: 600px) {
+  .benefits.bento { grid-template-columns: 1fr; }
+  .benefits.bento .benefit:last-child:not(:first-child) { grid-column: auto; }
+  .benefits.bento .benefit:first-child { grid-column: auto; grid-template-columns: 88px minmax(0, 1fr); }
+  .benefits.bento .benefit:first-child .benefit-ico, .benefits.bento .benefit-ico { width: 88px; margin: 0; }
+  .benefits.bento .benefit:first-child h3 { font-size: 22px; }
+  .benefits.bento .benefit:first-child p { font-size: 14px; }
   .benefits { gap: 10px; }
   .benefit { grid-template-columns: 88px minmax(0, 1fr); grid-template-rows: none; align-items: center; gap: 14px; padding: 14px 18px 14px 10px; }
   .benefit.no-ico { grid-template-columns: minmax(0, 1fr); padding-left: 18px; }

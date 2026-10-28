@@ -1881,3 +1881,9 @@ input:focus-visible + .pm-track { outline: 2px solid var(--accent); outline-offs
 .cs-cod { margin: 0; padding: 10px 14px; font-size: 13.5px; background: #fdf6e3; }
 .cs-cod.ok { background: #e8f1ea; color: var(--ok); }
 .cs-cod b { font-weight: 600; }
+.opt-price.calc { font-weight: 400 !important; color: var(--muted); background: transparent; border: 1px dashed var(--line-strong); }
+.option.on .opt-price.calc { background: transparent; color: var(--muted); }
+.pvz-chosen .pvz-deliv { margin-top: 4px; font-size: 13px; color: var(--text); font-weight: 500; }
+.dm-auto { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 12px; align-items: start; }
+.dm-auto[hidden] { display: none; }
+@media (max-width: 700px) { .dm-auto { grid-template-columns: 1fr; } }

@@ -361,6 +361,7 @@
     var to = '<div class="cs-route"><div><small>Отправляете из</small><b>' + esc(sp ? sp.address : 'пункт не выбран') + '</b></div><span aria-hidden="true">→</span><div><small>Получатель забирает</small><b>' + esc(pv.address || o.delivery.address || '—') + '</b><small>' + esc(o.delivery.city || '') + (pv.code ? ' · ' + esc(pv.code) : '') + '</small></div></div>';
     if (!c) {
       var pk = Object.assign({ weight: 1000, length: 30, width: 25, height: 10 }, (DATA.settings.cdek || {}).pkg);
+      pk.weight = Math.min(30000, pk.weight * Math.max(1, o.items.reduce(function (s, i) { return s + i.qty - (i.refundedQty || 0); }, 0)));
       var unpaid = o.payment.method === 'online' && o.payment.status !== 'paid';
       return '<div class="adm-card cs-order"><h3 class="adm-h3">Отправка СДЭК</h3>' + to +
         (o.payment.method === 'cod' ? '<p class="cs-cod">Оплата при получении: СДЭК возьмёт с покупателя <b>' + fmt(o.total - (o.refunded || 0)) + '</b></p>' : '') +
@@ -994,7 +995,7 @@
   /* ================= Оплата, касса, доставка =================
      Карточки вместо голой формы: у способа оплаты — переключатель и превью «как увидит покупатель»,
      у ЮKassa — статус подключения, у доставки — карточка на каждый способ с понятными полями. */
-  function payIc(n) { return '<img src="img/benefits/' + n + '.webp?v=13.20.0" alt="" width="52" height="52" decoding="async">'; }
+  function payIc(n) { return '<img src="img/benefits/' + n + '.webp?v=13.21.0" alt="" width="52" height="52" decoding="async">'; }
   var PAY_IC = { card: payIc('payment'), cash: payIc('cash'), truck: payIc('delivery'), pin: payIc('pin') };
   function switchHtml(id, on, label) {
     return '<label class="pm-switch"><input type="checkbox" id="' + id + '"' + (on ? ' checked' : '') + '><span class="pm-track" aria-hidden="true"></span><span class="sr">' + esc(label) + '</span></label>';
@@ -1002,6 +1003,7 @@
   function rub(n) { return Number(n || 0).toLocaleString('ru-RU') + ' ₽'; }
   function deliverySummary(d) {
     var price = Number(d.price) || 0, free = Number(d.freeFrom) || 0;
+    if (d.priceAuto && Pricing.isPvzMethod(d)) return 'по тарифу СДЭК' + (Number(d.markup) ? ' + ' + rub(d.markup) : '') + (free ? ', бесплатно от ' + rub(free) : '');
     if (!price) return 'Бесплатно';
     return rub(price) + (free ? ', бесплатно от ' + rub(free) : '');
   }
@@ -1020,6 +1022,8 @@
           '<div class="dm-f dm-addr"><span>Адрес покупателя</span><label class="dm-toggle">' + '<input type="checkbox" data-d="needsAddress"' + (d.needsAddress !== false ? ' checked' : '') + '><span class="pm-track" aria-hidden="true"></span><b>' + (d.needsAddress !== false ? 'Спросить город и адрес' : 'Не нужен — самовывоз') + '</b></label></div>' +
         '</div>' +
         '<label class="dm-pvz"' + (d.needsAddress === false ? ' hidden' : '') + '><input type="checkbox" data-d="pickupPoint"' + (Pricing.isPvzMethod(d) ? ' checked' : '') + '><span><b>До пункта выдачи СДЭК</b><small>Покупатель выбирает город с областью и пункт из списка СДЭК, а не печатает адрес сам</small></span></label>' +
+        '<div class="dm-auto"' + (d.needsAddress === false || !Pricing.isPvzMethod(d) ? ' hidden' : '') + '><label class="dm-pvz"><input type="checkbox" data-d="priceAuto"' + (d.priceAuto ? ' checked' : '') + '><span><b>Цена по тарифу СДЭК</b><small>Стоимость считается по городу покупателя из вашего пункта отгрузки. «Стоимость» выше — запасная, если СДЭК не ответил</small></span></label>' +
+          '<label class="dm-f dm-num dm-markup"><span>Наценка к тарифу</span><span class="dm-money"><input class="input num" type="number" min="0" step="10" data-d="markup" value="' + (Number(d.markup) || 0) + '"><i>₽</i></span><small>Например, на упаковку. Итог округляется до 10 ₽</small></label></div>' +
         '<p class="dm-preview">Покупатель увидит: <b>' + esc(d.name || 'Без названия') + '</b>' + (d.desc ? ' · ' + esc(d.desc) : '') + ' — <span>' + esc(deliverySummary(d)) + '</span></p>' +
       '</div>' +
       '<div class="dm-tools"><button type="button" data-dm="up" aria-label="Поднять выше" title="Выше">↑</button><button type="button" data-dm="down" aria-label="Опустить ниже" title="Ниже">↓</button><button type="button" data-dm="rm" aria-label="Удалить способ доставки" title="Удалить">✕</button></div>' +
@@ -1028,7 +1032,8 @@
   function readDelivery(box) {
     return $$('.dm', box).map(function (el) {
       var v = function (k) { return $('[data-d="' + k + '"]', el); };
-      return { id: el.getAttribute('data-id'), name: v('name').value.trim(), desc: v('desc').value.trim(), price: Math.max(0, Number(v('price').value) || 0), freeFrom: Math.max(0, Number(v('freeFrom').value) || 0), needsAddress: v('needsAddress').checked, pickupPoint: v('needsAddress').checked && v('pickupPoint').checked };
+      return { id: el.getAttribute('data-id'), name: v('name').value.trim(), desc: v('desc').value.trim(), price: Math.max(0, Number(v('price').value) || 0), freeFrom: Math.max(0, Number(v('freeFrom').value) || 0), needsAddress: v('needsAddress').checked, pickupPoint: v('needsAddress').checked && v('pickupPoint').checked,
+        priceAuto: v('needsAddress').checked && v('pickupPoint').checked && v('priceAuto').checked, markup: Math.max(0, Number(v('markup').value) || 0) };
     });
   }
   /* ---------- СДЭК: откуда отправляем, упаковка, тариф, услуги ---------- */
@@ -1041,7 +1046,7 @@
         '<div id="csPointPick" class="cs-pick"' + (sp ? ' hidden' : '') + '><div class="pvz-combo"><input class="input" id="csCity" placeholder="Ваш город, например «Москва»" autocomplete="off"><ul class="pvz-sug" id="csSug" hidden></ul></div><select class="select" id="csPoints" hidden></select></div></div>' +
       '<div class="pm-two">' +
         '<label class="pm-f"><span>Тариф</span><select class="select" id="csTariff">' + CDEK_TARIFFS.map(function (t) { return '<option value="' + t[0] + '"' + (Number(c.tariff || 136) === t[0] ? ' selected' : '') + '>' + t[1] + '</option>'; }).join('') + '</select><small>В постаматы — тариф «склад–постамат», подставится сам</small></label>' +
-        '<div class="pm-f"><span>Упаковка по умолчанию</span><div class="cs-pkg"><label><input class="input num" id="csW" type="number" min="50" step="50" value="' + pk.weight + '"><i>г</i></label><label><input class="input num" id="csL" type="number" min="1" value="' + pk.length + '"><i>см</i></label><span>×</span><label><input class="input num" id="csWd" type="number" min="1" value="' + pk.width + '"><i>см</i></label><span>×</span><label><input class="input num" id="csH" type="number" min="1" value="' + pk.height + '"><i>см</i></label></div><small>Вес и размеры можно поправить в конкретном заказе</small></div>' +
+        '<div class="pm-f"><span>Вес одной вещи в упаковке · размер коробки</span><div class="cs-pkg"><label><input class="input num" id="csW" type="number" min="50" step="50" value="' + pk.weight + '"><i>г</i></label><label><input class="input num" id="csL" type="number" min="1" value="' + pk.length + '"><i>см</i></label><span>×</span><label><input class="input num" id="csWd" type="number" min="1" value="' + pk.width + '"><i>см</i></label><span>×</span><label><input class="input num" id="csH" type="number" min="1" value="' + pk.height + '"><i>см</i></label></div><small>Вес посылки = вес вещи × количество. Используется для цены доставки и заявки; в заказе можно поправить</small></div>' +
       '</div>' +
       '<div class="cs-sv"><span class="cs-sv-h">Услуги для покупателя (включите, если они есть в вашем договоре со СДЭК)</span>' +
         '<label class="check"><input type="checkbox" id="csPart"' + (sv.partDeliv ? ' checked' : '') + '> <span><b>Частичный выкуп</b> — покупатель забирает только то, что подошло, остальное СДЭК везёт вам обратно</span></label>' +
@@ -1152,6 +1157,7 @@
       $('.dm-addr b', el).textContent = d.needsAddress ? 'Спросить город и адрес' : 'Не нужен — самовывоз';
       $('.dm-ic', el).innerHTML = d.needsAddress ? PAY_IC.truck : PAY_IC.pin;
       $('.dm-pvz', el).hidden = !d.needsAddress;
+      $('.dm-auto', el).hidden = !d.needsAddress || !d.pickupPoint;
     };
     list.addEventListener('input', function (e) { var el = e.target.closest('.dm'); if (el) refresh(el); });
     list.addEventListener('change', function (e) { var el = e.target.closest('.dm'); if (el) refresh(el); });

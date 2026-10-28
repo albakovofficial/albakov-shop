@@ -494,7 +494,7 @@
     var cards = h.benefits.map(function (b, i) {
       var ic = benefitIcon(b);
       return '<div class="benefit' + (ic ? '' : ' no-ico') + (b.link ? ' has-link' : '') + '" style="--i:' + i + (i === nb - 1 && nb >= 5 ? lastSpan : '') + (ic ? ';--glow:' + BENEFIT_ICONS[ic] : '') + '">' +
-        (ic ? '<div class="benefit-ico"><img src="img/benefits/' + ic + '.webp?v=13.24.2" alt="" width="160" height="160" loading="lazy" decoding="async"></div>' : '') +
+        (ic ? '<div class="benefit-ico"><img src="img/benefits/' + ic + '.webp?v=13.25.0" alt="" width="160" height="160" loading="lazy" decoding="async"></div>' : '') +
         '<div class="benefit-body"><h3>' + glue(b.title) + '</h3>' + (b.text ? '<p>' + glue(b.text) + '</p>' : '') +
         (b.link ? '<a class="benefit-more" href="' + esc(b.link) + '">' + esc(b.linkText || 'Подробнее') + '<span aria-hidden="true">→</span></a>' : '') + '</div></div>';
     }).join('');
@@ -999,7 +999,7 @@
       '<p class="pvz-hint">Выберите свой населённый пункт из списка — область подставится сама. Например, Мурино и Кудрово — это Ленинградская область, а не Санкт-Петербург.</p></div>' +
       '<div class="pvz-pick" id="pvzPick" hidden></div></div>';
   }
-  function optIc(n) { return '<span class="opt-ic"><img src="img/benefits/' + n + '.webp?v=13.24.2" alt="" width="48" height="48" decoding="async"></span>'; }
+  function optIc(n) { return '<span class="opt-ic"><img src="img/benefits/' + n + '.webp?v=13.25.0" alt="" width="48" height="48" decoding="async"></span>'; }
   function coStep(n, id, title, hint, body) {
     return '<section class="cstep" id="cs-' + id + '"><header class="cstep-head"><span class="cstep-n" aria-hidden="true"><i>' + n + '</i><svg viewBox="0 0 24 24"><path d="m6 12.5 4 4 8-9"/></svg></span>' +
       '<div><h3>' + title + '</h3><p>' + hint + '</p></div></header><div class="cstep-body">' + body + '</div></section>';

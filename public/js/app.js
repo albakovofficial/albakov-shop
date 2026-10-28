@@ -490,7 +490,7 @@
     var cards = h.benefits.map(function (b, i) {
       var ic = benefitIcon(b);
       return '<div class="benefit' + (ic ? '' : ' no-ico') + '" style="--i:' + i + (ic ? ';--glow:' + BENEFIT_ICONS[ic] : '') + '">' +
-        (ic ? '<div class="benefit-ico"><img src="img/benefits/' + ic + '.webp?v=13.17.0" alt="" width="160" height="160" loading="lazy" decoding="async"></div>' : '') +
+        (ic ? '<div class="benefit-ico"><img src="img/benefits/' + ic + '.webp?v=13.20.0" alt="" width="160" height="160" loading="lazy" decoding="async"></div>' : '') +
         '<div class="benefit-body"><h3>' + glue(b.title) + '</h3>' + (b.text ? '<p>' + glue(b.text) + '</p>' : '') + '</div></div>';
     }).join('');
     return '<section class="section benefits-sec"><div class="wrap">' + head + '<div class="benefits">' + cards + '</div></div></section>';
@@ -985,7 +985,14 @@
   var cartPageDraw = null;
 
   /* ---------- Оформление заказа ---------- */
-  function optIc(n) { return '<span class="opt-ic"><img src="img/benefits/' + n + '.webp?v=13.17.0" alt="" width="48" height="48" decoding="async"></span>'; }
+  function pvzHtml() {
+    return '<div class="pvz" id="pvzBox" hidden><div id="pvzCityBox"><label class="field" for="pvz-q"><span>Город или посёлок</span></label>' +
+      '<div class="pvz-combo"><input class="input" id="pvz-q" autocomplete="off" spellcheck="false" placeholder="Начните вводить, например «Мурино»" role="combobox" aria-expanded="false" aria-controls="pvzSug" aria-autocomplete="list">' +
+      '<ul class="pvz-sug" id="pvzSug" role="listbox" hidden></ul></div>' +
+      '<p class="pvz-hint">Выберите свой населённый пункт из списка — область подставится сама. Например, Мурино и Кудрово — это Ленинградская область, а не Санкт-Петербург.</p></div>' +
+      '<div class="pvz-pick" id="pvzPick" hidden></div></div>';
+  }
+  function optIc(n) { return '<span class="opt-ic"><img src="img/benefits/' + n + '.webp?v=13.20.0" alt="" width="48" height="48" decoding="async"></span>'; }
   function coStep(n, id, title, hint, body) {
     return '<section class="cstep" id="cs-' + id + '"><header class="cstep-head"><span class="cstep-n" aria-hidden="true"><i>' + n + '</i><svg viewBox="0 0 24 24"><path d="m6 12.5 4 4 8-9"/></svg></span>' +
       '<div><h3>' + title + '</h3><p>' + hint + '</p></div></header><div class="cstep-body">' + body + '</div></section>';
@@ -994,7 +1001,9 @@
     if (!Cart.get().length) { v.innerHTML = '<div class="wrap"><div class="empty"><h3>Корзина пуста</h3><a class="btn ghost" href="#/catalog">В каталог</a></div></div>'; return; }
     var s = D.settings, u = API.user || {}, methods = (s.delivery && s.delivery.methods) || [], pay = Object.assign({}, s.payment || {});
     if (!D.payReady) pay.online = false; // ЮKassa ещё не подключена — онлайн-оплату не предлагаем
-    var st = { deliveryId: methods[0] && methods[0].id, payment: pay.online ? 'online' : 'cod', code: '', useBonus: false };
+    var st = { deliveryId: methods[0] && methods[0].id, payment: pay.online ? 'online' : 'cod', code: '', useBonus: false, city: null, pvz: null };
+    function curMethod() { return methods.find(function (x) { return x.id === st.deliveryId; }); }
+    function pvzMode() { return !!(D.cdekReady && Pricing.isPvzMethod(curMethod())); }
     v.innerHTML = '<div class="wrap"><div class="page-head"><div class="crumbs"><a href="#/cart">Корзина</a><span>/</span><span>Оформление</span></div><h1>Оформление заказа</h1></div>' +
       '<form class="checkout" id="coForm" novalidate><div>' +
       (!API.user ? '<div class="co-login"><span class="co-login-ic" aria-hidden="true">Б</span><p><b>Уже покупали у нас?</b> <a class="link" href="#/account?back=checkout">Войдите</a>, чтобы копить бонусы и видеть историю заказов. Можно оформить и без регистрации.</p></div>' : '') +
@@ -1008,14 +1017,16 @@
       coStep(2, 'deliv', 'Доставка', 'Выберите способ и укажите, куда привезти',
         '<div class="options" id="delivOpts"></div>' +
         '<div class="co-addr" id="addrBox"><div class="row2">' +
-        '<label class="field"><span>Город</span><input class="input" id="co-city" autocomplete="address-level2" placeholder="Москва"></label>' +
-        '<label class="field"><span>Адрес или пункт выдачи СДЭК</span><input class="input" id="co-addr" autocomplete="street-address" placeholder="Улица, дом или адрес ПВЗ"></label></div></div>' +
+        '<label class="field"><span>Город или посёлок</span><input class="input" id="co-city" autocomplete="address-level2" placeholder="Москва"></label>' +
+        '<label class="field"><span id="co-addr-l">Адрес</span><input class="input" id="co-addr" autocomplete="street-address" placeholder="Улица, дом, квартира"></label></div>' +
+        '<p class="pvz-hint" id="addrHint" hidden>Указывайте свой населённый пункт и область: Мурино, Кудрово и Девяткино — это Ленинградская область, а не Санкт-Петербург.</p></div>' +
+        pvzHtml() +
         '<details class="co-comment"' + '><summary>Добавить комментарий к заказу</summary><textarea class="textarea" id="co-comment" rows="2" placeholder="Например, удобное время для звонка"></textarea></details>') +
       coStep(3, 'pay', 'Оплата', 'Оплатите заказ сразу после подтверждения',
         '<div class="options" id="payOpts">' +
         (pay.online ? '<label class="option ico"><input type="radio" name="pay" value="online">' + optIc('payment') + '<span><b>' + esc(pay.onlineLabel || 'Онлайн') + '</b><small>Быстро и безопасно через ЮKassa</small><span class="pay-marks" aria-label="Карта «Мир», СБП, SberPay, T-Pay"><i>МИР</i><i>СБП</i><i>SberPay</i><i>T-Pay</i></span></span><span></span></label>' : '') +
         (!pay.online && !pay.cod ? '<p class="demo-note">Оформление заказов временно недоступно — свяжитесь с нами по телефону из раздела «Контакты».</p>' : '') +
-        (pay.cod ? '<label class="option ico"><input type="radio" name="pay" value="cod">' + optIc('cash') + '<span><b>' + esc(pay.codLabel || 'При получении') + '</b><small>Картой или наличными курьеру и в пункте выдачи</small></span><span></span></label>' : '') + '</div>' +
+        (pay.cod ? '<label class="option ico"><input type="radio" name="pay" value="cod">' + optIc('cash') + '<span><b>' + esc(pay.codLabel || 'При получении') + '</b><small id="codHint">Наличными или картой при получении</small></span><span></span></label>' : '') + '</div>' +
         (pay.online ? '<p class="co-secure" id="coSecure"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.5 3 8.3 7 10 4-1.7 7-5.5 7-10V6z"/><path d="m9 12 2 2 4-4"/></svg><span>После подтверждения откроется защищённая страница ЮKassa. Данные карты к нам не попадают, чек придёт на почту.</span></p>' : '') +
         '<p class="demo-note bonus-paid" id="bonusPaid" hidden>Заказ полностью оплачен бонусами — платить ничего не нужно.</p>') +
       '</div>' +
@@ -1032,7 +1043,18 @@
       $('#delivOpts').innerHTML = methods.map(function (m) { return '<label class="option ico' + (st.deliveryId === m.id ? ' on' : '') + '"><input type="radio" name="deliv" value="' + esc(m.id) + '"' + (st.deliveryId === m.id ? ' checked' : '') + '>' + optIc(m.needsAddress === false ? 'pin' : 'delivery') + '<span><b>' + esc(m.name) + '</b><small>' + esc(m.desc || '') + (m.freeFrom ? ' · бесплатно от ' + fmt(m.freeFrom) : '') + '</small></span><span class="num opt-price" data-dp="' + esc(m.id) + '"></span></label>'; }).join('');
       $$('#payOpts .option').forEach(function (o) { var i = $('input', o); i.checked = i.value === st.payment; o.classList.toggle('on', i.checked); });
       var m = methods.find(function (x) { return x.id === st.deliveryId; });
-      $('#addrBox').hidden = !(m && m.needsAddress !== false);
+      var pm = pvzMode();
+      $('#addrBox').hidden = !(m && m.needsAddress !== false) || pm;
+      $('#pvzBox').hidden = !pm;
+      // СДЭК без подключённого подбора — вводят адрес пункта вручную, с подсказкой про область
+      var manualPvz = !pm && Pricing.isPvzMethod(m);
+      $('#co-addr-l').textContent = manualPvz ? 'Адрес пункта выдачи СДЭК' : 'Адрес';
+      $('#co-addr').placeholder = manualPvz ? 'Например, Петровский бульвар, 7' : 'Улица, дом, квартира';
+      $('#addrHint').hidden = !manualPvz;
+      if (pm && !st.pvzInit) { st.pvzInit = true; pvzInit(); }
+      // подсказки под оплатой зависят от выбранного способа
+      if ($('#codHint')) $('#codHint').textContent = pm ? 'Наличными или картой в пункте выдачи СДЭК' : 'Наличными или картой при получении';
+      $('#cs-pay .cstep-head p').textContent = st.payment === 'cod' ? 'Оплатите заказ при получении — наличными или картой' : 'Оплатите заказ сразу после подтверждения';
       if ($('#coSecure')) $('#coSecure').hidden = st.payment !== 'online' || st.free;
       submitLabel(); coProgress();
     }
@@ -1042,7 +1064,7 @@
       var ph = String($('#co-phone').value).replace(/\D/g, ''), em = $('#co-email').value.trim();
       var buyer = $('#co-first').value.trim() && ph.length === 11 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em);
       var m = methods.find(function (x) { return x.id === st.deliveryId; });
-      var deliv = m && (m.needsAddress === false || ($('#co-city').value.trim() && $('#co-addr').value.trim()));
+      var deliv = m && (m.needsAddress === false || (pvzMode() ? !!st.pvz : $('#co-city').value.trim() && $('#co-addr').value.trim()));
       var payOk = !!$('#payOpts input:checked') || !$('#payOpts').children.length || $('#payOpts').hidden;
       [['buyer', buyer], ['deliv', deliv], ['pay', payOk && $('#payOpts').children.length]].forEach(function (x) { $('#cs-' + x[0]).classList.toggle('done', !!x[1]); });
     }
@@ -1077,11 +1099,104 @@
       submitLabel(); if ($('#coSecure')) $('#coSecure').hidden = st.payment !== 'online' || free;
       return q;
     }
+    /* ---- Пункт выдачи СДЭК: населённый пункт из списка (с областью) → пункт на карте адресов ---- */
+    var LS_PVZ = 'albakov:pvz';
+    function pvzSave() { try { localStorage.setItem(LS_PVZ, JSON.stringify({ city: st.city, pvz: st.pvz && st.pvz.code })); } catch (e) {} }
+    function pvzInit() {
+      var q = $('#pvz-q'), sug = $('#pvzSug'), timer = 0, seq = 0, items = [], act = -1;
+      function close() { sug.hidden = true; q.setAttribute('aria-expanded', 'false'); act = -1; }
+      function paint() {
+        sug.innerHTML = items.length ? items.map(function (c, i) { return '<li role="option" id="pvzo' + i + '" data-i="' + i + '"' + (i === act ? ' class="on" aria-selected="true"' : '') + '><b>' + esc(c.city) + '</b><span>' + esc(c.region || 'Россия') + '</span></li>'; }).join('') : '<li class="none">Ничего не нашли. Проверьте название — или впишите соседний город</li>';
+        sug.hidden = false; q.setAttribute('aria-expanded', 'true'); q.setAttribute('aria-activedescendant', act >= 0 ? 'pvzo' + act : '');
+      }
+      q.addEventListener('input', function () {
+        clearTimeout(timer); var v = q.value.trim(), my = ++seq;
+        if (st.city) { st.city = null; st.pvz = null; $('#pvzPick').hidden = true; coProgress(); }
+        if (v.length < 2) { close(); return; }
+        timer = setTimeout(async function () {
+          try { var r = await API.cdekCities(v); if (my !== seq) return; items = r; act = r.length ? 0 : -1; paint(); }
+          catch (e) { if (my !== seq) return; items = []; sug.innerHTML = '<li class="none">' + esc(errMsg(e)) + '</li>'; sug.hidden = false; }
+        }, 250);
+      });
+      q.addEventListener('keydown', function (e) {
+        if (sug.hidden || !items.length) return;
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); act = (act + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length; paint(); }
+        else if (e.key === 'Enter') { e.preventDefault(); if (act >= 0) pickCity(items[act]); }
+        else if (e.key === 'Escape') close();
+      });
+      sug.addEventListener('mousedown', function (e) { var li = e.target.closest('[data-i]'); if (li) { e.preventDefault(); pickCity(items[Number(li.dataset.i)]); } });
+      q.addEventListener('blur', function () { setTimeout(close, 120); });
+      $('#pvzBox').addEventListener('click', function (e) {
+        if (e.target.closest('[data-pvz-city]')) { st.city = null; st.pvz = null; q.value = ''; $('#pvzPick').hidden = true; $('#pvzCityBox').hidden = false; coProgress(); q.focus(); }
+        if (e.target.closest('[data-pvz-change]')) { st.pvz = null; drawPoints(); coProgress(); }
+      });
+      $('#pvzBox').addEventListener('change', function (e) {
+        if (e.target.name === 'pvz') { st.pvz = (st.points || []).find(function (x) { return x.code === e.target.value; }) || null; $('#pvzBox').classList.remove('invalid'); pvzSave(); drawPoints(); coProgress(); }
+      });
+      $('#pvzBox').addEventListener('input', function (e) { if (e.target.id === 'pvz-f') { st.filter = e.target.value; drawPoints(true); } });
+      try { var saved = JSON.parse(localStorage.getItem(LS_PVZ) || 'null'); if (saved && saved.city && saved.city.code) pickCity(saved.city, saved.pvz); } catch (e) {}
+    }
+    async function pickCity(c, keep) {
+      st.city = c; st.pvz = null; st.points = null; st.filter = '';
+      $('#pvz-q').value = c.city; $('#pvzSug').hidden = true; $('#pvzCityBox').hidden = true;
+      var box = $('#pvzPick'); box.hidden = false;
+      box.innerHTML = cityChip() + '<div class="pvz-load">Загружаем пункты выдачи…</div>';
+      try {
+        var pts = await API.cdekPoints(c.code); if (st.city !== c) return;
+        st.points = pts;
+        if (keep) st.pvz = pts.find(function (x) { return x.code === keep; }) || null;
+        if (pts.length === 1 && !st.pvz) st.pvz = pts[0];
+        pvzSave(); drawPoints(); coProgress();
+      } catch (e) { if (st.city === c) box.innerHTML = cityChip() + '<p class="form-error">' + esc(errMsg(e)) + '</p>'; }
+    }
+    // Примерка и частичный выкуп — если они включены в договоре со СДЭК
+    function tryNote(p) {
+      var sv = (D.settings.cdek && D.settings.cdek.services) || {};
+      if (!sv.partDeliv && !sv.tryOn) return '';
+      return p.fitting && p.type !== 'postamat' ? '<span class="pvz-try">Можно примерить в пункте и забрать только то, что подошло' + (sv.partDeliv ? (st.payment === 'cod' ? ' — платите только за то, что берёте' : ' — за остальное вернём деньги') : '') + '</span>' : '<span class="pvz-try no">В этом пункте нет примерочной</span>';
+    }
+    function codNow() { return st.payment === 'cod' && pvzMode(); }
+    function codNote(p) {
+      if (st.payment !== 'cod') return '';
+      return '<span class="pvz-try">Оплата при получении: ' + (p.cash && p.card ? 'наличными или картой' : p.cash ? 'наличными' : p.card ? 'картой' : 'в пункте выдачи') + '</span>';
+    }
+    function cityChip() {
+      return '<div class="pvz-cityc"><span class="pvz-pin" aria-hidden="true"></span><div><b>' + esc(st.city.city) + '</b><span>' + esc(st.city.region || 'Россия') + '</span></div><button type="button" class="link" data-pvz-city>Другой город</button></div>';
+    }
+    function drawPoints(listOnly) {
+      var box = $('#pvzPick'), pts = st.points || [];
+      if (st.pvz) {
+        var p = st.pvz;
+        box.innerHTML = cityChip() + '<div class="pvz-chosen"><span class="pvz-ok" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m6 12.5 4 4 8-9"/></svg></span><div><small>' + (p.type === 'postamat' ? 'Постамат СДЭК' : 'Пункт выдачи СДЭК') + '</small><b>' + esc(p.address) + '</b>' +
+          '<span>' + esc([p.hours, p.metro ? 'м. ' + p.metro : ''].filter(Boolean).join(' · ')) + '</span>' + (p.note ? '<span class="pvz-note">' + esc(p.note) + '</span>' : '') + tryNote(p) + codNote(p) + '</div><button type="button" class="link" data-pvz-change>Изменить</button></div>';
+        return;
+      }
+      var all = pts.length, reset = st.codReset; st.codReset = false;
+      if (codNow()) pts = pts.filter(function (p) { return p.cod; });
+      if (!pts.length && all) { box.innerHTML = cityChip() + '<p class="pvz-empty">Здесь нет пунктов СДЭК, где можно оплатить при получении. Выберите оплату онлайн — тогда будут доступны все ' + all + ' ' + plural(all, 'пункт', 'пункта', 'пунктов') + '.</p>'; return; }
+      if (!pts.length) { box.innerHTML = cityChip() + '<p class="pvz-empty">В этом населённом пункте нет пунктов выдачи СДЭК. Выберите ближайший город.</p>'; return; }
+      var f = (st.filter || '').toLowerCase().trim();
+      var shown = pts.filter(function (p) { return !f || (p.address + ' ' + p.metro + ' ' + p.name).toLowerCase().indexOf(f) !== -1; });
+      var list = shown.length ? shown.map(function (p) {
+        return '<label class="pvz-i"><input type="radio" name="pvz" value="' + esc(p.code) + '"><span class="pvz-txt"><b>' + esc(p.address) + '</b><small>' + esc([p.hours, p.metro ? 'м. ' + p.metro : ''].filter(Boolean).join(' · ')) + '</small></span>' +
+          '<span class="pvz-tags">' + (p.type === 'postamat' ? '<em>Постамат</em>' : '') + (p.fitting ? '<em>Примерочная</em>' : '') + '</span></label>';
+      }).join('') : '<p class="pvz-empty">По «' + esc(st.filter) + '» ничего не нашли</p>';
+      if (listOnly && $('#pvzList')) { $('#pvzList').innerHTML = list; return; }
+      box.innerHTML = cityChip() + (reset ? '<p class="pvz-warn">Выбранный пункт не принимает оплату при получении — выберите другой</p>' : '') +
+        '<div class="pvz-tools"><b>' + pts.length + ' ' + plural(pts.length, 'пункт', 'пункта', 'пунктов') + (codNow() ? ' с оплатой при получении' : ' выдачи') + '</b>' +
+        (pts.length > 5 ? '<input class="input" id="pvz-f" type="search" placeholder="Улица или метро" aria-label="Найти пункт по улице или метро" value="' + esc(st.filter || '') + '">' : '') + '</div>' +
+        '<div class="pvz-list" id="pvzList" role="radiogroup" aria-label="Пункты выдачи">' + list + '</div>';
+    }
     drawOpts(); drawSum();
     ['#co-first', '#co-phone', '#co-email', '#co-city', '#co-addr'].forEach(function (q) { $(q).addEventListener('input', coProgress); });
     $('#delivOpts').addEventListener('change', function (e) { st.deliveryId = e.target.value; drawOpts(); drawSum(); });
     $('#coBonus').addEventListener('change', function (e) { if (e.target.id === 'co-bonus') { st.useBonus = e.target.checked; drawSum(); } });
-    $('#payOpts').addEventListener('change', function (e) { st.payment = e.target.value; drawOpts(); });
+    $('#payOpts').addEventListener('change', function (e) {
+      st.payment = e.target.value;
+      // при оплате при получении подходят не все пункты СДЭК
+      if (codNow() && st.pvz && !st.pvz.cod) { st.pvz = null; st.codReset = true; pvzSave(); }
+      drawOpts(); drawSum(); if (st.city && st.points) drawPoints();
+    });
     $('#applyCode').addEventListener('click', function () { st.code = $('#co-code').value.trim(); drawSum(); });
     $('#promoMsg').addEventListener('click', function (e) {
       if (e.target.closest('[data-promo-clear]')) { st.code = ''; $('#co-code').value = ''; drawSum(); }
@@ -1098,6 +1213,7 @@
       $('#co-phone').classList.toggle('invalid', !validPhone(f.phone)); if (!validPhone(f.phone)) bad.push(1);
       $('#co-email').classList.toggle('invalid', !validEmail(f.email)); if (!validEmail(f.email)) bad.push(1);
       var needAddr = !$('#addrBox').hidden;
+      if (pvzMode() && !st.pvz) { bad.push(1); $('#pvzBox').classList.add('invalid'); $('#pvz-q').focus(); }
       if (needAddr) [['co-city'], ['co-addr']].forEach(function (x) { var el = $('#' + x[0]); el.classList.toggle('invalid', !el.value.trim()); if (!el.value.trim()) bad.push(1); });
       var err = $('#coErr');
       if (bad.length) { err.textContent = 'Заполните выделенные поля'; return; }
@@ -1106,7 +1222,7 @@
       err.textContent = '';
       var btn = $('#coSubmit'); btn.disabled = true; btn.textContent = st.payment === 'online' && !st.free ? 'Переходим к оплате…' : 'Оформляем…';
       try {
-        var r = await API.placeOrder({ lines: Cart.get(), code: st.code, deliveryId: st.deliveryId, payment: st.payment, useBonus: st.useBonus, customer: f, city: needAddr ? $('#co-city').value.trim() : '', address: needAddr ? $('#co-addr').value.trim() : '', comment: $('#co-comment').value.trim(), consent: true });
+        var r = await API.placeOrder({ lines: Cart.get(), code: st.code, deliveryId: st.deliveryId, payment: st.payment, useBonus: st.useBonus, customer: f, city: needAddr ? $('#co-city').value.trim() : '', address: needAddr ? $('#co-addr').value.trim() : '', pvz: pvzMode() && st.pvz ? st.pvz.code : '', cityCode: pvzMode() && st.city ? st.city.code : '', comment: $('#co-comment').value.trim(), consent: true });
         Cart.clear();
         if (r.payUrl) { location.href = r.payUrl; return; }
         go('#/order/' + r.order.id);
@@ -1136,6 +1252,7 @@
     if (o.status === 'canceled') return 'Заказ отменён.';
     if (o.status === 'returned' || o.payment.status === 'refunded') return 'Деньги по заказу возвращены. На карту они обычно приходят за 1–3 рабочих дня.';
     if (o.payment.method === 'online' && o.payment.status !== 'paid') return 'Заказ ждёт оплаты — после неё сразу начнём сборку.';
+    if (o.payment.method === 'cod' && o.payment.status === 'pending' && o.status !== 'done') return 'Оплатите заказ при получении в пункте выдачи — наличными или картой. ' + (o.tracking ? 'Следите за посылкой по трек-номеру ниже.' : 'Когда передадим посылку в СДЭК, пришлём трек-номер на почту.');
     if (o.status === 'done') return 'Заказ получен. Спасибо, что выбрали ALBAKOV.';
     if (o.tracking) return 'Заказ передан в СДЭК — следите за ним по трек-номеру ниже.';
     if (pickup) return 'Соберём заказ и напишем на почту, когда его можно будет забрать.';

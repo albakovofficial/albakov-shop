@@ -1900,3 +1900,14 @@ input:focus-visible + .pm-track { outline: 2px solid var(--accent); outline-offs
 .pvz-door { display: grid; gap: 6px; }
 .pvz-door-note { margin: 0; font-size: 13px; color: var(--muted); }
 .pvz-door-note #pvzDeliv { color: var(--text); font-weight: 500; }
+.ret-card { display: grid; gap: 12px; }
+.ret-row { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--line); }
+.ret-row.here { border-color: var(--warn); background: #fdf6e3; }
+.ret-row.done { background: #e8f1ea; border-color: transparent; }
+.ret-top { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.ret-top b { font-size: 17px; font-weight: 500; }
+.ret-top span { font-size: 12.5px; color: var(--muted); }
+.ret-row p { margin: 0; font-size: 13px; }
+.ret-row small { font-size: 12px; color: var(--muted); }
+.ret-row .link { justify-self: start; font-size: 12.5px; }
+.ret-c .trk-l small { display: block; margin-top: 6px; font-size: 12.5px; color: var(--muted); max-width: 46ch; }

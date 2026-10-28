@@ -490,7 +490,7 @@
     var cards = h.benefits.map(function (b, i) {
       var ic = benefitIcon(b);
       return '<div class="benefit' + (ic ? '' : ' no-ico') + '" style="--i:' + i + (ic ? ';--glow:' + BENEFIT_ICONS[ic] : '') + '">' +
-        (ic ? '<div class="benefit-ico"><img src="img/benefits/' + ic + '.webp?v=13.22.0" alt="" width="160" height="160" loading="lazy" decoding="async"></div>' : '') +
+        (ic ? '<div class="benefit-ico"><img src="img/benefits/' + ic + '.webp?v=13.23.0" alt="" width="160" height="160" loading="lazy" decoding="async"></div>' : '') +
         '<div class="benefit-body"><h3>' + glue(b.title) + '</h3>' + (b.text ? '<p>' + glue(b.text) + '</p>' : '') + '</div></div>';
     }).join('');
     return '<section class="section benefits-sec"><div class="wrap">' + head + '<div class="benefits">' + cards + '</div></div></section>';
@@ -992,7 +992,7 @@
       '<p class="pvz-hint">Выберите свой населённый пункт из списка — область подставится сама. Например, Мурино и Кудрово — это Ленинградская область, а не Санкт-Петербург.</p></div>' +
       '<div class="pvz-pick" id="pvzPick" hidden></div></div>';
   }
-  function optIc(n) { return '<span class="opt-ic"><img src="img/benefits/' + n + '.webp?v=13.22.0" alt="" width="48" height="48" decoding="async"></span>'; }
+  function optIc(n) { return '<span class="opt-ic"><img src="img/benefits/' + n + '.webp?v=13.23.0" alt="" width="48" height="48" decoding="async"></span>'; }
   function coStep(n, id, title, hint, body) {
     return '<section class="cstep" id="cs-' + id + '"><header class="cstep-head"><span class="cstep-n" aria-hidden="true"><i>' + n + '</i><svg viewBox="0 0 24 24"><path d="m6 12.5 4 4 8-9"/></svg></span>' +
       '<div><h3>' + title + '</h3><p>' + hint + '</p></div></header><div class="cstep-body">' + body + '</div></section>';
@@ -1287,6 +1287,15 @@
     if (pickup) return 'Соберём заказ и напишем на почту, когда его можно будет забрать.';
     return 'Соберём заказ и передадим в СДЭК, а трек-номер для отслеживания пришлём на почту.';
   }
+  // Возврат через СДЭК: номер, который назвать в пункте
+  function returnsHtml(o) {
+    return (o.returns || []).filter(function (r) { return r.number; }).map(function (r) {
+      var got = r.status === 'DELIVERED' || r.status === 'ACCEPTED_AT_PICK_UP_POINT';
+      return '<div class="trk ret-c"><div class="trk-l"><span>Возврат через СДЭК</span><b class="num">' + esc(r.number) + '</b>' +
+        '<small>' + (got ? 'Посылка у нас — скоро вернём деньги' : 'Отнесите вещи в любой пункт СДЭК и назовите этот номер. Заполнять ничего не нужно') + '</small></div>' +
+        '<div class="trk-a"><button type="button" class="btn ghost sm" data-copy-track="' + esc(r.number) + '">Скопировать</button></div></div>';
+    }).join('');
+  }
   async function orderPage(v, parts) {
     v.innerHTML = '<div class="loader">…</div>';
     try {
@@ -1295,7 +1304,7 @@
       v.innerHTML = '<div class="wrap"><div class="success"><span class="eyebrow">Заказ № ' + esc(o.number) + '</span><h1>' + (o.status === 'returned' ? 'Возврат оформлен' : 'Спасибо за заказ') + '</h1>' +
         '<p class="muted" style="max-width:46ch">' + (D.mailReady ? 'Подтверждение придёт на ' + esc(o.customer.email) + (o.payment.method === 'online' && o.payment.status !== 'paid' ? ' после оплаты' : '') + '. ' : '') + orderNext(o) + '</p>' +
         '<div style="display:flex;gap:18px;flex-wrap:wrap;justify-content:center"><span class="status ' + esc(o.status) + '">' + esc(STATUS[o.status] || o.status) + '</span><span class="status ' + esc(o.payment.status) + '">' + esc(payLabel) + '</span></div>' +
-        trackHtml(o) +
+        trackHtml(o) + returnsHtml(o) +
         '<div class="order-card" style="width:100%;text-align:left">' + o.items.map(function (i) { return '<div class="mini-line"><img src="' + esc(i.image || Art.make(i.art)) + '" alt=""><div><div>' + esc(i.name) + '</div><div class="sub">' + (i.color ? esc(i.color) + ' · ' : '') + esc(i.size) + ' · ' + i.qty + ' шт.</div></div><span class="num">' + fmt(i.price * i.qty) + '</span></div>'; }).join('') +
           (o.promoDiscount ? '<div class="sum-row disc"><span>Промокод ' + esc(o.promoCode) + '</span><span>−' + fmt(o.promoDiscount) + '</span></div>' : '') +
           '<div class="sum-row"><span>' + esc(o.delivery && o.delivery.name || 'Доставка') + '</span><span>' + (o.delivery && o.delivery.price ? fmt(o.delivery.price) : 'Бесплатно') + '</span></div>' +

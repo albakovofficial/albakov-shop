@@ -251,7 +251,28 @@
     return { subject: subject, html: frame(ctx, subject, 'Возврат ' + sum + ' — деньги уже в пути', inner, footer), text: text };
   }
 
-  var api = { renderRefund: renderRefund, renderTracking: renderTracking, renderSupport: renderSupport, DEFAULT_NOTIFY: DEFAULT_NOTIFY, PLACEHOLDERS: PLACEHOLDERS, tplOf: tplOf, readyRequests: readyRequests, render: render, renderOrder: renderOrder, renderCode: renderCode, renderWelcome: renderWelcome };
+  // Возврат через СДЭК: номер заявки и что делать покупателю
+  function renderReturnShip(ctx) {
+    var subject = 'Возврат по заказу № ' + ctx.number + ' — номер СДЭК ' + ctx.track;
+    var list = (ctx.items || []).map(function (i) { return esc(i.name) + (i.color ? ', ' + esc(i.color) : '') + ', размер ' + esc(i.size) + ' — ' + i.qty + ' шт.'; });
+    var box = '<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:24px auto 0;"><tr><td align="center" style="border:1px solid #121417;padding:16px 28px;font-family:' + SANS + ';">' +
+      '<div style="font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#464B52;">Номер для пункта СДЭК</div>' +
+      '<div style="margin-top:8px;font-size:24px;font-weight:600;letter-spacing:3px;color:#121417;">' + esc(ctx.track) + '</div></td></tr></table>';
+    var steps = '<ol style="margin:22px 0 0;padding-left:20px;font-family:' + SANS + ';font-size:15px;line-height:1.6;color:#141414;">' +
+      '<li>Упакуйте вещи с бирками, лучше в исходную упаковку.</li>' +
+      '<li>Отнесите посылку в любой пункт выдачи СДЭК и назовите номер выше. Ничего заполнять не нужно — заявка уже оформлена.</li>' +
+      '<li>Когда посылка придёт к нам и мы её проверим, вернём деньги и пришлём письмо.</li></ol>';
+    var inner = eyebrow('Возврат') + h1((ctx.name ? ctx.name + ', возврат' : 'Возврат') + ' оформлен') +
+      para('Мы оформили отправку вещей по заказу № ' + esc(ctx.number) + ' обратно к нам через СДЭК.') + box + steps +
+      (list.length ? para('<b>Что возвращаете:</b><br>' + list.join('<br>'), 'margin:22px 0 0;font-size:14px;') : '') +
+      (ctx.cost ? para('Стоимость обратной доставки — ' + esc(Number(ctx.cost).toLocaleString('ru-RU')) + ' ₽, её удержим из суммы возврата (если вещь надлежащего качества). Платить в пункте СДЭК ничего не нужно.', 'margin:18px 0 0;font-size:14px;color:#464B52;') : para('Платить в пункте СДЭК ничего не нужно.', 'margin:18px 0 0;font-size:14px;color:#464B52;')) +
+      para('<a href="' + esc(ctx.url) + '" style="color:#121417;">Открыть заказ на сайте</a>', 'margin:22px 0 0;font-size:14px;');
+    var footer = 'Если появятся вопросы, ответьте на это письмо или напишите в поддержку в личном кабинете.' + (ctx.contacts ? '<br>' + esc(ctx.contacts) : '');
+    var text = 'Возврат по заказу № ' + ctx.number + ' оформлен.\nНомер для пункта СДЭК: ' + ctx.track + '\n1. Упакуйте вещи с бирками.\n2. Отнесите в любой пункт СДЭК и назовите номер — заполнять ничего не нужно.\n3. Когда посылка придёт и мы её проверим, вернём деньги.' + (ctx.cost ? '\nСтоимость обратной доставки ' + ctx.cost + ' ₽ удержим из суммы возврата.' : '') + '\n\nЗаказ: ' + ctx.url;
+    return { subject: subject, html: frame(ctx, subject, 'Номер СДЭК для возврата: ' + ctx.track, inner, footer), text: text };
+  }
+
+  var api = { renderReturnShip: renderReturnShip, renderRefund: renderRefund, renderTracking: renderTracking, renderSupport: renderSupport, DEFAULT_NOTIFY: DEFAULT_NOTIFY, PLACEHOLDERS: PLACEHOLDERS, tplOf: tplOf, readyRequests: readyRequests, render: render, renderOrder: renderOrder, renderCode: renderCode, renderWelcome: renderWelcome };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Mail = api;
 })(this);

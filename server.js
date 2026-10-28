@@ -168,6 +168,57 @@ async function applyCdek(o, info) {
   syncBonus(o); save();
   if (mail && mailReady()) { try { await sendTrackingMail(o); o.tracking.mailedAt = new Date().toISOString(); save(); } catch (e) { console.error('Письмо с трек-номером не отправлено:', e.message); } }
 }
+/* ---------- Возврат через СДЭК: обратная заявка от покупателя на ваш пункт ---------- */
+const returnedQty = (o, idx) => (o.returns || []).filter((r) => r.status !== 'REMOVED').reduce((s, r) => s + ((r.items.find((x) => x.idx === idx) || {}).qty || 0), 0);
+async function createReturnShip(o, b) {
+  const c = cdekCfg(), sp = c.shipmentPoint, rt = c.returnTo || {}, cs = db.settings.contacts || {};
+  if (!sp || !sp.code) fail(400, 'Укажите пункт отгрузки в «Отправка заказов в СДЭК» — туда придёт возврат');
+  const shopPhone = normPhone(rt.phone || cs.phone || '');
+  if (shopPhone.length !== 11) fail(400, 'Укажите телефон для возвратов в «Отправка заказов в СДЭК» — СДЭК позвонит, когда посылка придёт');
+  const shopName = String(rt.name || String(db.settings.legal || '').split(/[,\n]/)[0] || db.settings.storeName || 'ALBAKOV').slice(0, 120);
+  const pv = o.delivery && o.delivery.pvz, dr = o.delivery && o.delivery.door, fromCity = (pv && pv.cityCode) || (dr && dr.cityCode);
+  if (!fromCity) fail(400, 'Город покупателя неизвестен — оформите возврат в личном кабинете СДЭК');
+  const sel = [];
+  for (const x of Array.isArray(b.lines) ? b.lines : []) {
+    const idx = Number(x.idx), it = o.items[idx], q = Math.floor(Number(x.qty) || 0); if (!it || q <= 0) continue;
+    const can = it.qty - (it.refundedQty || 0) - returnedQty(o, idx);
+    if (q > can) fail(400, `«${it.name}»: можно вернуть не больше ${can} шт.`);
+    sel.push({ idx, qty: q });
+  }
+  if (!sel.length) fail(400, 'Отметьте вещи, которые покупатель возвращает');
+  const pkg = Pricing.parcelFor(sel.map((x) => ({ productId: o.items[x.idx].productId, qty: x.qty })), db.products, c);
+  // откуда: пункт, где покупатель забирал заказ, или любой пункт в его городе (сдать можно в любой)
+  let from = pv && pv.code;
+  if (!from) { const pts = await cdek.points(fromCity).catch(() => []); const p0 = pts.find((p) => p.type === 'pvz'); if (!p0) fail(400, 'В городе покупателя нет пунктов СДЭК'); from = p0.code; }
+  let cost = 0, tariff = Number(c.tariff) || 136;
+  try { const r = await cdekCalcAny(fromCity, sp.cityCode, 'pvz', pkg); cost = Math.ceil(r.sum); tariff = r.tariff; } catch (e) { /* стоимость не узнали — заявку всё равно создаём */ }
+  const n = (o.returns || []).length + 1;
+  const body = {
+    type: 1, is_client_return: true, number: 'ALB-' + o.number + '-R' + n + (o.returnTry ? '-' + o.returnTry : ''), tariff_code: tariff,
+    shipment_point: from, delivery_point: sp.code,
+    sender: { name: `${o.customer.lastName} ${o.customer.firstName}`.trim(), phones: [{ number: '+' + o.customer.phone }] },
+    recipient: { name: shopName, phones: [{ number: '+' + shopPhone }] },
+    packages: [{ number: '1', weight: pkg.weight, length: pkg.length, width: pkg.width, height: pkg.height, comment: 'Возврат одежды',
+      items: sel.map((x) => { const it = o.items[x.idx]; return { name: `${it.name}${it.color ? ', ' + it.color : ''}, ${it.size}`.slice(0, 255), ware_key: `${it.productId}-${it.size}`.slice(0, 50), payment: { value: 0 }, cost: it.price, weight: Math.max(1, Math.floor(pkg.weight / sel.reduce((s, y) => s + y.qty, 0))), amount: x.qty }; }) }],
+    comment: 'Возврат по заказу № ' + o.number
+  };
+  let uuid;
+  try { uuid = await cdek.createOrder(body); } catch (e) { o.returnTry = (o.returnTry || 0) + 1; save(); fail(502, 'СДЭК: ' + e.message); }
+  const ret = { uuid, number: '', status: 'ACCEPTED', statusName: 'Заявка принята', createdAt: new Date().toISOString(), cost, from, items: sel.map((x) => ({ idx: x.idx, name: o.items[x.idx].name, color: o.items[x.idx].color || '', size: o.items[x.idx].size, qty: x.qty })) };
+  o.returns = o.returns || []; o.returns.push(ret); save();
+  for (let i = 0; i < 4 && !ret.number; i++) { await new Promise((r) => setTimeout(r, 1500)); try { await syncReturns(o); } catch (e) { /* дождёмся уведомления */ } }
+  if (ret.error) { o.returns = o.returns.filter((x) => x !== ret); save(); fail(400, 'СДЭК отклонил заявку: ' + ret.error); }
+  return ret;
+}
+async function syncReturns(o) {
+  for (const r of o.returns || []) {
+    if (!r.uuid || r.status === 'DELIVERED' || r.status === 'REMOVED') continue;
+    const info = await cdek.order(r.uuid);
+    Object.assign(r, { number: info.number || r.number, status: info.status || r.status, statusName: info.statusName || r.statusName, statusAt: info.statusAt || r.statusAt, error: info.error || '' });
+    if (r.number && !r.mailedAt && mailReady()) { try { await sendReturnShipMail(o, r); r.mailedAt = new Date().toISOString(); } catch (e) { console.error('Письмо о возврате не отправлено:', e.message); } }
+  }
+  save();
+}
 async function syncCdek(o) {
   if (!o.cdek || !o.cdek.uuid || !cdek.ready()) return;
   await applyCdek(o, await cdek.order(o.cdek.uuid));
@@ -312,7 +363,7 @@ function receiptCustomer(order) { return { email: order.customer.email, phone: o
 const refundedK = (o) => (o.refunds || []).filter((r) => r.status !== 'canceled').reduce((s, r) => s + Math.round(r.amount * 100), 0);
 // Сколько вернуть за выбранные товары и доставку. Доля позиции считается так, чтобы частичные возвраты в сумме дали ровно её стоимость
 function refundPlan(o, b) {
-  const n = netLines(o), sel = [], { cfg } = yk(), vat = Number(cfg.vatCode) || 1, items = [];
+  const n = netLines(o), sel = [], { cfg } = yk(), vat = Number(cfg.vatCode) || 1, items = [], parts = [];
   let amountK = 0;
   for (const x of Array.isArray(b.lines) ? b.lines : []) {
     const l = n.lines[Number(x.idx)], q = Math.floor(Number(x.qty) || 0); if (!l || q <= 0) continue;
@@ -320,17 +371,23 @@ function refundPlan(o, b) {
     if (q > l.qty - done) fail(400, `«${o.items[l.idx].name}»: можно вернуть не больше ${l.qty - done} шт.`);
     const k = Math.round(l.totalK * (done + q) / l.qty) - Math.round(l.totalK * done / l.qty);
     sel.push({ idx: l.idx, qty: q }); amountK += k;
-    if (k > 0) pushReceipt(items, l.name, q, k, 'commodity', vat);
+    if (k > 0) parts.push({ name: l.name, q, k, subject: 'commodity' });
   }
   let delivK = 0;
   if (b.delivery) {
     if (o.deliveryRefunded) fail(400, 'Доставка уже возвращена');
     delivK = n.delivK; amountK += delivK;
-    if (delivK > 0) pushReceipt(items, 'Доставка: ' + n.deliveryName, 1, delivK, 'service', vat);
+    if (delivK > 0) parts.push({ name: 'Доставка: ' + n.deliveryName, q: 1, k: delivK, subject: 'service' });
   }
   const leftK = Math.round(o.total * 100) - refundedK(o);
   amountK = Math.min(amountK, leftK);
-  return { sel, delivery: !!b.delivery && delivK >= 0, amountK, leftK, items, sendReceipt: !!cfg.sendReceipt };
+  // Удержание за обратную доставку СДЭК: уменьшаем позиции чека, начиная с самой дорогой
+  let deductK = Math.max(0, Math.min(Math.round((Number(b.deduct) || 0) * 100), amountK - 100));
+  const deducted = deductK;
+  parts.sort((a, c) => c.k - a.k).forEach((x) => { const cut = Math.min(deductK, x.k - x.q); if (cut > 0) { x.k -= cut; deductK -= cut; } });
+  amountK -= deducted - deductK;
+  parts.forEach((x) => pushReceipt(items, x.name, x.q, x.k, x.subject, vat));
+  return { sel, delivery: !!b.delivery && delivK >= 0, amountK, leftK, items, sendReceipt: !!cfg.sendReceipt, deducted: (deducted - deductK) / 100 };
 }
 // Возврат из кабинета ЮKassa (без выбора товаров): записываем сумму и меняем статус
 function recordRefund(r) {
@@ -349,7 +406,7 @@ async function refundOrder(o, b) {
   const plan = refundPlan(o, b);
   if (!plan.sel.length && !plan.delivery) fail(400, 'Отметьте товары или доставку, за которые возвращаете деньги');
   if (plan.amountK <= 0) fail(400, 'Сумма возврата получилась 0 ₽ — эти позиции были оплачены бонусами');
-  if (b.dry) return { amount: plan.amountK / 100, left: plan.leftK / 100 };
+  if (b.dry) return { amount: plan.amountK / 100, left: plan.leftK / 100, deducted: plan.deducted };
   const key = String(b.key || '').replace(/[^\w-]/g, '').slice(0, 60);
   if (!key) fail(400, 'Обновите страницу и повторите возврат');
   const body = { payment_id: o.payment.providerId, amount: { value: rub(plan.amountK), currency: 'RUB' }, description: `Возврат по заказу № ${o.number}`.slice(0, 250) };
@@ -362,8 +419,10 @@ async function refundOrder(o, b) {
   if ((o.refunds || []).some((x) => x.id === r.id)) return { refund: o.refunds.find((x) => x.id === r.id), repeated: true };
   const refund = {
     id: r.id, status: r.status, amount: plan.amountK / 100, at: new Date().toISOString(), reason: String(b.reason || '').trim().slice(0, 300),
-    items: plan.sel.map((x) => ({ name: o.items[x.idx].name, color: o.items[x.idx].color || '', size: o.items[x.idx].size, qty: x.qty })), delivery: plan.delivery, restocked: !!b.restock
+    items: plan.sel.map((x) => ({ name: o.items[x.idx].name, color: o.items[x.idx].color || '', size: o.items[x.idx].size, qty: x.qty })), delivery: plan.delivery, restocked: !!b.restock,
+    deducted: plan.deducted || 0
   };
+  if (plan.deducted && Array.isArray(o.returns)) o.returns.forEach((r) => { if (r.cost && !r.deducted) r.deducted = true; });
   o.refunds = o.refunds || []; o.refunds.push(refund);
   plan.sel.forEach((x) => {
     const it = o.items[x.idx]; it.refundedQty = (it.refundedQty || 0) + x.qty;
@@ -619,6 +678,12 @@ function sendOrderMails(order) {
 
 /* ---------------- Трек-номер ---------------- */
 const CDEK_TRACK = 'https://www.cdek.ru/ru/tracking/?order_id=';
+function sendReturnShipMail(o, r) {
+  const cs = db.settings.contacts || {}, sp = cdekCfg().shipmentPoint || {};
+  const m = Mail.renderReturnShip({ store: db.settings.storeName, logo: brandLogo(), name: o.customer.firstName, number: o.number, track: r.number, items: r.items,
+    to: [sp.address, sp.city].filter(Boolean).join(', '), cost: r.cost, url: `${PUBLIC_URL}/#/order/${o.id}`, contacts: [cs.phone, cs.email].filter(Boolean).join(' · ') });
+  return sendMail({ to: o.customer.email, subject: m.subject, html: m.html, text: m.text });
+}
 function sendRefundMail(o, r) {
   const cs = db.settings.contacts || {};
   const m = Mail.renderRefund({ store: db.settings.storeName, logo: brandLogo(), name: o.customer.firstName, number: o.number, amount: r.amount, items: r.items, delivery: r.delivery,
@@ -922,6 +987,8 @@ async function api(req, res, url, body) {
     const uuid = body && (body.uuid || (body.attributes && body.attributes.uuid));
     const o = uuid && db.orders.find((x) => x.cdek && x.cdek.uuid === uuid);
     if (o) { try { await syncCdek(o); } catch (e) { console.error('СДЭК:', e.message); } }
+    const ro = uuid && db.orders.find((x) => (x.returns || []).some((r) => r.uuid === uuid));
+    if (ro) { try { await syncReturns(ro); } catch (e) { console.error('СДЭК возврат:', e.message); } }
     return {};
   }
   // Подсказки населённых пунктов и пункты выдачи СДЭК
@@ -1005,6 +1072,7 @@ async function api(req, res, url, body) {
         const n = (v, lo, hi) => Math.min(hi, Math.max(lo, Math.round(Number(v) || 0)));
         db.settings.cdek.packs = body.packs.slice(0, 12).map((x, i) => ({ id: String(x.id || 'pk' + i).replace(/[^\w-]/g, '').slice(0, 20) || 'pk' + i, name: String(x.name || 'Упаковка').slice(0, 40), length: n(x.length, 1, 150), width: n(x.width, 1, 150), height: n(x.height, 1, 150), weight: n(x.weight, 0, 5000) }));
       }
+      if (body.returnTo && typeof body.returnTo === 'object') db.settings.cdek.returnTo = { name: String(body.returnTo.name || '').trim().slice(0, 120), phone: normPhone(body.returnTo.phone || '') };
       if (typeof body.defaultPack === 'string') db.settings.cdek.defaultPack = body.defaultPack.slice(0, 20);
       if (body.services) db.settings.cdek.services = { partDeliv: !!body.services.partDeliv, tryOn: !!body.services.tryOn };
       save();
@@ -1058,7 +1126,7 @@ async function api(req, res, url, body) {
       return { log };
     }
     // Отправление СДЭК: создать, обновить статус, отменить, распечатать
-    if (p[1] === 'orders' && p[2] && /^cdek/.test(p[3] || '')) {
+    if (p[1] === 'orders' && p[2] && /^(cdek|return)/.test(p[3] || '')) {
       const o = db.orders.find((x) => x.id === p[2]); if (!o) fail(404, 'Заказ не найден');
       if (!cdek.ready()) fail(400, 'СДЭК не подключён — введите ключи в «Оплата и доставка»');
       if (p[3] === 'cdek' && M === 'POST') {
@@ -1077,6 +1145,14 @@ async function api(req, res, url, body) {
         for (let i = 0; i < 4 && !o.cdek.number; i++) { await new Promise((r) => setTimeout(r, 1500)); try { await syncCdek(o); } catch (e) { /* дождёмся уведомления */ } }
         if (o.cdek.error) { const err = o.cdek.error; delete o.cdek; save(); fail(400, 'СДЭК отклонил заявку: ' + err); }
         return { order: orderView(o) };
+      }
+      if (p[3] === 'return-ship' && M === 'POST') { const r = await createReturnShip(o, body); return { order: orderView(o), ret: r }; }
+      if (p[3] === 'return-sync' && M === 'POST') { try { await syncReturns(o); } catch (e) { fail(502, 'СДЭК: ' + e.message); } return { order: orderView(o) }; }
+      if (p[3] === 'return-cancel' && M === 'POST') {
+        const r = (o.returns || []).find((x) => x.uuid === body.uuid); if (!r) fail(404, 'Возврат не найден');
+        if (!CDEK_WAIT.includes(r.status)) fail(400, 'Посылка уже у СДЭК — отменить можно только через СДЭК');
+        try { await cdek.cancel(r.uuid); } catch (e) { fail(502, 'СДЭК: ' + e.message); }
+        o.returns = o.returns.filter((x) => x !== r); save(); return { order: orderView(o) };
       }
       if (p[3] === 'cdek-sync' && M === 'POST') {
         if (!o.cdek) fail(400, 'Отправления нет');

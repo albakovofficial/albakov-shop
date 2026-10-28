@@ -397,6 +397,15 @@ function sendOrderMails(order) {
   Promise.allSettled(jobs).then((r) => r.forEach((x) => { if (x.status === 'rejected') console.error('Письмо о заказе не отправлено:', x.reason && x.reason.message); }));
 }
 
+/* ---------------- Трек-номер ---------------- */
+const CDEK_TRACK = 'https://www.cdek.ru/ru/tracking/?order_id=';
+function sendTrackingMail(o) {
+  const cs = db.settings.contacts || {};
+  const m = Mail.renderTracking({ store: db.settings.storeName, logo: brandLogo(), name: o.customer.firstName, number: o.number, carrier: o.tracking.carrier, track: o.tracking.number,
+    trackUrl: o.tracking.url, url: `${PUBLIC_URL}/#/order/${o.id}`, contacts: [cs.phone, cs.email].filter(Boolean).join(' · ') });
+  return sendMail({ to: o.customer.email, subject: m.subject, html: m.html, text: m.text });
+}
+
 /* ---------------- Поддержка: переписка покупателя с магазином ---------------- */
 const SUPPORT_TOPICS = ['Заказ', 'Доставка', 'Размер и посадка', 'Возврат и обмен', 'Другое'];
 const ticketText = (v) => String(v || '').replace(/\r\n?/g, '\n').trim().slice(0, 2000);
@@ -777,9 +786,25 @@ async function api(req, res, url, body) {
         o.status = body.status;
       }
       if (body.paymentStatus && pays.includes(body.paymentStatus)) o.payment.status = body.paymentStatus;
+      // Трек-номер СДЭК: сохраняем, ставим «Передан в доставку» и пишем покупателю
+      let tracked = false;
+      if (typeof body.track === 'string') {
+        const t = body.track.replace(/\s+/g, '').slice(0, 40);
+        if (t && !/^[A-Za-z0-9-]{4,40}$/.test(t)) fail(400, 'Трек-номер: только цифры и латинские буквы');
+        const prev = o.tracking && o.tracking.number;
+        if (!t) delete o.tracking;
+        else if (t !== prev) {
+          o.tracking = { carrier: 'СДЭК', number: t, url: CDEK_TRACK + encodeURIComponent(t), at: new Date().toISOString() };
+          if (o.status === 'new' || o.status === 'processing') o.status = 'shipped';
+          tracked = true;
+        }
+      }
       if (typeof body.note === 'string') o.adminNote = body.note.slice(0, 2000);
       syncBonus(o);
-      save(); const notify = await processWaitlist(); return { order: orderView(o), notify };
+      save();
+      let mailed = false;
+      if (tracked && body.notify !== false && mailReady()) { try { await sendTrackingMail(o); o.tracking.mailedAt = new Date().toISOString(); save(); mailed = true; } catch (e) { console.error('Письмо с трек-номером не отправлено:', e.message); } }
+      const notify = await processWaitlist(); return { order: orderView(o), notify, trackMailed: mailed };
     }
     if (p[1] === 'users' && p[2] && p[3] === 'bonus' && M === 'POST') {
       // Ручная корректировка баланса: +начислить, −списать (не ниже нуля)

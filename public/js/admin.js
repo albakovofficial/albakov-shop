@@ -288,6 +288,11 @@
         (o.bonusEarn ? '<div class="sum-row"><span class="muted">Бонусы за заказ: ' + (o.bonusCredited ? 'начислены' : o.status === 'canceled' ? 'не начисляются — заказ отменён' : 'начислятся ' + (Pricing.bonusConf(DATA.settings).creditOn === 'done' ? 'когда заказ будет выполнен' : 'после оплаты')) + '</span><span class="num">+' + o.bonusEarn + '</span></div>' : '') + '</div>' +
       '<div style="display:grid;gap:16px;align-content:start"><div class="adm-card" style="display:grid;gap:8px"><h3 class="adm-h3">Покупатель</h3><b>' + esc(c.firstName + ' ' + c.lastName) + '</b><span class="copyable">' + esc(A().fmtPhone(c.phone)) + '</span><span class="copyable">' + esc(c.email) + '</span>' + (o.userId ? '<span class="muted" style="font-size:14px">Зарегистрированный покупатель</span>' : '<span class="muted" style="font-size:14px">Без регистрации</span>') + '</div>' +
         '<div class="adm-card" style="display:grid;gap:8px"><h3 class="adm-h3">Доставка</h3><span>' + esc(d.name || '—') + '</span>' + (d.city || d.address ? '<span class="copyable">' + esc([d.city, d.address].filter(Boolean).join(', ')) + '</span>' : '') + (o.comment ? '<span class="muted">Комментарий: ' + esc(o.comment) + '</span>' : '') + '</div>' +
+        '<div class="adm-card adm-form trk-card" style="grid-template-columns:1fr"><h3 class="adm-h3">Отправка СДЭК</h3>' +
+          (o.tracking ? '<div class="trk-now"><span>Трек-номер</span><b class="copyable">' + esc(o.tracking.number) + '</b><a class="link" href="' + esc(o.tracking.url) + '" target="_blank" rel="noopener">Отследить</a>' +
+            '<small>' + (o.tracking.mailedAt ? 'Письмо покупателю отправлено ' + esc(new Date(o.tracking.mailedAt).toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })) : 'Письмо покупателю не отправлялось') + '</small></div>' : '') +
+          '<label class="field"><span>' + (o.tracking ? 'Изменить трек-номер' : 'Трек-номер СДЭК') + '</span><input class="input num" id="f-track" value="' + esc(o.tracking ? o.tracking.number : '') + '" placeholder="Например, 1234567890" autocomplete="off" inputmode="numeric"></label>' +
+          '<p class="muted" style="font-size:13px;margin:0">После «Сохранить» покупатель получит письмо со ссылкой для отслеживания, а заказ станет «Передан в доставку». Номер также появится у покупателя на странице заказа.</p></div>' +
         '<div class="adm-card adm-form" style="grid-template-columns:1fr"><h3 class="adm-h3">Статус</h3>' +
           fieldHtml({ k: 'status', label: 'Статус заказа', type: 'select', options: Object.keys(A().STATUS).map(function (k) { return [k, A().STATUS[k]]; }) }, o) +
           fieldHtml({ k: 'paymentStatus', label: 'Оплата (' + (o.payment.method === 'online' ? 'онлайн' : o.payment.method === 'bonus' ? 'бонусами' : 'при получении') + ')', type: 'select', options: Object.keys(A().PAY).map(function (k) { return [k, A().PAY[k]]; }) }, { paymentStatus: o.payment.status }) +
@@ -298,7 +303,11 @@
       try { await A().API.adminOrderDelete(o.id); await afterSave('Заказ № ' + o.number + ' удалён', '#/admin?s=orders'); } catch (e) { toast(A().errMsg(e), true); }
     });
     $('#oSave').addEventListener('click', async function () {
-      try { var r = await A().API.adminOrder(o.id, { status: $('#f-status').value, paymentStatus: $('#f-paymentStatus').value, note: $('#f-note').value }); await afterSave(notifyMsg('Заказ обновлён', r.notify), '#/admin?s=orders&id=' + o.id); }
+      var track = $('#f-track').value.replace(/\s+/g, '');
+      var patch = { paymentStatus: $('#f-paymentStatus').value, note: $('#f-note').value, track: track };
+      // если вводят новый трек-номер, статус ставит сервер («Передан в доставку»)
+      if (!(track && track !== (o.tracking && o.tracking.number))) patch.status = $('#f-status').value;
+      try { var r = await A().API.adminOrder(o.id, patch); await afterSave(notifyMsg(r.trackMailed ? 'Трек-номер сохранён, покупателю отправлено письмо' : track && track !== (o.tracking && o.tracking.number) ? 'Трек-номер сохранён. Письмо не отправлено — проверьте настройки почты' : 'Заказ обновлён', r.notify), '#/admin?s=orders&id=' + o.id); }
       catch (e) { toast(A().errMsg(e), true); }
     });
   }

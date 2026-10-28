@@ -219,7 +219,22 @@
     return { subject: subject, html: frame(ctx, subject, String(ctx.text).slice(0, 90), inner, footer), text: text };
   }
 
-  var api = { renderSupport: renderSupport, DEFAULT_NOTIFY: DEFAULT_NOTIFY, PLACEHOLDERS: PLACEHOLDERS, tplOf: tplOf, readyRequests: readyRequests, render: render, renderOrder: renderOrder, renderCode: renderCode, renderWelcome: renderWelcome };
+  /* Заказ передан в доставку. ctx: { store, logo, name, number, carrier, track, trackUrl, url, contacts } */
+  function renderTracking(ctx) {
+    var subject = 'Заказ № ' + ctx.number + ' отправлен — трек-номер ' + ctx.track;
+    var box = '<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:24px auto 0;"><tr><td align="center" style="border:1px solid #121417;padding:16px 28px;font-family:' + SANS + ';">' +
+      '<div style="font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#464B52;">Трек-номер ' + esc(ctx.carrier) + '</div>' +
+      '<div style="margin-top:8px;font-size:24px;font-weight:600;letter-spacing:3px;color:#121417;">' + esc(ctx.track) + '</div></td></tr></table>';
+    var inner = eyebrow('Заказ в пути') + h1((ctx.name ? ctx.name + ', ваш заказ' : 'Ваш заказ') + ' отправлен') +
+      para('Заказ № ' + esc(ctx.number) + ' передан в ' + esc(ctx.carrier) + '. По трек-номеру можно следить, где посылка, и узнать, когда она прибудет.') +
+      box + button('Отследить посылку', ctx.trackUrl) +
+      para('<a href="' + esc(ctx.url) + '" style="color:#121417;">Открыть заказ на сайте</a>', 'margin:22px 0 0;font-size:14px;');
+    var footer = 'Если появятся вопросы по доставке, ответьте на это письмо или напишите в поддержку в личном кабинете.' + (ctx.contacts ? '<br>' + esc(ctx.contacts) : '');
+    var text = 'Заказ № ' + ctx.number + ' отправлен через ' + ctx.carrier + '.\nТрек-номер: ' + ctx.track + '\nОтследить: ' + ctx.trackUrl + '\n\nЗаказ на сайте: ' + ctx.url;
+    return { subject: subject, html: frame(ctx, subject, 'Трек-номер ' + ctx.track + ' — отследите посылку', inner, footer), text: text };
+  }
+
+  var api = { renderTracking: renderTracking, renderSupport: renderSupport, DEFAULT_NOTIFY: DEFAULT_NOTIFY, PLACEHOLDERS: PLACEHOLDERS, tplOf: tplOf, readyRequests: readyRequests, render: render, renderOrder: renderOrder, renderCode: renderCode, renderWelcome: renderWelcome };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Mail = api;
 })(this);

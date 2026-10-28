@@ -490,7 +490,7 @@
     var cards = h.benefits.map(function (b, i) {
       var ic = benefitIcon(b);
       return '<div class="benefit' + (ic ? '' : ' no-ico') + '" style="--i:' + i + (ic ? ';--glow:' + BENEFIT_ICONS[ic] : '') + '">' +
-        (ic ? '<div class="benefit-ico"><img src="img/benefits/' + ic + '.webp?v=13.14.0" alt="" width="160" height="160" loading="lazy" decoding="async"></div>' : '') +
+        (ic ? '<div class="benefit-ico"><img src="img/benefits/' + ic + '.webp?v=13.16.0" alt="" width="160" height="160" loading="lazy" decoding="async"></div>' : '') +
         '<div class="benefit-body"><h3>' + glue(b.title) + '</h3>' + (b.text ? '<p>' + glue(b.text) + '</p>' : '') + '</div></div>';
     }).join('');
     return '<section class="section benefits-sec"><div class="wrap">' + head + '<div class="benefits">' + cards + '</div></div></section>';
@@ -985,6 +985,11 @@
   var cartPageDraw = null;
 
   /* ---------- Оформление заказа ---------- */
+  function optIc(n) { return '<span class="opt-ic"><img src="img/benefits/' + n + '.webp?v=13.16.0" alt="" width="48" height="48" decoding="async"></span>'; }
+  function coStep(n, id, title, hint, body) {
+    return '<section class="cstep" id="cs-' + id + '"><header class="cstep-head"><span class="cstep-n" aria-hidden="true"><i>' + n + '</i><svg viewBox="0 0 24 24"><path d="m6 12.5 4 4 8-9"/></svg></span>' +
+      '<div><h3>' + title + '</h3><p>' + hint + '</p></div></header><div class="cstep-body">' + body + '</div></section>';
+  }
   function checkout(v) {
     if (!Cart.get().length) { v.innerHTML = '<div class="wrap"><div class="empty"><h3>Корзина пуста</h3><a class="btn ghost" href="#/catalog">В каталог</a></div></div>'; return; }
     var s = D.settings, u = API.user || {}, methods = (s.delivery && s.delivery.methods) || [], pay = Object.assign({}, s.payment || {});
@@ -992,36 +997,54 @@
     var st = { deliveryId: methods[0] && methods[0].id, payment: pay.online ? 'online' : 'cod', code: '', useBonus: false };
     v.innerHTML = '<div class="wrap"><div class="page-head"><div class="crumbs"><a href="#/cart">Корзина</a><span>/</span><span>Оформление</span></div><h1>Оформление заказа</h1></div>' +
       '<form class="checkout" id="coForm" novalidate><div>' +
-      (!API.user ? '<div class="demo-note" style="margin-bottom:32px"><a class="link" href="#/account?back=checkout">Войдите</a> или зарегистрируйтесь, чтобы копить бонусы, видеть историю заказов и пользоваться промокодами для постоянных покупателей. Можно оформить и без регистрации.</div>' : '') +
-      '<div class="step"><h3>Покупатель</h3><div class="row2">' +
-        '<label class="field"><span>Имя</span><input class="input" id="co-first" autocomplete="given-name" value="' + esc(u.firstName || '') + '"></label>' +
-        '<label class="field"><span>Фамилия</span><input class="input" id="co-last" autocomplete="family-name" value="' + esc(u.lastName || '') + '"></label>' +
+      (!API.user ? '<div class="co-login"><span class="co-login-ic" aria-hidden="true">Б</span><p><b>Уже покупали у нас?</b> <a class="link" href="#/account?back=checkout">Войдите</a>, чтобы копить бонусы и видеть историю заказов. Можно оформить и без регистрации.</p></div>' : '') +
+      '<div class="csteps">' +
+      coStep(1, 'buyer', 'Покупатель', 'Для связи по заказу и электронного чека',
+        '<div class="row2">' +
+        '<label class="field"><span>Имя</span><input class="input" id="co-first" autocomplete="given-name" placeholder="Иван" value="' + esc(u.firstName || '') + '"></label>' +
+        '<label class="field"><span>Фамилия</span><input class="input" id="co-last" autocomplete="family-name" placeholder="Иванов" value="' + esc(u.lastName || '') + '"></label>' +
         '<label class="field"><span>Телефон</span><input class="input" id="co-phone" type="tel" autocomplete="tel" placeholder="+7 (___) ___-__-__" value="' + esc(fmtPhone(u.phone)) + '"></label>' +
-        '<label class="field"><span>Электронная почта</span><input class="input" id="co-email" type="email" autocomplete="email" value="' + esc(u.email || '') + '"></label></div></div>' +
-      '<div class="step"><h3>Доставка</h3><div class="options" id="delivOpts"></div><div class="row2" id="addrBox">' +
-        '<label class="field"><span>Город</span><input class="input" id="co-city" autocomplete="address-level2"></label>' +
-        '<label class="field"><span>Адрес или пункт выдачи</span><input class="input" id="co-addr" autocomplete="street-address"></label></div>' +
-        '<label class="field"><span>Комментарий к заказу</span><textarea class="textarea" id="co-comment" rows="2"></textarea></label></div>' +
-      '<div class="step" style="border:0"><h3>Оплата</h3><div class="options" id="payOpts">' +
-        (pay.online ? '<label class="option"><input type="radio" name="pay" value="online"><span><b>' + esc(pay.onlineLabel || 'Онлайн') + '</b><small>Чек придёт на электронную почту</small></span><span></span></label>' : '') +
+        '<label class="field"><span>Электронная почта</span><input class="input" id="co-email" type="email" autocomplete="email" placeholder="mail@example.ru" value="' + esc(u.email || '') + '"></label></div>') +
+      coStep(2, 'deliv', 'Доставка', 'Выберите способ и укажите, куда привезти',
+        '<div class="options" id="delivOpts"></div>' +
+        '<div class="co-addr" id="addrBox"><div class="row2">' +
+        '<label class="field"><span>Город</span><input class="input" id="co-city" autocomplete="address-level2" placeholder="Москва"></label>' +
+        '<label class="field"><span>Адрес или пункт выдачи СДЭК</span><input class="input" id="co-addr" autocomplete="street-address" placeholder="Улица, дом или адрес ПВЗ"></label></div></div>' +
+        '<details class="co-comment"' + '><summary>Добавить комментарий к заказу</summary><textarea class="textarea" id="co-comment" rows="2" placeholder="Например, удобное время для звонка"></textarea></details>') +
+      coStep(3, 'pay', 'Оплата', 'Оплатите заказ сразу после подтверждения',
+        '<div class="options" id="payOpts">' +
+        (pay.online ? '<label class="option ico"><input type="radio" name="pay" value="online">' + optIc('payment') + '<span><b>' + esc(pay.onlineLabel || 'Онлайн') + '</b><small>Быстро и безопасно через ЮKassa</small><span class="pay-marks" aria-label="Карта «Мир», СБП, SberPay, T-Pay"><i>МИР</i><i>СБП</i><i>SberPay</i><i>T-Pay</i></span></span><span></span></label>' : '') +
         (!pay.online && !pay.cod ? '<p class="demo-note">Оформление заказов временно недоступно — свяжитесь с нами по телефону из раздела «Контакты».</p>' : '') +
-        (pay.cod ? '<label class="option"><input type="radio" name="pay" value="cod"><span><b>' + esc(pay.codLabel || 'При получении') + '</b><small>Картой или наличными курьеру и в пункте выдачи</small></span><span></span></label>' : '') + '</div>' +
-        '<p class="demo-note bonus-paid" id="bonusPaid" hidden>Заказ полностью оплачен бонусами — платить ничего не нужно.</p>' +
-        '</div>' +
+        (pay.cod ? '<label class="option ico"><input type="radio" name="pay" value="cod">' + optIc('cash') + '<span><b>' + esc(pay.codLabel || 'При получении') + '</b><small>Картой или наличными курьеру и в пункте выдачи</small></span><span></span></label>' : '') + '</div>' +
+        (pay.online ? '<p class="co-secure" id="coSecure"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.5 3 8.3 7 10 4-1.7 7-5.5 7-10V6z"/><path d="m9 12 2 2 4-4"/></svg><span>После подтверждения откроется защищённая страница ЮKassa. Данные карты к нам не попадают, чек придёт на почту.</span></p>' : '') +
+        '<p class="demo-note bonus-paid" id="bonusPaid" hidden>Заказ полностью оплачен бонусами — платить ничего не нужно.</p>') +
+      '</div>' +
       '</div><aside class="summary"><h3 class="serif" style="font-size:28px">Ваш заказ</h3><div id="coSum"></div>' +
         '<div class="promo-form"><input class="input" id="co-code" placeholder="Промокод" autocomplete="off" aria-label="Промокод"><button type="button" class="btn ghost" id="applyCode">Применить</button></div><div class="promo-msg" id="promoMsg"></div>' +
         '<div id="coBonus"></div><div id="coTotals" style="display:grid;gap:10px"></div>' +
         // Оферта и согласие на обработку персональных данных — отдельными галочками (согласие по 152-ФЗ даётся отдельно от других документов)
         '<label class="check"><input type="checkbox" id="co-offer"> <span>Принимаю условия <a href="#/page/offer" data-page-modal="offer">публичной оферты</a></span></label>' +
         '<label class="check"><input type="checkbox" id="co-agree"> <span>Даю <a href="#/page/consent" data-page-modal="consent">согласие на обработку персональных данных</a></span></label>' +
-        '<p class="form-error" id="coErr"></p><button class="btn block" id="coSubmit" type="submit">Подтвердить заказ</button></aside></form></div>';
+        '<p class="form-error" id="coErr"></p><button class="btn block" id="coSubmit" type="submit">' + (st.payment === 'online' ? 'Оплатить заказ' : 'Подтвердить заказ') + '</button></aside></form></div>';
     phoneMask($('#co-phone'));
 
     function drawOpts() {
-      $('#delivOpts').innerHTML = methods.map(function (m) { return '<label class="option' + (st.deliveryId === m.id ? ' on' : '') + '"><input type="radio" name="deliv" value="' + esc(m.id) + '"' + (st.deliveryId === m.id ? ' checked' : '') + '><span><b>' + esc(m.name) + '</b><small>' + esc(m.desc || '') + (m.freeFrom ? ' · бесплатно от ' + fmt(m.freeFrom) : '') + '</small></span><span class="num" data-dp="' + esc(m.id) + '"></span></label>'; }).join('');
+      $('#delivOpts').innerHTML = methods.map(function (m) { return '<label class="option ico' + (st.deliveryId === m.id ? ' on' : '') + '"><input type="radio" name="deliv" value="' + esc(m.id) + '"' + (st.deliveryId === m.id ? ' checked' : '') + '>' + optIc(m.needsAddress === false ? 'pin' : 'delivery') + '<span><b>' + esc(m.name) + '</b><small>' + esc(m.desc || '') + (m.freeFrom ? ' · бесплатно от ' + fmt(m.freeFrom) : '') + '</small></span><span class="num opt-price" data-dp="' + esc(m.id) + '"></span></label>'; }).join('');
       $$('#payOpts .option').forEach(function (o) { var i = $('input', o); i.checked = i.value === st.payment; o.classList.toggle('on', i.checked); });
       var m = methods.find(function (x) { return x.id === st.deliveryId; });
       $('#addrBox').hidden = !(m && m.needsAddress !== false);
+      if ($('#coSecure')) $('#coSecure').hidden = st.payment !== 'online' || st.free;
+      submitLabel(); coProgress();
+    }
+    function submitLabel() { var b = $('#coSubmit'); if (b && !b.disabled) b.textContent = st.payment === 'online' && !st.free ? 'Оплатить заказ' : 'Подтвердить заказ'; }
+    // Шаг отмечается галочкой, когда в нём всё заполнено
+    function coProgress() {
+      var ph = String($('#co-phone').value).replace(/\D/g, ''), em = $('#co-email').value.trim();
+      var buyer = $('#co-first').value.trim() && ph.length === 11 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em);
+      var m = methods.find(function (x) { return x.id === st.deliveryId; });
+      var deliv = m && (m.needsAddress === false || ($('#co-city').value.trim() && $('#co-addr').value.trim()));
+      var payOk = !!$('#payOpts input:checked') || !$('#payOpts').children.length || $('#payOpts').hidden;
+      [['buyer', buyer], ['deliv', deliv], ['pay', payOk && $('#payOpts').children.length]].forEach(function (x) { $('#cs-' + x[0]).classList.toggle('done', !!x[1]); });
     }
     async function drawSum() {
       var contact = { email: $('#co-email').value, phone: $('#co-phone').value };
@@ -1050,10 +1073,12 @@
         box.innerHTML = '<p class="bonus-guest"><i class="b-ic" aria-hidden="true">Б</i><span><a class="link" href="#/account?back=checkout">Войдите</a> — и получите +' + bonusNum(q.bonusEarn) + ' ' + bonusWord(q.bonusEarn) + ' за этот заказ</span></p>';
       } else box.innerHTML = '';
       var free = q.lines.length && q.total === 0;
-      $('#bonusPaid').hidden = !free; $('#payOpts').hidden = free;
+      $('#bonusPaid').hidden = !free; $('#payOpts').hidden = free; st.free = free;
+      submitLabel(); if ($('#coSecure')) $('#coSecure').hidden = st.payment !== 'online' || free;
       return q;
     }
     drawOpts(); drawSum();
+    ['#co-first', '#co-phone', '#co-email', '#co-city', '#co-addr'].forEach(function (q) { $(q).addEventListener('input', coProgress); });
     $('#delivOpts').addEventListener('change', function (e) { st.deliveryId = e.target.value; drawOpts(); drawSum(); });
     $('#coBonus').addEventListener('change', function (e) { if (e.target.id === 'co-bonus') { st.useBonus = e.target.checked; drawSum(); } });
     $('#payOpts').addEventListener('change', function (e) { st.payment = e.target.value; drawOpts(); });
@@ -1079,13 +1104,13 @@
       if (!$('#co-offer').checked) { err.textContent = 'Примите условия публичной оферты'; return; }
       if (!$('#co-agree').checked) { err.textContent = 'Нужно согласие на обработку персональных данных'; return; }
       err.textContent = '';
-      var btn = $('#coSubmit'); btn.disabled = true; btn.textContent = 'Оформляем…';
+      var btn = $('#coSubmit'); btn.disabled = true; btn.textContent = st.payment === 'online' && !st.free ? 'Переходим к оплате…' : 'Оформляем…';
       try {
         var r = await API.placeOrder({ lines: Cart.get(), code: st.code, deliveryId: st.deliveryId, payment: st.payment, useBonus: st.useBonus, customer: f, city: needAddr ? $('#co-city').value.trim() : '', address: needAddr ? $('#co-addr').value.trim() : '', comment: $('#co-comment').value.trim(), consent: true });
         Cart.clear();
         if (r.payUrl) { location.href = r.payUrl; return; }
         go('#/order/' + r.order.id);
-      } catch (ex) { err.textContent = errMsg(ex); btn.disabled = false; btn.textContent = 'Подтвердить заказ'; drawSum(); }
+      } catch (ex) { err.textContent = errMsg(ex); btn.disabled = false; drawSum(); }
     });
   }
 
@@ -1099,6 +1124,12 @@
   }
 
   /* ---------- Заказ ---------- */
+  // Трек-номер: номер крупно, копирование, ссылка на отслеживание в СДЭК
+  function trackHtml(o) {
+    var t = o.tracking; if (!t) return '';
+    return '<div class="trk"><div class="trk-l"><span>Трек-номер ' + esc(t.carrier || 'СДЭК') + '</span><b class="num">' + esc(t.number) + '</b></div>' +
+      '<div class="trk-a"><button type="button" class="btn ghost sm" data-copy-track="' + esc(t.number) + '">Скопировать</button><a class="btn sm" href="' + esc(t.url) + '" target="_blank" rel="noopener">Отследить посылку</a></div></div>';
+  }
   async function orderPage(v, parts) {
     v.innerHTML = '<div class="loader">…</div>';
     try {
@@ -1107,6 +1138,7 @@
       v.innerHTML = '<div class="wrap"><div class="success"><span class="eyebrow">Заказ № ' + esc(o.number) + '</span><h1>Спасибо за заказ</h1>' +
         '<p class="muted" style="max-width:46ch">' + (D.mailReady ? 'Подтверждение придёт на ' + esc(o.customer.email) + (o.payment.method === 'online' && o.payment.status !== 'paid' ? ' после оплаты' : '') + '. ' : '') + 'Мы свяжемся по телефону ' + esc(fmtPhone(o.customer.phone)) + ', чтобы согласовать доставку.</p>' +
         '<div style="display:flex;gap:18px;flex-wrap:wrap;justify-content:center"><span class="status ' + esc(o.status) + '">' + esc(STATUS[o.status] || o.status) + '</span><span class="status ' + esc(o.payment.status) + '">' + esc(payLabel) + '</span></div>' +
+        trackHtml(o) +
         '<div class="order-card" style="width:100%;text-align:left">' + o.items.map(function (i) { return '<div class="mini-line"><img src="' + esc(i.image || Art.make(i.art)) + '" alt=""><div><div>' + esc(i.name) + '</div><div class="sub">' + (i.color ? esc(i.color) + ' · ' : '') + esc(i.size) + ' · ' + i.qty + ' шт.</div></div><span class="num">' + fmt(i.price * i.qty) + '</span></div>'; }).join('') +
           (o.promoDiscount ? '<div class="sum-row disc"><span>Промокод ' + esc(o.promoCode) + '</span><span>−' + fmt(o.promoDiscount) + '</span></div>' : '') +
           '<div class="sum-row"><span>' + esc(o.delivery && o.delivery.name || 'Доставка') + '</span><span>' + (o.delivery && o.delivery.price ? fmt(o.delivery.price) : 'Бесплатно') + '</span></div>' +
@@ -1187,7 +1219,7 @@
       var thumbs = o.items.slice(0, 3).map(function (i) { return '<img src="' + esc(i.image || Art.make(i.art)) + '" alt="" loading="lazy">'; }).join('') + (o.items.length > 3 ? '<em>+' + (o.items.length - 3) + '</em>' : '');
       return '<a class="acc-order" href="#/order/' + esc(o.id) + '">' +
         '<div class="ao-thumbs">' + thumbs + '</div>' +
-        '<div class="ao-main"><div class="ao-top"><b>Заказ № ' + esc(o.number) + '</b><span>' + esc(fmtDate(o.createdAt).replace(/ \d{4} г\.$/, '')) + '</span>' + pay + '</div>' + orderTrack(o) + '</div>' +
+        '<div class="ao-main"><div class="ao-top"><b>Заказ № ' + esc(o.number) + '</b><span>' + esc(fmtDate(o.createdAt).replace(/ \d{4} г\.$/, '')) + '</span>' + pay + '</div>' + orderTrack(o) + (o.tracking && o.status !== 'canceled' ? '<span class="ao-trk">СДЭК: <b>' + esc(o.tracking.number) + '</b> · отследить на странице заказа</span>' : '') + '</div>' +
         '<div class="ao-sum"><b class="num">' + fmt(o.total) + '</b><span>' + n + ' ' + plural(n, 'вещь', 'вещи', 'вещей') + '</span></div>' +
       '</a>';
     }).join('') + '</div>';
@@ -1684,6 +1716,11 @@
     }
     window.addEventListener('scroll', function () { if (!ticking) { ticking = true; requestAnimationFrame(onScroll); } }, { passive: true });
     document.addEventListener('click', function (e) { if (e.target.closest('#toTop')) window.scrollTo({ top: 0, behavior: 'smooth' }); });
+    document.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-copy-track]'); if (!b) return;
+      var t = b.getAttribute('data-copy-track'), done = function () { b.textContent = 'Скопировано'; setTimeout(function () { b.textContent = 'Скопировать'; }, 1800); };
+      try { navigator.clipboard.writeText(t).then(done, function () { toast('Трек-номер: ' + t); }); } catch (ex) { toast('Трек-номер: ' + t); }
+    });
     initTilt();
     window.addEventListener('hashchange', route);
     route();

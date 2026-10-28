@@ -940,7 +940,7 @@
   /* ================= Оплата, касса, доставка =================
      Карточки вместо голой формы: у способа оплаты — переключатель и превью «как увидит покупатель»,
      у ЮKassa — статус подключения, у доставки — карточка на каждый способ с понятными полями. */
-  function payIc(n) { return '<img src="img/benefits/' + n + '.webp?v=13.17.0" alt="" width="52" height="52" decoding="async">'; }
+  function payIc(n) { return '<img src="img/benefits/' + n + '.webp?v=13.18.0" alt="" width="52" height="52" decoding="async">'; }
   var PAY_IC = { card: payIc('payment'), cash: payIc('cash'), truck: payIc('delivery'), pin: payIc('pin') };
   function switchHtml(id, on, label) {
     return '<label class="pm-switch"><input type="checkbox" id="' + id + '"' + (on ? ' checked' : '') + '><span class="pm-track" aria-hidden="true"></span><span class="sr">' + esc(label) + '</span></label>';
@@ -965,6 +965,7 @@
           '<label class="dm-f dm-num"><span>Бесплатно от суммы заказа</span><span class="dm-money"><input class="input num" type="number" min="0" step="500" data-d="freeFrom" value="' + (Number(d.freeFrom) || 0) + '"><i>₽</i></span><small>0 — не делать бесплатной</small></label>' +
           '<div class="dm-f dm-addr"><span>Адрес покупателя</span><label class="dm-toggle">' + '<input type="checkbox" data-d="needsAddress"' + (d.needsAddress !== false ? ' checked' : '') + '><span class="pm-track" aria-hidden="true"></span><b>' + (d.needsAddress !== false ? 'Спросить город и адрес' : 'Не нужен — самовывоз') + '</b></label></div>' +
         '</div>' +
+        '<label class="dm-pvz"' + (d.needsAddress === false ? ' hidden' : '') + '><input type="checkbox" data-d="pickupPoint"' + (Pricing.isPvzMethod(d) ? ' checked' : '') + '><span><b>До пункта выдачи СДЭК</b><small>Покупатель выбирает город с областью и пункт из списка СДЭК, а не печатает адрес сам</small></span></label>' +
         '<p class="dm-preview">Покупатель увидит: <b>' + esc(d.name || 'Без названия') + '</b>' + (d.desc ? ' · ' + esc(d.desc) : '') + ' — <span>' + esc(deliverySummary(d)) + '</span></p>' +
       '</div>' +
       '<div class="dm-tools"><button type="button" data-dm="up" aria-label="Поднять выше" title="Выше">↑</button><button type="button" data-dm="down" aria-label="Опустить ниже" title="Ниже">↓</button><button type="button" data-dm="rm" aria-label="Удалить способ доставки" title="Удалить">✕</button></div>' +
@@ -973,7 +974,7 @@
   function readDelivery(box) {
     return $$('.dm', box).map(function (el) {
       var v = function (k) { return $('[data-d="' + k + '"]', el); };
-      return { id: el.getAttribute('data-id'), name: v('name').value.trim(), desc: v('desc').value.trim(), price: Math.max(0, Number(v('price').value) || 0), freeFrom: Math.max(0, Number(v('freeFrom').value) || 0), needsAddress: v('needsAddress').checked };
+      return { id: el.getAttribute('data-id'), name: v('name').value.trim(), desc: v('desc').value.trim(), price: Math.max(0, Number(v('price').value) || 0), freeFrom: Math.max(0, Number(v('freeFrom').value) || 0), needsAddress: v('needsAddress').checked, pickupPoint: v('needsAddress').checked && v('pickupPoint').checked };
     });
   }
   function paymentSettings(m) {
@@ -1022,6 +1023,17 @@
       '<div class="dm-add"><button type="button" class="btn ghost" data-dm-add="courier">+ Доставка с адресом</button><button type="button" class="btn ghost" data-dm-add="pickup">+ Самовывоз</button></div>' +
       '</section>' +
 
+      // ---- СДЭК
+      '<section class="pm-sec"><div class="pm-sec-h"><h2>СДЭК: выбор пункта выдачи</h2><p>Покупатель начинает вводить город — сайт подсказывает населённые пункты с областью (Мурино — Ленинградская обл.) и показывает только пункты СДЭК в выбранном месте. Ключи — в личном кабинете СДЭК: «Интеграция» → «Ключи API» (нужен договор со СДЭК).</p></div>' +
+      '<div class="pm-card pm-wide">' +
+        '<div class="pm-two">' +
+          '<label class="pm-f"><span>Account (идентификатор)</span><input class="input" id="cdekId" value="' + esc((s.cdek && s.cdek.clientId) || '') + '" autocomplete="off" spellcheck="false"></label>' +
+          '<label class="pm-f"><span>Secure password (секретный ключ)</span><input class="input" id="cdekSecret" type="password" autocomplete="off" placeholder="Вставьте ключ"></label>' +
+        '</div>' +
+        '<label class="check"><input type="checkbox" id="cdekTest"' + (s.cdek && s.cdek.test ? ' checked' : '') + '> <span>Тестовая среда СДЭК (только для проверки, данные учебные)</span></label>' +
+        '<div class="pm-key-row"><button type="button" class="btn ghost" id="cdekSave">Сохранить и проверить</button><small id="cdekState" class="' + (A().D.cdekReady ? 'ok' : 'warn') + '">' + (A().D.cdekReady ? 'Ключи сохранены — подбор пунктов работает' : 'Не подключено — покупатели вводят адрес пункта вручную') + '</small></div>' +
+      '</div></section>' +
+
       '</div><div class="adm-bar"><button class="btn" id="stSave">Сохранить</button><span class="form-error" id="stErr"></span></div>';
 
     // переключатели способов оплаты подсвечивают карточку
@@ -1034,6 +1046,7 @@
       $('.dm-preview', el).innerHTML = 'Покупатель увидит: <b>' + esc(d.name || 'Без названия') + '</b>' + (d.desc ? ' · ' + esc(d.desc) : '') + ' — <span>' + esc(deliverySummary(d)) + '</span>';
       $('.dm-addr b', el).textContent = d.needsAddress ? 'Спросить город и адрес' : 'Не нужен — самовывоз';
       $('.dm-ic', el).innerHTML = d.needsAddress ? PAY_IC.truck : PAY_IC.pin;
+      $('.dm-pvz', el).hidden = !d.needsAddress;
     };
     list.addEventListener('input', function (e) { var el = e.target.closest('.dm'); if (el) refresh(el); });
     list.addEventListener('change', function (e) { var el = e.target.closest('.dm'); if (el) refresh(el); });
@@ -1057,6 +1070,19 @@
     };
     A().API.adminSecret().then(showState).catch(function () {});
     $('#secSave').addEventListener('click', async function () { try { showState(await A().API.adminSecret($('#secKey').value.trim())); $('#secKey').value = ''; toast('Ключ сохранён'); } catch (e) { toast(A().errMsg(e), true); } });
+
+    // ключи СДЭК: секретный хранится только на сервере, сразу проверяем, что СДЭК их принимает
+    $('#cdekSave').addEventListener('click', async function () {
+      var b = this, el = $('#cdekState'); b.disabled = true; el.textContent = 'Проверяем ключи в СДЭК…'; el.className = '';
+      try {
+        var r = await A().API.adminCdek({ clientId: $('#cdekId').value, secret: $('#cdekSecret').value, test: $('#cdekTest').checked });
+        DATA.settings.cdek = r.settings.cdek; s.cdek = r.settings.cdek; $('#cdekSecret').value = '';
+        el.textContent = r.ok ? 'Подключено' + (r.settings.cdek.test ? ' (тестовая среда)' : '') + ' — покупатели выбирают пункт из списка' : r.error || (!r.hasSecret ? 'Введите Secure password' : 'Не удалось проверить ключи');
+        el.className = r.ok ? 'ok' : 'warn';
+        A().D.cdekReady = !!(r.settings.cdek.clientId && r.hasSecret);
+      } catch (e) { el.textContent = A().errMsg(e); el.className = 'warn'; }
+      b.disabled = false;
+    });
 
     $('#stSave').addEventListener('click', async function () {
       var err = $('#stErr'); err.textContent = '';

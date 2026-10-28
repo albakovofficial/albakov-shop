@@ -10,6 +10,7 @@ const SEED = require('./public/js/seed.js');
 const Mail = require('./public/js/mail.js');
 const smtp = require('./lib/smtp.js');
 const Store = require('./lib/db.js');
+const CdekLib = require('./lib/cdek.js');
 
 loadEnv(path.join(__dirname, '.env'));
 const PORT = Number(process.env.PORT || 3000);
@@ -102,6 +103,11 @@ const fail = (status, msg) => { throw new HttpError(status, msg); };
 const pwOk = (pw) => typeof pw === 'string' && pw.length <= 200;
 
 // ЮKassa подключена: выбран провайдер и есть оба ключа
+/* СДЭК: подбор населённого пункта и пункта выдачи при оформлении */
+const cdek = CdekLib.create(() => {
+  const c = (db.settings && db.settings.cdek) || {};
+  return { id: process.env.CDEK_CLIENT_ID || c.clientId || '', secret: process.env.CDEK_CLIENT_SECRET || db.secrets.cdekSecret || '', test: !!c.test };
+});
 function payReady() { const p = db.settings.payment || {}, k = yk(); return p.provider === 'yookassa' && !!(k.shopId && k.secret); }
 // Хиты продаж: товары, которых больше всего купили за 90 дней (без отменённых и неоплаченных онлайн-заказов).
 // Наружу уходит только порядок товаров — без количества продаж. Выключается в «Главной странице» панели.
@@ -123,6 +129,7 @@ function publicState() {
     hits: hitIds(),
     payReady: payReady(),
     mailReady: mailReady(),
+    cdekReady: cdek.ready(),
     settings: db.settings,
     categories: db.categories,
     sizeCharts: db.sizeCharts,
@@ -401,7 +408,15 @@ async function placeOrder(req, b) {
   const bad = q.lines.find((l) => l.problem); if (bad) fail(409, `${bad.name}: ${bad.problem.toLowerCase()}`);
   if (b.code && !(q.promo && q.promo.ok)) fail(400, q.promo ? q.promo.message : 'Промокод не применён');
   const m = db.settings.delivery.methods.find((x) => x.id === b.deliveryId);
-  if (m && m.needsAddress !== false && (!String(b.city || '').trim() || !String(b.address || '').trim())) fail(400, 'Укажите город и адрес доставки');
+  // Пункт выдачи СДЭК выбирают из списка: адрес и населённый пункт берём из данных СДЭК, а не из того, что набрал покупатель
+  let pvz = null;
+  if (m && Pricing.isPvzMethod(m) && cdek.ready()) {
+    if (!b.pvz || !b.cityCode) fail(400, 'Выберите пункт выдачи СДЭК из списка');
+    let list = [];
+    try { list = await cdek.points(b.cityCode); } catch (e) { fail(502, 'СДЭК сейчас не отвечает. Попробуйте оформить заказ через минуту.'); }
+    pvz = list.find((x) => x.code === String(b.pvz));
+    if (!pvz) fail(400, 'Этот пункт выдачи больше не работает — выберите другой');
+  } else if (m && m.needsAddress !== false && (!String(b.city || '').trim() || !String(b.address || '').trim())) fail(400, 'Укажите город и адрес доставки');
 
   q.lines.forEach((l) => { sizeEntry(l.productId, l.colorId, l.size).stock -= l.qty; });
   if (q.promo && q.promo.ok) { const pc = db.promocodes.find((x) => x.code === q.promo.code); if (pc) pc.used = (pc.used || 0) + 1; }
@@ -411,7 +426,9 @@ async function placeOrder(req, b) {
     id: uid('o'), number: String(db.orderSeq), token: crypto.randomBytes(16).toString('hex'), createdAt: new Date().toISOString(), userId: user ? user.id : null, customer, consentAt: new Date().toISOString(),
     items: q.lines.map((l) => ({ productId: l.productId, slug: l.slug, name: l.name, colorId: l.colorId, color: l.color, size: l.size, qty: l.qty, price: l.price, oldPrice: l.oldPrice, image: l.image, art: l.art })),
     subtotal: q.subtotal, saleDiscount: q.saleDiscount, promoCode: q.promo && q.promo.ok ? q.promo.code : '', promoDiscount: q.promoDiscount,
-    delivery: Object.assign({}, q.delivery, { city: String(b.city || '').slice(0, 100), address: String(b.address || '').slice(0, 300) }), comment: String(b.comment || '').slice(0, 1000),
+    delivery: Object.assign({}, q.delivery, pvz
+      ? { city: pvz.city + (pvz.region ? ' (' + pvz.region + ')' : ''), address: (pvz.type === 'postamat' ? 'Постамат СДЭК ' : 'ПВЗ СДЭК ') + pvz.code + ': ' + pvz.address, pvz: { code: pvz.code, type: pvz.type, cityCode: pvz.cityCode, city: pvz.city, region: pvz.region, address: pvz.address, full: pvz.full, hours: pvz.hours } }
+      : { city: String(b.city || '').slice(0, 100), address: String(b.address || '').slice(0, 300) }), comment: String(b.comment || '').slice(0, 1000),
     total: q.total, payment: { method, status: 'pending', provider: method === 'online' ? pay.provider : null }, status: 'new',
     test: method === 'online' && pay.provider !== 'yookassa' ? true : undefined,
     bonusUsed: q.bonusUsed, bonusEarn: user ? q.bonusEarn : 0
@@ -780,6 +797,15 @@ async function api(req, res, url, body) {
   if (p[0] === 'support') { const u = user(); if (!u) fail(401, 'Войдите в личный кабинет'); return supportApi(req, p, M, body, u); }
 
   if (p[0] === 'quote' && M === 'POST') return { quote: quote(req, body) };
+  // Подсказки населённых пунктов и пункты выдачи СДЭК
+  if (p[0] === 'cdek' && M === 'GET' && (p[1] === 'cities' || p[1] === 'points')) {
+    if (!cdek.ready()) fail(503, 'Подбор пунктов СДЭК не подключён');
+    throttle(req, 'cdek', 600);
+    try {
+      if (p[1] === 'cities') return { cities: await cdek.cities(url.searchParams.get('q')) };
+      return { points: await cdek.points(url.searchParams.get('city')) };
+    } catch (e) { console.error('СДЭК:', e.message); fail(502, 'СДЭК сейчас не отвечает. Попробуйте ещё раз через минуту.'); }
+  }
 
   if (p[0] === 'notify' && !p[1] && M === 'POST') return subscribe(req, body);
 
@@ -834,6 +860,19 @@ async function api(req, res, url, body) {
       const keep = getSession(req, 'admin').token;
       for (const k in db.sessions) if (db.sessions[k].kind === 'admin' && k !== keep) delete db.sessions[k];
       save(); return {};
+    }
+    // Ключи СДЭК: Account хранится в настройках, Secure password — только на сервере
+    if (p[1] === 'cdek' && M === 'POST') {
+      db.settings.cdek = Object.assign({}, db.settings.cdek);
+      if (typeof body.clientId === 'string') db.settings.cdek.clientId = body.clientId.trim().slice(0, 100);
+      if (typeof body.secret === 'string' && body.secret.trim()) db.secrets.cdekSecret = body.secret.trim().slice(0, 200);
+      if (body.secret === null) delete db.secrets.cdekSecret;
+      if (typeof body.test === 'boolean') db.settings.cdek.test = body.test;
+      save();
+      const s = process.env.CDEK_CLIENT_SECRET || db.secrets.cdekSecret || '';
+      let ok = false, error = '';
+      if (cdek.ready()) { try { ok = await cdek.check(); } catch (e) { error = e.message; } }
+      return { settings: db.settings, hasSecret: !!s, mask: s ? s.slice(0, 3) + '…' + s.slice(-3) : '', ok, error, env: !!process.env.CDEK_CLIENT_SECRET };
     }
     if (p[1] === 'payment-secret' && M === 'POST') {
       if (typeof body.secret === 'string') { if (body.secret && !/^(live|test)_[\w-]{10,}$/.test(body.secret)) fail(400, 'Ключ должен начинаться с live_ или test_'); db.secrets.yookassaSecret = body.secret; save(); }

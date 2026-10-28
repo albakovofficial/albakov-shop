@@ -309,7 +309,15 @@
     return String(Math.round(n || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' ₽';
   }
 
-  var api = { bonusConf: bonusConf, bonusFor: bonusFor, bonusMove: bonusMove, syncOrderBonus: syncOrderBonus, badgesOf: badgesOf, inkFor: inkFor, BADGE_KEYS: BADGE_KEYS, forGender: forGender, migrateData: migrateData, migrateProduct: migrateProduct, colorsOf: colorsOf, colorOf: colorOf, stockOf: stockOf, productPrice: productPrice, calcCart: calcCart, checkCode: checkCode, inWindow: inWindow, format: format };
+  // Способ доставки «до пункта выдачи СДЭК»: пункт выбирают из списка СДЭК. Флаг pickupPoint задаётся в панели;
+  // если его ещё не трогали — узнаём по названию («СДЭК, пункт выдачи»)
+  function isPvzMethod(m) {
+    if (!m || m.needsAddress === false) return false;
+    if (typeof m.pickupPoint === 'boolean') return m.pickupPoint;
+    return /сдэк|cdek/i.test(m.name || '') && /пункт|пвз|постамат|выдач/i.test((m.name || '') + ' ' + (m.desc || ''));
+  }
+
+  var api = { isPvzMethod: isPvzMethod, bonusConf: bonusConf, bonusFor: bonusFor, bonusMove: bonusMove, syncOrderBonus: syncOrderBonus, badgesOf: badgesOf, inkFor: inkFor, BADGE_KEYS: BADGE_KEYS, forGender: forGender, migrateData: migrateData, migrateProduct: migrateProduct, colorsOf: colorsOf, colorOf: colorOf, stockOf: stockOf, productPrice: productPrice, calcCart: calcCart, checkCode: checkCode, inWindow: inWindow, format: format };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Pricing = api;
 })(this);

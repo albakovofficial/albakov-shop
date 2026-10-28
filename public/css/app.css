@@ -1774,3 +1774,71 @@ input:focus-visible + .pm-track { outline: 2px solid var(--accent); outline-offs
 .sum-row.refund-row span { color: var(--refund); }
 .ao-track.is-returned .ao-state { color: var(--refund); }
 @media (max-width: 560px) { .rf-banner { grid-template-columns: auto minmax(0, 1fr); } .rf-banner-sum { grid-column: 2; } }
+
+/* ---------- Пункт выдачи СДЭК: город с областью и список пунктов ---------- */
+.pvz { display: grid; gap: 12px; padding: 18px; background: var(--surface); }
+.pvz[hidden] { display: none; }
+.pvz.invalid { box-shadow: inset 0 0 0 1px var(--danger); }
+.pvz .field > span { font-size: 13px; color: var(--muted); }
+.pvz .input { background: var(--paper); }
+.pvz-combo { position: relative; margin-top: 6px; }
+.pvz-sug { position: absolute; z-index: 20; left: 0; right: 0; top: calc(100% + 4px); margin: 0; padding: 6px 0; list-style: none; background: var(--paper); border: 1px solid var(--line-strong); box-shadow: 0 24px 50px -24px rgba(18, 20, 23, .35); max-height: 320px; overflow: auto; }
+.pvz-sug[hidden] { display: none; }
+.pvz-sug li { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; padding: 10px 14px; cursor: pointer; font-size: 14px; }
+.pvz-sug li span { color: var(--muted); font-size: 13px; text-align: right; }
+.pvz-sug li.on, .pvz-sug li:hover { background: var(--surface); }
+.pvz-sug li.none { cursor: default; color: var(--muted); font-size: 13px; }
+.pvz-sug li.none:hover { background: none; }
+.pvz-hint { margin: 8px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
+.co-addr .pvz-hint { margin-top: 10px; }
+.pvz-hint[hidden] { display: none; }
+.pvz-pick { display: grid; gap: 12px; }
+.pvz-pick[hidden] { display: none; }
+.pvz-cityc { display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: var(--paper); border: 1px solid var(--line); }
+.pvz-cityc > div { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.pvz-cityc b { font-weight: 500; font-size: 15px; }
+.pvz-cityc span { font-size: 13px; color: var(--muted); }
+.pvz-cityc .link { font-size: 13px; white-space: nowrap; }
+.pvz-pin { width: 30px; height: 30px; flex: none; background: url(../img/benefits/pin.webp) center / contain no-repeat; }
+.pvz-tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.pvz-tools b { font-weight: 500; font-size: 14px; }
+.pvz-tools .input { width: min(240px, 100%); height: 42px; min-height: 42px; font-size: 14px; }
+.pvz-list { display: grid; gap: 6px; max-height: 360px; overflow: auto; padding-right: 2px; overscroll-behavior: contain; }
+.pvz-i { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 14px; background: var(--paper); border: 1px solid var(--line); cursor: pointer; transition: border-color .15s; }
+.pvz-i:hover { border-color: var(--line-strong); }
+.pvz-i input { appearance: none; width: 16px; height: 16px; border: 1px solid var(--line-strong); border-radius: 50%; margin: 0; }
+.pvz-i input:checked { border: 5px solid var(--text); }
+.pvz-txt { display: grid; gap: 3px; min-width: 0; }
+.pvz-txt b { font-weight: 500; font-size: 14px; }
+.pvz-txt small { font-size: 12.5px; color: var(--muted); line-height: 1.4; }
+.pvz-tags { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.pvz-tags em { font-style: normal; font-size: 11px; padding: 2px 7px; background: var(--surface); color: var(--muted); white-space: nowrap; }
+.pvz-chosen { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 14px; align-items: start; padding: 14px 16px; background: var(--paper); border: 1px solid var(--text); }
+.pvz-chosen > div { display: grid; gap: 3px; }
+.pvz-chosen small { font-size: 12px; color: var(--muted); letter-spacing: .02em; }
+.pvz-chosen b { font-weight: 500; font-size: 15px; }
+.pvz-chosen span { font-size: 13px; color: var(--muted); }
+.pvz-chosen .pvz-note { font-size: 12.5px; }
+.pvz-chosen .link { font-size: 13px; }
+.pvz-ok { width: 28px; height: 28px; border-radius: 50%; background: var(--ok); display: grid; place-items: center; }
+.pvz-ok svg { width: 16px; height: 16px; fill: none; stroke: #fff; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.pvz-load, .pvz-empty { margin: 0; padding: 14px; font-size: 14px; color: var(--muted); background: var(--paper); }
+.pvz-load { animation: pvzp 1.2s ease-in-out infinite; }
+@keyframes pvzp { 50% { opacity: .5; } }
+@media (max-width: 560px) {
+  .pvz { padding: 14px; }
+  .pvz-i { grid-template-columns: auto minmax(0, 1fr); }
+  .pvz-tags { grid-column: 2; justify-content: flex-start; }
+  .pvz-chosen { grid-template-columns: auto minmax(0, 1fr); }
+  .pvz-chosen .link { grid-column: 2; justify-self: start; }
+  .pvz-tools .input { width: 100%; }
+}
+.dm-pvz { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; background: var(--surface); cursor: pointer; }
+.dm-pvz[hidden] { display: none; }
+.dm-pvz input { margin-top: 3px; accent-color: var(--text); width: 16px; height: 16px; }
+.dm-pvz b { display: block; font-weight: 500; font-size: 14px; }
+.dm-pvz small { font-size: 12.5px; color: var(--muted); }
+.pm-key-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.pm-key-row small { font-size: 13px; color: var(--muted); }
+.pm-key-row small.ok { color: var(--ok); }
+.pm-key-row small.warn { color: var(--warn); }

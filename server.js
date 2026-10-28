@@ -135,7 +135,7 @@ function cdekOrderBody(o, pkg) {
   if (c.services && c.services.tryOn) services.push({ code: 'TRYING_ON' });
   return {
     type: 1, number: 'ALB-' + o.number + (o.cdekTry ? '-' + o.cdekTry : ''),
-    tariff_code: pv.type === 'postamat' ? Number(c.tariffPostamat) || 368 : Number(c.tariff) || 136,
+    tariff_code: Number(o.delivery.tariff) || (pv.type === 'postamat' ? Number(c.tariffPostamat) || 368 : Number(c.tariff) || 136),
     shipment_point: c.shipmentPoint.code, delivery_point: pv.code,
     recipient: { name: `${o.customer.lastName} ${o.customer.firstName}`.trim(), email: o.customer.email, phones: [{ number: '+' + o.customer.phone }] },
     packages: [{ number: '1', weight: pkg.weight, length: pkg.length, width: pkg.width, height: pkg.height, comment: 'Одежда',
@@ -444,9 +444,22 @@ async function cdekShipPrice(m, cityCode, type, count) {
   const c = cdekCfg(), from = c.shipmentPoint && c.shipmentPoint.cityCode;
   if (!from || !cityCode) return null;
   const one = cdekPkg(), pkg = Object.assign({}, one, { weight: Math.min(30000, one.weight * Math.max(1, count)) });
-  const tariff = type === 'postamat' ? Number(c.tariffPostamat) || 368 : Number(c.tariff) || 136;
-  const r = await cdek.calc(from, cityCode, tariff, pkg);
-  return { price: Math.ceil((r.sum + Math.max(0, Number(m.markup) || 0)) / 10) * 10, days: r.max ? (r.min && r.min !== r.max ? r.min + '–' + r.max : String(r.max)) : '' };
+  const r = await cdekCalcAny(from, cityCode, type, pkg);
+  return { price: Math.ceil((r.sum + Math.max(0, Number(m.markup) || 0)) / 10) * 10, days: r.max ? (r.min && r.min !== r.max ? r.min + '–' + r.max : String(r.max)) : '', tariff: r.tariff };
+}
+// Выбранный тариф доступен не на всех направлениях — пробуем следующий подходящий
+function cdekTariffs(type) {
+  const c = cdekCfg();
+  const list = type === 'postamat' ? [Number(c.tariffPostamat) || 368, 368] : [Number(c.tariff) || 136, 136, 234];
+  return [...new Set(list)];
+}
+async function cdekCalcAny(from, to, type, pkg, log) {
+  let last = null;
+  for (const t of cdekTariffs(type)) {
+    try { const r = await cdek.calc(from, to, t, pkg); if (log) log.push({ tariff: t, sum: r.sum, days: [r.min, r.max] }); return Object.assign({ tariff: t }, r); }
+    catch (e) { last = e; if (log) log.push({ tariff: t, error: e.message }); }
+  }
+  throw last || new Error('СДЭК не рассчитал доставку');
 }
 // Расчёт корзины с ценой доставки СДЭК для выбранного города
 async function quoteFull(req, b, strict) {
@@ -455,7 +468,7 @@ async function quoteFull(req, b, strict) {
   let extra = { cdekAuto: auto };
   if (auto && b.cityCode) {
     const count = (Array.isArray(b.lines) ? b.lines : []).reduce((s, l) => s + Math.max(1, Math.floor(Number(l.qty) || 1)), 0);
-    try { const p = await cdekShipPrice(m, b.cityCode, b.pvzType, count); if (p) extra = { cdekAuto: true, deliveryPrice: p.price, deliveryDays: p.days }; }
+    try { const p = await cdekShipPrice(m, b.cityCode, b.pvzType, count); if (p) extra = { cdekAuto: true, deliveryPrice: p.price, deliveryDays: p.days, deliveryTariff: p.tariff }; }
     catch (e) {
       console.error('СДЭК расчёт:', e.message);
       // СДЭК не ответил: берём запасную цену из настроек способа
@@ -463,7 +476,9 @@ async function quoteFull(req, b, strict) {
     }
   }
   if (auto && strict && typeof extra.deliveryPrice !== 'number') fail(400, 'Выберите пункт выдачи — по нему рассчитаем доставку');
-  return quote(req, b, extra);
+  const q = quote(req, b, extra);
+  if (q.delivery && extra.deliveryTariff) q.delivery.tariff = extra.deliveryTariff;
+  return q;
 }
 function quote(req, b, extra) {
   const user = currentUser(req), c = b.contact || {};
@@ -1012,6 +1027,12 @@ async function api(req, res, url, body) {
       db.orders = db.orders.filter((o) => !ids.has(o.id));
       db.tickets.forEach((t) => { if (ids.has(t.orderId)) { t.orderId = ''; } });
       save(); const notify = await processWaitlist(); return { deleted: ids.size, notify };
+    }
+    // Проверка расчёта доставки СДЭК до города (для настройки)
+    if (p[1] === 'cdek-calc' && M === 'POST') {
+      const from = cdekCfg().shipmentPoint && cdekCfg().shipmentPoint.cityCode; if (!from) fail(400, 'Не выбран пункт отгрузки');
+      const log = []; try { await cdekCalcAny(from, body.city, body.type || 'pvz', cdekPkg(), log); } catch (e) { /* в log */ }
+      return { log };
     }
     // Отправление СДЭК: создать, обновить статус, отменить, распечатать
     if (p[1] === 'orders' && p[2] && /^cdek/.test(p[3] || '')) {

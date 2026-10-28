@@ -217,8 +217,8 @@
   /* ================= Обзор ================= */
   function overview(m) {
     var o = DATA.orders, today = new Date().toDateString();
-    var active = o.filter(function (x) { return x.status !== 'canceled'; });
-    var revenue = active.reduce(function (s, x) { return s + x.total; }, 0);
+    var active = o.filter(function (x) { return x.status !== 'canceled' && x.status !== 'returned'; });
+    var revenue = o.filter(function (x) { return x.status !== 'canceled'; }).reduce(function (s, x) { return s + x.total - (x.refunded || 0); }, 0); // возвраты вычитаются
     var todayN = o.filter(function (x) { return new Date(x.createdAt).toDateString() === today; }).length;
     var newN = o.filter(function (x) { return x.status === 'new'; }).length;
     var low = [];
@@ -243,29 +243,36 @@
   function ordersTable(list) {
     return '<div class="table-wrap adm-table"><table class="sizes"><thead><tr><th>№</th><th>Дата</th><th>Покупатель</th><th>Сумма</th><th>Оплата</th><th>Статус</th></tr></thead><tbody>' +
       list.map(function (o) {
-        return '<tr data-href="#/admin?s=orders&id=' + esc(o.id) + '"><td>' + esc(o.number) + '</td><td>' + esc(new Date(o.createdAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })) + '</td><td>' + esc(o.customer.firstName + ' ' + o.customer.lastName) + '</td><td class="num">' + fmt(o.total) + '</td>' +
-          '<td><span class="status ' + esc(o.payment.status) + '">' + esc(o.payment.method === 'bonus' ? 'Бонусами' : o.payment.method === 'cod' && o.payment.status === 'pending' ? 'При получении' : A().PAY[o.payment.status]) + '</span></td><td><span class="status ' + esc(o.status) + '">' + esc(A().STATUS[o.status]) + '</span></td></tr>';
+        var ret = o.status === 'returned';
+        return '<tr data-href="#/admin?s=orders&id=' + esc(o.id) + '"' + (ret ? ' class="row-returned"' : '') + '><td>' + esc(o.number) + (o.refunds && o.refunds.length ? '<span class="rf-tag">' + (ret ? 'Возврат' : 'Частичный возврат') + '</span>' : '') + '</td><td>' + esc(new Date(o.createdAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })) + '</td><td>' + esc(o.customer.firstName + ' ' + o.customer.lastName) + '</td><td class="num">' + (o.refunded ? '<s class="muted">' + fmt(o.total) + '</s><br><span class="rf-back">−' + fmt(o.refunded) + '</span>' : fmt(o.total)) + '</td>' +
+          '<td><span class="status ' + esc(o.refunded ? 'refunded' : o.payment.status) + '">' + esc(payText(o)) + '</span></td><td><span class="status ' + esc(o.status) + '">' + esc(A().STATUS[o.status]) + '</span></td></tr>';
       }).join('') + '</tbody></table></div>';
+  }
+  function payText(o) {
+    if (o.payment.method === 'bonus') return 'Бонусами';
+    if (o.payment.method === 'cod' && o.payment.status === 'pending') return 'При получении';
+    if (o.payment.status === 'paid' && o.refunded) return 'Частичный возврат';
+    return A().PAY[o.payment.status];
   }
   function orders(m, q) {
     if (q.id) return orderDetail(m, q.id);
     var f = q.f || 'all', search = (q.q || '').toLowerCase();
     var list = DATA.orders.slice().reverse().filter(function (o) {
-      if (f !== 'all' && o.status !== f) return false;
-      if (search) { var t = [o.number, o.customer.firstName, o.customer.lastName, o.customer.email, o.customer.phone].join(' ').toLowerCase(); if (t.indexOf(search) === -1) return false; }
+      if (f === 'refund' ? !(o.refunds && o.refunds.length) : f !== 'all' && o.status !== f) return false;
+      if (search) { var t = [o.number, o.customer.firstName, o.customer.lastName, o.customer.email, o.customer.phone, A().fmtPhone(o.customer.phone), o.payment.providerId || ''].join(' ').toLowerCase(); if (t.indexOf(search) === -1) return false; }
       return true;
     });
     // Фильтр по статусу: число заказов крупно, подпись под ним, цветная точка статуса
-    var F = [['all', 'Все заказы'], ['new', 'Новые'], ['processing', 'Собираются'], ['shipped', 'В доставке'], ['done', 'Выполнены'], ['canceled', 'Отменены']];
-    var cnt = function (k) { return k === 'all' ? DATA.orders.length : DATA.orders.filter(function (o) { return o.status === k; }).length; };
+    var F = [['all', 'Все заказы'], ['new', 'Новые'], ['processing', 'Собираются'], ['shipped', 'В доставке'], ['done', 'Выполнены'], ['canceled', 'Отменены'], ['refund', 'Возвраты']];
+    var cnt = function (k) { return k === 'all' ? DATA.orders.length : k === 'refund' ? DATA.orders.filter(function (o) { return o.refunds && o.refunds.length; }).length : DATA.orders.filter(function (o) { return o.status === k; }).length; };
     var tabs = '<nav class="ost" aria-label="Статус заказов">' + F.map(function (x) {
       var n = cnt(x[0]);
       return '<a class="ost-i s-' + x[0] + (f === x[0] ? ' on' : '') + (n ? '' : ' zero') + '" href="#/admin?s=orders&f=' + x[0] + (q.q ? '&q=' + encodeURIComponent(q.q) : '') + '"' + (f === x[0] ? ' aria-current="page"' : '') + '>' +
         '<b class="num">' + n + '</b><span>' + (x[0] === 'all' ? '' : '<i aria-hidden="true"></i>') + x[1] + '</span></a>';
     }).join('') + '</nav>';
     var test = DATA.testOrders ? '<div class="ost-test"><span>Тестовые заказы скрыты и не считаются: ' + DATA.testOrders + '</span><button class="link" type="button" id="delTest">Удалить их</button></div>' : '';
-    var emptyTxt = f === 'all' && !search ? ['Заказов пока нет', 'Они появятся здесь сразу после оформления на сайте.'] : ['Ничего не нашлось', search ? 'Проверьте номер, имя или телефон.' : 'В этом статусе заказов нет.'];
-    m.innerHTML = head('Заказы', '<input class="input" id="oSearch" type="search" placeholder="Номер, имя или телефон" value="' + esc(q.q || '') + '" style="min-height:42px;width:260px" aria-label="Поиск заказа">') +
+    var emptyTxt = f === 'all' && !search ? ['Заказов пока нет', 'Они появятся здесь сразу после оформления на сайте.'] : ['Ничего не нашлось', search ? 'Проверьте номер заказа, имя, телефон, почту или номер платежа ЮKassa.' : 'В этом статусе заказов нет.'];
+    m.innerHTML = head('Заказы', '<input class="input" id="oSearch" type="search" placeholder="Номер, имя, телефон, почта" value="' + esc(q.q || '') + '" style="min-height:42px;width:280px" aria-label="Поиск заказа">') +
       tabs + test +
       (list.length ? ordersTable(list) : '<div class="empty"><h3>' + emptyTxt[0] + '</h3><p>' + emptyTxt[1] + '</p></div>');
     if ($('#delTest')) bindConfirm($('#delTest'), async function () {
@@ -273,13 +280,82 @@
     });
     var si = $('#oSearch'); si.addEventListener('change', function () { location.hash = '#/admin?s=orders&f=' + f + '&q=' + encodeURIComponent(si.value); });
   }
+  /* ---------- Оплата и возврат ---------- */
+  // Всё про деньги заказа в одном месте: кто и сколько заплатил, номер платежа ЮKassa, что уже вернули, и форма возврата
+  function dt(s) { return new Date(s).toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }); }
+  function refundCard(o) {
+    var c = o.customer, pm = o.payment, refunds = o.refunds || [], back = o.refunded || 0, left = Math.max(0, o.total - back);
+    var online = pm.method === 'online' && pm.providerId;
+    var rows = '<div class="rf-sum"><div><span>Оплачено</span><b class="num">' + fmt(pm.status === 'paid' || pm.status === 'refunded' ? o.total : 0) + '</b></div>' +
+      '<div><span>Возвращено</span><b class="num' + (back ? ' rf-back' : '') + '">' + (back ? '−' + fmt(back) : '0 ₽') + '</b></div>' +
+      '<div><span>Осталось у магазина</span><b class="num">' + fmt(pm.status === 'paid' || pm.status === 'refunded' ? left : 0) + '</b></div></div>';
+    var meta = '<dl class="rf-meta"><dt>Плательщик</dt><dd>' + esc(c.lastName + ' ' + c.firstName) + ' · ' + esc(A().fmtPhone(c.phone)) + '</dd>' +
+      '<dt>Способ</dt><dd>' + (pm.method === 'online' ? 'Онлайн через ЮKassa' : pm.method === 'bonus' ? 'Бонусами' : 'При получении') + '</dd>' +
+      (online ? '<dt>Платёж ЮKassa</dt><dd><span class="copyable num">' + esc(pm.providerId) + '</span></dd>' : '') + '</dl>';
+    var hist = refunds.length ? '<div class="rf-hist"><b>История возвратов</b>' + refunds.map(function (r) {
+      var what = r.items.map(function (i) { return esc(i.name) + ', ' + esc(i.size) + ' × ' + i.qty; }); if (r.delivery) what.push('доставка');
+      return '<div class="rf-row"><div><span class="num rf-back">−' + fmt(r.amount) + '</span><small>' + esc(dt(r.at)) + (r.status === 'pending' ? ' · в обработке' : '') + (r.mailedAt ? ' · письмо отправлено' : '') + '</small></div>' +
+        '<p>' + (what.join('; ') || '—') + (r.reason ? '<br><span class="muted">Причина: ' + esc(r.reason) + '</span>' : '') + (r.restocked ? '<br><span class="muted">Товар вернули на склад</span>' : '') + '</p></div>';
+    }).join('') + '</div>' : '';
+    var action = '';
+    if (online && pm.status === 'paid') {
+      var lines = o.items.map(function (i, idx) {
+        var can = i.qty - (i.refundedQty || 0); if (can <= 0) return '<div class="rf-line off"><span>' + esc(i.name) + ' · ' + esc(i.size) + '</span><small>возвращено</small></div>';
+        return '<label class="rf-line"><input type="checkbox" data-rl="' + idx + '"><span>' + esc(i.name) + '<small>' + (i.color ? esc(i.color) + ' · ' : '') + 'размер ' + esc(i.size) + '</small></span>' +
+          (can > 1 ? '<select class="select rf-qty" data-rq="' + idx + '" aria-label="Количество">' + Array.from({ length: can }, function (_, k) { return '<option value="' + (k + 1) + '"' + (k + 1 === can ? ' selected' : '') + '>' + (k + 1) + ' шт.</option>'; }).join('') + '</select>' : '<span class="muted rf-one">1 шт.</span>') + '</label>';
+      }).join('');
+      var dl = o.delivery && o.delivery.price > 0 && !o.deliveryRefunded ? '<label class="rf-line"><input type="checkbox" data-rd><span>Доставка<small>' + esc(o.delivery.name) + '</small></span><span class="muted rf-one">' + fmt(o.delivery.price) + '</span></label>' : '';
+      action = '<button class="btn ghost" type="button" id="rfOpen">Вернуть деньги</button>' +
+        '<div class="rf-form" id="rfForm" hidden><p class="rf-hint">Отметьте, за что возвращаете деньги. Сумму посчитаем сами — с учётом промокода и бонусов, которыми платил покупатель.</p>' +
+        '<div class="rf-all"><button class="link" type="button" id="rfAll">Отметить всё</button></div>' + lines + dl +
+        '<label class="check"><input type="checkbox" id="rfStock" checked> <span>Вернуть товар на склад (вещь вернулась к вам)</span></label>' +
+        '<label class="field"><span>Причина, для себя</span><input class="input" id="rfReason" placeholder="Например, не подошёл размер" maxlength="300"></label>' +
+        '<div class="rf-total"><span>К возврату</span><b class="num" id="rfAmt">0 ₽</b></div>' +
+        '<p class="rf-to">Деньги уйдут <b>' + esc(c.lastName + ' ' + c.firstName) + '</b> туда же, откуда была оплата заказа № ' + esc(o.number) + '. Покупатель получит письмо.</p>' +
+        '<p class="form-error" id="rfErr"></p><button class="btn" type="button" id="rfGo" disabled>Выберите позиции</button></div>';
+    } else if (pm.status === 'refunded') action = '<p class="rf-note ok">Деньги по заказу возвращены полностью.</p>';
+    else if (pm.method === 'cod') action = '<p class="rf-note">Оплата при получении — деньги возвращаются вручную, переводом покупателю.</p>';
+    else if (pm.method === 'online' && pm.status !== 'paid') action = '<p class="rf-note">Заказ не оплачен — возвращать нечего.</p>';
+    return '<div class="adm-card rf-card"><h3 class="adm-h3">Оплата и возврат</h3>' + rows + meta + hist + action + '</div>';
+  }
+  function bindRefund(o) {
+    var open = $('#rfOpen'); if (!open) return;
+    var form = $('#rfForm'), go = $('#rfGo'), err = $('#rfErr'), key, amount = 0, seq = 0;
+    key = Date.now().toString(36) + Math.random().toString(36).slice(2, 8); // одна попытка = один ключ: двойной клик не вернёт деньги дважды
+    open.addEventListener('click', function () { form.hidden = !form.hidden; open.textContent = form.hidden ? 'Вернуть деньги' : 'Скрыть'; });
+    function body(dry) {
+      var lines = $$('[data-rl]', form).filter(function (x) { return x.checked; }).map(function (x) { var q = $('[data-rq="' + x.dataset.rl + '"]', form); return { idx: Number(x.dataset.rl), qty: q ? Number(q.value) : 1 }; });
+      return { lines: lines, delivery: !!($('[data-rd]', form) && $('[data-rd]', form).checked), restock: $('#rfStock').checked, reason: $('#rfReason').value, dry: dry, key: key };
+    }
+    async function calc() {
+      var b = body(true), my = ++seq; err.textContent = '';
+      if (!b.lines.length && !b.delivery) { amount = 0; $('#rfAmt').textContent = '0 ₽'; go.disabled = true; go.textContent = 'Выберите позиции'; return; }
+      try { var r = await A().API.adminRefund(o.id, b); if (my !== seq) return; amount = r.amount; $('#rfAmt').textContent = fmt(r.amount); go.disabled = false; go.textContent = 'Вернуть ' + fmt(r.amount); delete go.dataset.armed; }
+      catch (e) { if (my !== seq) return; amount = 0; $('#rfAmt').textContent = '—'; go.disabled = true; go.textContent = 'Вернуть'; err.textContent = A().errMsg(e); }
+    }
+    form.addEventListener('change', function (e) { if (e.target.matches('[data-rl], [data-rq], [data-rd]')) calc(); }); // сумму меняют только позиции
+    $('#rfAll').addEventListener('click', function () { $$('[data-rl], [data-rd]', form).forEach(function (x) { x.checked = true; }); $$('.rf-qty', form).forEach(function (s) { s.value = s.options[s.options.length - 1].value; }); calc(); });
+    // Два нажатия: первое показывает, кому и сколько, второе — возвращает
+    go.addEventListener('click', async function () {
+      if (!amount) return;
+      if (!go.dataset.armed) { go.dataset.armed = '1'; go.textContent = 'Подтвердить возврат ' + fmt(amount); go.classList.add('danger'); return; }
+      go.disabled = true; go.textContent = 'Возвращаем…';
+      try {
+        var r = await A().API.adminRefund(o.id, body(false));
+        await afterSave('Возврат ' + fmt(r.refund.amount) + ' оформлен' + (r.refund.mailedAt ? ', покупателю отправлено письмо' : ''), '#/admin?s=orders&id=' + o.id);
+      } catch (e) { err.textContent = A().errMsg(e); go.disabled = false; go.classList.remove('danger'); delete go.dataset.armed; go.textContent = 'Вернуть ' + fmt(amount); }
+    });
+  }
   function orderDetail(m, id) {
     var o = DATA.orders.find(function (x) { return x.id === id; });
     if (!o) { m.innerHTML = head('Заказ не найден') + '<a class="link" href="#/admin?s=orders">← К заказам</a>'; return; }
     var c = o.customer, d = o.delivery || {};
-    m.innerHTML = '<a class="link muted" href="#/admin?s=orders" style="font-size:14px">← Все заказы</a>' + head('Заказ № ' + o.number, '', esc(new Date(o.createdAt).toLocaleString('ru-RU'))) +
+    var lastRf = (o.refunds || [])[(o.refunds || []).length - 1];
+    var banner = lastRf ? '<div class="rf-banner' + (o.status === 'returned' ? ' full' : '') + '"><span class="rf-banner-ic" aria-hidden="true">↩</span><div><b>' + (o.status === 'returned' ? 'Возврат — деньги возвращены полностью' : 'Частичный возврат') + '</b>' +
+      '<span>Вернули ' + fmt(o.refunded) + ' из ' + fmt(o.total) + ' · ' + esc(o.customer.lastName + ' ' + o.customer.firstName) + ' · последний возврат ' + esc(dt(lastRf.at)) + '</span></div><b class="num rf-banner-sum">−' + fmt(o.refunded) + '</b></div>' : '';
+    m.innerHTML = '<a class="link muted" href="#/admin?s=orders" style="font-size:14px">← Все заказы</a>' + head((o.status === 'returned' ? 'Возврат · заказ № ' : 'Заказ № ') + o.number, '', esc(new Date(o.createdAt).toLocaleString('ru-RU'))) + banner +
       '<div class="adm-two"><div class="adm-card" style="display:grid;gap:14px"><h3 class="adm-h3">Состав</h3>' +
-        o.items.map(function (i) { return '<div class="mini-line"><img src="' + esc(i.image || Art.make(i.art)) + '" alt=""><div>' + esc(i.name) + '<div class="sub">' + (i.color ? 'Цвет ' + esc(i.color) + ' · ' : '') + 'Размер ' + esc(i.size) + ' · ' + i.qty + ' шт. × ' + fmt(i.price) + '</div></div><span class="num">' + fmt(i.price * i.qty) + '</span></div>'; }).join('') +
+        o.items.map(function (i) { return '<div class="mini-line"><img src="' + esc(i.image || Art.make(i.art)) + '" alt=""><div>' + esc(i.name) + '<div class="sub">' + (i.color ? 'Цвет ' + esc(i.color) + ' · ' : '') + 'Размер ' + esc(i.size) + ' · ' + i.qty + ' шт. × ' + fmt(i.price) + (i.refundedQty ? ' · <span class="rf-back">возвращено ' + i.refundedQty + ' шт.</span>' : '') + '</div></div><span class="num">' + fmt(i.price * i.qty) + '</span></div>'; }).join('') +
         '<div class="sum-row"><span>Товары</span><span>' + fmt(o.subtotal) + '</span></div>' +
         (o.promoDiscount ? '<div class="sum-row disc"><span>Промокод ' + esc(o.promoCode) + '</span><span>−' + fmt(o.promoDiscount) + '</span></div>' : '') +
         '<div class="sum-row"><span>' + esc(d.name || 'Доставка') + '</span><span>' + fmt(d.price || 0) + '</span></div>' +
@@ -287,6 +363,7 @@
         '<div class="sum-row total"><span>Итого деньгами</span><span>' + fmt(o.total) + '</span></div>' +
         (o.bonusEarn ? '<div class="sum-row"><span class="muted">Бонусы за заказ: ' + (o.bonusCredited ? 'начислены' : o.status === 'canceled' ? 'не начисляются — заказ отменён' : 'начислятся ' + (Pricing.bonusConf(DATA.settings).creditOn === 'done' ? 'когда заказ будет выполнен' : 'после оплаты')) + '</span><span class="num">+' + o.bonusEarn + '</span></div>' : '') + '</div>' +
       '<div style="display:grid;gap:16px;align-content:start"><div class="adm-card" style="display:grid;gap:8px"><h3 class="adm-h3">Покупатель</h3><b>' + esc(c.firstName + ' ' + c.lastName) + '</b><span class="copyable">' + esc(A().fmtPhone(c.phone)) + '</span><span class="copyable">' + esc(c.email) + '</span>' + (o.userId ? '<span class="muted" style="font-size:14px">Зарегистрированный покупатель</span>' : '<span class="muted" style="font-size:14px">Без регистрации</span>') + '</div>' +
+        refundCard(o) +
         '<div class="adm-card" style="display:grid;gap:8px"><h3 class="adm-h3">Доставка</h3><span>' + esc(d.name || '—') + '</span>' + (d.city || d.address ? '<span class="copyable">' + esc([d.city, d.address].filter(Boolean).join(', ')) + '</span>' : '') + (o.comment ? '<span class="muted">Комментарий: ' + esc(o.comment) + '</span>' : '') + '</div>' +
         '<div class="adm-card adm-form trk-card" style="grid-template-columns:1fr"><h3 class="adm-h3">Отправка СДЭК</h3>' +
           (o.tracking ? '<div class="trk-now"><span>Трек-номер</span><b class="copyable">' + esc(o.tracking.number) + '</b><a class="link" href="' + esc(o.tracking.url) + '" target="_blank" rel="noopener">Отследить</a>' +
@@ -295,10 +372,11 @@
           '<p class="muted" style="font-size:13px;margin:0">После «Сохранить» покупатель получит письмо со ссылкой для отслеживания, а заказ станет «Передан в доставку». Номер также появится у покупателя на странице заказа.</p></div>' +
         '<div class="adm-card adm-form" style="grid-template-columns:1fr"><h3 class="adm-h3">Статус</h3>' +
           fieldHtml({ k: 'status', label: 'Статус заказа', type: 'select', options: Object.keys(A().STATUS).map(function (k) { return [k, A().STATUS[k]]; }) }, o) +
-          fieldHtml({ k: 'paymentStatus', label: 'Оплата (' + (o.payment.method === 'online' ? 'онлайн' : o.payment.method === 'bonus' ? 'бонусами' : 'при получении') + ')', type: 'select', options: Object.keys(A().PAY).map(function (k) { return [k, A().PAY[k]]; }) }, { paymentStatus: o.payment.status }) +
+          fieldHtml({ k: 'paymentStatus', label: 'Оплата (' + (o.payment.method === 'online' ? 'онлайн' : o.payment.method === 'bonus' ? 'бонусами' : 'при получении') + ')', type: 'select', options: Object.keys(A().PAY).filter(function (k) { return k !== 'refunded' || o.payment.method !== 'online' || o.payment.status === 'refunded'; }).map(function (k) { return [k, A().PAY[k]]; }) }, { paymentStatus: o.payment.status }) +
           fieldHtml({ k: 'note', label: 'Заметка для себя', type: 'textarea', rows: 2 }, { note: o.adminNote || '' }) +
           '<button class="btn" id="oSave">Сохранить</button></div>' +
         '<div class="adm-card" style="display:grid;gap:10px"><h3 class="adm-h3">Удаление</h3><p class="muted" style="font-size:13px;margin:0">Для тестовых и ошибочных заказов. Товар вернётся на склад, промокод и бонусы — как при отмене. Удаление не отменить.</p><button class="btn ghost" id="oDel" type="button">Удалить заказ</button></div></div></div>';
+    bindRefund(o);
     bindConfirm($('#oDel'), async function () {
       try { await A().API.adminOrderDelete(o.id); await afterSave('Заказ № ' + o.number + ' удалён', '#/admin?s=orders'); } catch (e) { toast(A().errMsg(e), true); }
     });
@@ -862,7 +940,7 @@
   /* ================= Оплата, касса, доставка =================
      Карточки вместо голой формы: у способа оплаты — переключатель и превью «как увидит покупатель»,
      у ЮKassa — статус подключения, у доставки — карточка на каждый способ с понятными полями. */
-  function payIc(n) { return '<img src="img/benefits/' + n + '.webp?v=13.16.0" alt="" width="52" height="52" decoding="async">'; }
+  function payIc(n) { return '<img src="img/benefits/' + n + '.webp?v=13.17.0" alt="" width="52" height="52" decoding="async">'; }
   var PAY_IC = { card: payIc('payment'), cash: payIc('cash'), truck: payIc('delivery'), pin: payIc('pin') };
   function switchHtml(id, on, label) {
     return '<label class="pm-switch"><input type="checkbox" id="' + id + '"' + (on ? ' checked' : '') + '><span class="pm-track" aria-hidden="true"></span><span class="sr">' + esc(label) + '</span></label>';

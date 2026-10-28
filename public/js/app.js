@@ -48,8 +48,8 @@
   function fmtPhone(d) { d = String(d || '').replace(/\D/g, ''); if (d.length !== 11) return d; return '+7 (' + d.slice(1, 4) + ') ' + d.slice(4, 7) + '-' + d.slice(7, 9) + '-' + d.slice(9, 11); }
   function fmtDate(iso) { try { return new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }); } catch (e) { return iso; } }
   function sortedCats() { return D.categories.slice().sort(function (a, b) { return (a.order || 0) - (b.order || 0); }); }
-  var STATUS = { new: 'Новый', processing: 'Собирается', shipped: 'Передан в доставку', done: 'Выполнен', canceled: 'Отменён' };
-  var PAY = { pending: 'Ожидает оплаты', paid: 'Оплачен', canceled: 'Оплата отменена', refunded: 'Возврат' };
+  var STATUS = { new: 'Новый', processing: 'Собирается', shipped: 'Передан в доставку', done: 'Выполнен', canceled: 'Отменён', returned: 'Возврат' };
+  var PAY = { pending: 'Ожидает оплаты', paid: 'Оплачен', canceled: 'Оплата отменена', refunded: 'Деньги возвращены' };
 
   function md(text) {
     var out = [], list = null;
@@ -490,7 +490,7 @@
     var cards = h.benefits.map(function (b, i) {
       var ic = benefitIcon(b);
       return '<div class="benefit' + (ic ? '' : ' no-ico') + '" style="--i:' + i + (ic ? ';--glow:' + BENEFIT_ICONS[ic] : '') + '">' +
-        (ic ? '<div class="benefit-ico"><img src="img/benefits/' + ic + '.webp?v=13.16.0" alt="" width="160" height="160" loading="lazy" decoding="async"></div>' : '') +
+        (ic ? '<div class="benefit-ico"><img src="img/benefits/' + ic + '.webp?v=13.17.0" alt="" width="160" height="160" loading="lazy" decoding="async"></div>' : '') +
         '<div class="benefit-body"><h3>' + glue(b.title) + '</h3>' + (b.text ? '<p>' + glue(b.text) + '</p>' : '') + '</div></div>';
     }).join('');
     return '<section class="section benefits-sec"><div class="wrap">' + head + '<div class="benefits">' + cards + '</div></div></section>';
@@ -985,7 +985,7 @@
   var cartPageDraw = null;
 
   /* ---------- Оформление заказа ---------- */
-  function optIc(n) { return '<span class="opt-ic"><img src="img/benefits/' + n + '.webp?v=13.16.0" alt="" width="48" height="48" decoding="async"></span>'; }
+  function optIc(n) { return '<span class="opt-ic"><img src="img/benefits/' + n + '.webp?v=13.17.0" alt="" width="48" height="48" decoding="async"></span>'; }
   function coStep(n, id, title, hint, body) {
     return '<section class="cstep" id="cs-' + id + '"><header class="cstep-head"><span class="cstep-n" aria-hidden="true"><i>' + n + '</i><svg viewBox="0 0 24 24"><path d="m6 12.5 4 4 8-9"/></svg></span>' +
       '<div><h3>' + title + '</h3><p>' + hint + '</p></div></header><div class="cstep-body">' + body + '</div></section>';
@@ -1130,13 +1130,24 @@
     return '<div class="trk"><div class="trk-l"><span>Трек-номер ' + esc(t.carrier || 'СДЭК') + '</span><b class="num">' + esc(t.number) + '</b></div>' +
       '<div class="trk-a"><button type="button" class="btn ghost sm" data-copy-track="' + esc(t.number) + '">Скопировать</button><a class="btn sm" href="' + esc(t.url) + '" target="_blank" rel="noopener">Отследить посылку</a></div></div>';
   }
+  // Что будет дальше — вместо обещания позвонить
+  function orderNext(o) {
+    var pickup = o.delivery && !o.delivery.address;
+    if (o.status === 'canceled') return 'Заказ отменён.';
+    if (o.status === 'returned' || o.payment.status === 'refunded') return 'Деньги по заказу возвращены. На карту они обычно приходят за 1–3 рабочих дня.';
+    if (o.payment.method === 'online' && o.payment.status !== 'paid') return 'Заказ ждёт оплаты — после неё сразу начнём сборку.';
+    if (o.status === 'done') return 'Заказ получен. Спасибо, что выбрали ALBAKOV.';
+    if (o.tracking) return 'Заказ передан в СДЭК — следите за ним по трек-номеру ниже.';
+    if (pickup) return 'Соберём заказ и напишем на почту, когда его можно будет забрать.';
+    return 'Соберём заказ и передадим в СДЭК, а трек-номер для отслеживания пришлём на почту.';
+  }
   async function orderPage(v, parts) {
     v.innerHTML = '<div class="loader">…</div>';
     try {
       var o = await API.getOrder(parts[1]);
       var payLabel = o.payment.method === 'bonus' ? 'Оплачен бонусами' : o.payment.method === 'online' ? PAY[o.payment.status] : 'Оплата при получении';
-      v.innerHTML = '<div class="wrap"><div class="success"><span class="eyebrow">Заказ № ' + esc(o.number) + '</span><h1>Спасибо за заказ</h1>' +
-        '<p class="muted" style="max-width:46ch">' + (D.mailReady ? 'Подтверждение придёт на ' + esc(o.customer.email) + (o.payment.method === 'online' && o.payment.status !== 'paid' ? ' после оплаты' : '') + '. ' : '') + 'Мы свяжемся по телефону ' + esc(fmtPhone(o.customer.phone)) + ', чтобы согласовать доставку.</p>' +
+      v.innerHTML = '<div class="wrap"><div class="success"><span class="eyebrow">Заказ № ' + esc(o.number) + '</span><h1>' + (o.status === 'returned' ? 'Возврат оформлен' : 'Спасибо за заказ') + '</h1>' +
+        '<p class="muted" style="max-width:46ch">' + (D.mailReady ? 'Подтверждение придёт на ' + esc(o.customer.email) + (o.payment.method === 'online' && o.payment.status !== 'paid' ? ' после оплаты' : '') + '. ' : '') + orderNext(o) + '</p>' +
         '<div style="display:flex;gap:18px;flex-wrap:wrap;justify-content:center"><span class="status ' + esc(o.status) + '">' + esc(STATUS[o.status] || o.status) + '</span><span class="status ' + esc(o.payment.status) + '">' + esc(payLabel) + '</span></div>' +
         trackHtml(o) +
         '<div class="order-card" style="width:100%;text-align:left">' + o.items.map(function (i) { return '<div class="mini-line"><img src="' + esc(i.image || Art.make(i.art)) + '" alt=""><div><div>' + esc(i.name) + '</div><div class="sub">' + (i.color ? esc(i.color) + ' · ' : '') + esc(i.size) + ' · ' + i.qty + ' шт.</div></div><span class="num">' + fmt(i.price * i.qty) + '</span></div>'; }).join('') +
@@ -1144,7 +1155,8 @@
           '<div class="sum-row"><span>' + esc(o.delivery && o.delivery.name || 'Доставка') + '</span><span>' + (o.delivery && o.delivery.price ? fmt(o.delivery.price) : 'Бесплатно') + '</span></div>' +
           (o.bonusUsed ? '<div class="sum-row disc"><span>Оплачено бонусами</span><span>−' + fmt(o.bonusUsed) + '</span></div>' : '') +
           '<div class="sum-row total"><span>Итого</span><span>' + fmt(o.total) + '</span></div>' +
-          (o.bonusEarn > 0 && o.status !== 'canceled' ? '<div class="sum-row bonus-earn"><span><i class="b-ic" aria-hidden="true">Б</i>' + (o.bonusCredited ? 'Начислено бонусов' : 'Начислим ' + (bonusCfg().creditOn === 'done' ? 'после получения' : 'после оплаты')) + '</span><span>+' + bonusNum(o.bonusEarn) + '</span></div>' : '') + '</div>' +
+          (o.refunds || []).map(function (r) { return '<div class="sum-row refund-row"><span>Возврат ' + esc(new Date(r.at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })) + '</span><span>−' + fmt(r.amount) + '</span></div>'; }).join('') +
+          (o.bonusEarn > 0 && o.status !== 'canceled' && o.status !== 'returned' ? '<div class="sum-row bonus-earn"><span><i class="b-ic" aria-hidden="true">Б</i>' + (o.bonusCredited ? 'Начислено бонусов' : 'Начислим ' + (bonusCfg().creditOn === 'done' ? 'после получения' : 'после оплаты')) + '</span><span>+' + bonusNum(o.bonusEarn) + '</span></div>' : '') + '</div>' +
         '<div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">' + (o.payUrl && o.payment.status === 'pending' ? '<a class="btn" href="' + esc(o.payUrl) + '">Оплатить заказ</a>' : '') + '<a class="btn ghost" href="#/catalog">Продолжить покупки</a>' + (API.user ? '<a class="btn ghost" href="#/account">Мои заказы</a><a class="btn ghost" href="#/account?tab=support&new=1&order=' + esc(o.id) + '">Вопрос по заказу</a>' : '') + '</div></div></div>';
       if (API.user) refreshBonus(); // после оплаты бонусы могли прийти — обновим счёт и покажем уведомление
     } catch (e) { v.innerHTML = '<div class="wrap"><div class="empty"><h3>Заказ не найден</h3><p>' + esc(errMsg(e)) + '</p><a class="btn ghost" href="#/">На главную</a></div></div>'; }
@@ -1186,7 +1198,7 @@
     // Факты под приветствием: заказы и баланс, обновляются после загрузки
     API.myOrders().then(function (list) {
       var f = $('#accFacts'); if (!f || !document.body.contains(f)) return;
-      var active = list.filter(function (o) { return o.status !== 'done' && o.status !== 'canceled'; }).length;
+      var active = list.filter(function (o) { return o.status !== 'done' && o.status !== 'canceled' && o.status !== 'returned'; }).length;
       f.innerHTML = '<a href="#/account?tab=orders"><b class="num">' + list.length + '</b><span>' + plural(list.length, 'заказ', 'заказа', 'заказов') + '</span></a>' +
         (active ? '<a href="#/account?tab=orders"><b class="num">' + active + '</b><span>в пути и в работе</span></a>' : '') +
         (bOn ? '<a href="#/account?tab=bonus"><b class="num">' + bonusNum(API.user.bonus || 0) + '</b><span>' + bonusWord(API.user.bonus || 0) + ' на счёте</span></a>' : '');
@@ -1206,6 +1218,7 @@
 
   function orderTrack(o) {
     if (o.status === 'canceled') return '<div class="ao-track is-canceled"><span class="ao-state">Отменён</span></div>';
+    if (o.status === 'returned') return '<div class="ao-track is-canceled is-returned"><span class="ao-state">Возврат · вернули ' + fmt(o.refunded || o.total) + '</span></div>';
     var at = Math.max(0, ORDER_STEPS.findIndex(function (s) { return s[0] === o.status; }));
     return '<div class="ao-track" style="--done:' + at + '" aria-label="Статус: ' + esc(ORDER_STEPS[at][1]) + '"><ol>' + ORDER_STEPS.map(function (s, i) {
       return '<li class="' + (i < at ? 'is-done' : i === at ? 'is-now' : '') + '"><i></i><span>' + s[1] + '</span></li>';
@@ -1219,7 +1232,7 @@
       var thumbs = o.items.slice(0, 3).map(function (i) { return '<img src="' + esc(i.image || Art.make(i.art)) + '" alt="" loading="lazy">'; }).join('') + (o.items.length > 3 ? '<em>+' + (o.items.length - 3) + '</em>' : '');
       return '<a class="acc-order" href="#/order/' + esc(o.id) + '">' +
         '<div class="ao-thumbs">' + thumbs + '</div>' +
-        '<div class="ao-main"><div class="ao-top"><b>Заказ № ' + esc(o.number) + '</b><span>' + esc(fmtDate(o.createdAt).replace(/ \d{4} г\.$/, '')) + '</span>' + pay + '</div>' + orderTrack(o) + (o.tracking && o.status !== 'canceled' ? '<span class="ao-trk">СДЭК: <b>' + esc(o.tracking.number) + '</b> · отследить на странице заказа</span>' : '') + '</div>' +
+        '<div class="ao-main"><div class="ao-top"><b>Заказ № ' + esc(o.number) + '</b><span>' + esc(fmtDate(o.createdAt).replace(/ \d{4} г\.$/, '')) + '</span>' + pay + '</div>' + orderTrack(o) + (o.tracking && o.status !== 'canceled' && o.status !== 'returned' ? '<span class="ao-trk">СДЭК: <b>' + esc(o.tracking.number) + '</b> · отследить на странице заказа</span>' : '') + '</div>' +
         '<div class="ao-sum"><b class="num">' + fmt(o.total) + '</b><span>' + n + ' ' + plural(n, 'вещь', 'вещи', 'вещей') + '</span></div>' +
       '</a>';
     }).join('') + '</div>';

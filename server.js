@@ -111,7 +111,7 @@ function hitIds() {
   if (home.hitsAuto === false) return [];
   const since = Date.now() - HITS_DAYS * 864e5, sold = new Map();
   for (const o of db.orders) {
-    if (o.test || o.status === 'canceled' || Date.parse(o.createdAt) < since) continue;
+    if (o.test || o.status === 'canceled' || o.status === 'returned' || Date.parse(o.createdAt) < since) continue;
     if (o.payment && o.payment.method === 'online' && o.payment.status !== 'paid') continue;
     for (const i of o.items || []) sold.set(i.productId, (sold.get(i.productId) || 0) + (Number(i.qty) || 0));
   }
@@ -207,27 +207,110 @@ async function ykRequest(method, url, body, idemKey) {
   return j;
 }
 const rub = (kop) => (kop / 100).toFixed(2);
-/* Позиции чека: скидка по промокоду распределяется по товарам, сумма позиций = сумма платежа */
-function receiptItems(order, vatCode) {
-  const lines = order.items.map((i) => ({ name: `${i.name}${i.color ? ', ' + i.color : ''}, размер ${i.size}`.slice(0, 128), qty: i.qty, totalK: i.price * i.qty * 100 }));
+/* Сколько реально оплачено деньгами за каждую позицию и доставку (в копейках):
+   скидка по промокоду и бонусы распределяются по товарам, остаток бонусов уменьшает доставку */
+function netLines(order) {
+  const lines = order.items.map((i, idx) => ({ idx, name: `${i.name}${i.color ? ', ' + i.color : ''}, размер ${i.size}`.slice(0, 128), qty: i.qty, totalK: i.price * i.qty * 100 }));
   const subK = lines.reduce((s, l) => s + l.totalK, 0);
-  // Скидка по промокоду и оплата бонусами распределяются по товарам; если бонусов больше суммы товаров — остаток уменьшает доставку
   const bonusK = (order.bonusUsed || 0) * 100, goodsBonusK = Math.min(bonusK, Math.max(0, subK - order.promoDiscount * 100));
   let discK = order.promoDiscount * 100 + goodsBonusK, left = discK;
   lines.forEach((l, idx) => {
     const share = idx === lines.length - 1 ? left : Math.min(left, Math.round(discK * l.totalK / (subK || 1)));
     left -= share; l.totalK -= share;
   });
-  const out = [];
-  const push = (name, qty, unitK, subject) => out.push({ description: name, quantity: qty.toFixed(2), amount: { value: rub(unitK), currency: 'RUB' }, vat_code: vatCode, payment_mode: 'full_payment', payment_subject: subject });
-  lines.forEach((l) => {
-    const unit = Math.floor(l.totalK / l.qty), rest = l.totalK - unit * l.qty;
-    if (rest === 0) push(l.name, l.qty, unit, 'commodity');
-    else { if (l.qty > 1) push(l.name, l.qty - 1, unit, 'commodity'); push(l.name, 1, unit + rest, 'commodity'); }
-  });
-  const delivK = order.delivery ? order.delivery.price * 100 - (bonusK - goodsBonusK) : 0;
-  if (delivK > 0) push('Доставка: ' + order.delivery.name, 1, delivK, 'service');
+  const delivK = order.delivery ? Math.max(0, order.delivery.price * 100 - (bonusK - goodsBonusK)) : 0;
+  return { lines, delivK, deliveryName: order.delivery ? order.delivery.name : '' };
+}
+// Позиция чека: если сумма не делится на количество без остатка — одна штука уходит отдельной строкой
+function pushReceipt(out, name, qty, totalK, subject, vatCode) {
+  const push = (q, unitK) => out.push({ description: name, quantity: q.toFixed(2), amount: { value: rub(unitK), currency: 'RUB' }, vat_code: vatCode, payment_mode: 'full_payment', payment_subject: subject });
+  const unit = Math.floor(totalK / qty), rest = totalK - unit * qty;
+  if (rest === 0) push(qty, unit);
+  else { if (qty > 1) push(qty - 1, unit); push(1, unit + rest); }
+}
+/* Позиции чека: сумма позиций = сумма платежа */
+function receiptItems(order, vatCode) {
+  const n = netLines(order), out = [];
+  n.lines.forEach((l) => { if (l.totalK > 0) pushReceipt(out, l.name, l.qty, l.totalK, 'commodity', vatCode); });
+  if (n.delivK > 0) pushReceipt(out, 'Доставка: ' + n.deliveryName, 1, n.delivK, 'service', vatCode);
   return out.filter((x) => Number(x.amount.value) > 0);
+}
+function receiptCustomer(order) { return { email: order.customer.email, phone: order.customer.phone, full_name: `${order.customer.lastName} ${order.customer.firstName}` }; }
+/* ---------- Возврат денег ---------- */
+const refundedK = (o) => (o.refunds || []).filter((r) => r.status !== 'canceled').reduce((s, r) => s + Math.round(r.amount * 100), 0);
+// Сколько вернуть за выбранные товары и доставку. Доля позиции считается так, чтобы частичные возвраты в сумме дали ровно её стоимость
+function refundPlan(o, b) {
+  const n = netLines(o), sel = [], { cfg } = yk(), vat = Number(cfg.vatCode) || 1, items = [];
+  let amountK = 0;
+  for (const x of Array.isArray(b.lines) ? b.lines : []) {
+    const l = n.lines[Number(x.idx)], q = Math.floor(Number(x.qty) || 0); if (!l || q <= 0) continue;
+    const done = o.items[l.idx].refundedQty || 0;
+    if (q > l.qty - done) fail(400, `«${o.items[l.idx].name}»: можно вернуть не больше ${l.qty - done} шт.`);
+    const k = Math.round(l.totalK * (done + q) / l.qty) - Math.round(l.totalK * done / l.qty);
+    sel.push({ idx: l.idx, qty: q }); amountK += k;
+    if (k > 0) pushReceipt(items, l.name, q, k, 'commodity', vat);
+  }
+  let delivK = 0;
+  if (b.delivery) {
+    if (o.deliveryRefunded) fail(400, 'Доставка уже возвращена');
+    delivK = n.delivK; amountK += delivK;
+    if (delivK > 0) pushReceipt(items, 'Доставка: ' + n.deliveryName, 1, delivK, 'service', vat);
+  }
+  const leftK = Math.round(o.total * 100) - refundedK(o);
+  amountK = Math.min(amountK, leftK);
+  return { sel, delivery: !!b.delivery && delivK >= 0, amountK, leftK, items, sendReceipt: !!cfg.sendReceipt };
+}
+// Возврат из кабинета ЮKassa (без выбора товаров): записываем сумму и меняем статус
+function recordRefund(r) {
+  if (!r || r.status !== 'succeeded') return;
+  const o = db.orders.find((x) => x.payment.providerId === r.payment_id); if (!o) return;
+  o.refunds = o.refunds || [];
+  if (o.refunds.some((x) => x.id === r.id)) return;
+  o.refunds.push({ id: r.id, status: r.status, amount: Number(r.amount.value), at: r.created_at || new Date().toISOString(), reason: 'Оформлен в кабинете ЮKassa', items: [], delivery: false, external: true });
+  o.refunded = refundedK(o) / 100;
+  if (refundedK(o) >= Math.round(o.total * 100)) { o.payment.status = 'refunded'; if (o.status !== 'returned') { o.statusBefore = o.status; o.status = 'returned'; } }
+  syncBonus(o); save();
+}
+async function refundOrder(o, b) {
+  if (o.payment.method !== 'online' || !o.payment.providerId) fail(400, 'Заказ оплачен не онлайн — деньги возвращаются вручную');
+  if (o.payment.status !== 'paid') fail(400, o.payment.status === 'refunded' ? 'Деньги по заказу уже возвращены полностью' : 'Заказ ещё не оплачен — возвращать нечего');
+  const plan = refundPlan(o, b);
+  if (!plan.sel.length && !plan.delivery) fail(400, 'Отметьте товары или доставку, за которые возвращаете деньги');
+  if (plan.amountK <= 0) fail(400, 'Сумма возврата получилась 0 ₽ — эти позиции были оплачены бонусами');
+  if (b.dry) return { amount: plan.amountK / 100, left: plan.leftK / 100 };
+  const key = String(b.key || '').replace(/[^\w-]/g, '').slice(0, 60);
+  if (!key) fail(400, 'Обновите страницу и повторите возврат');
+  const body = { payment_id: o.payment.providerId, amount: { value: rub(plan.amountK), currency: 'RUB' }, description: `Возврат по заказу № ${o.number}`.slice(0, 250) };
+  // Чек возврата: сумма позиций должна совпасть с суммой возврата
+  if (plan.sendReceipt && plan.items.length && plan.items.reduce((s, x) => s + Math.round(Number(x.amount.value) * 100) * Number(x.quantity), 0) === plan.amountK) {
+    body.receipt = { customer: receiptCustomer(o), items: plan.items, tax_system_code: Number(yk().cfg.taxSystem) || 1 };
+  }
+  const r = await ykRequest('POST', '/refunds', body, 'rf-' + o.id + '-' + key);
+  if (r.status === 'canceled') fail(502, 'ЮKassa отклонила возврат' + (r.cancellation_details && r.cancellation_details.reason ? ': ' + r.cancellation_details.reason : ''));
+  if ((o.refunds || []).some((x) => x.id === r.id)) return { refund: o.refunds.find((x) => x.id === r.id), repeated: true };
+  const refund = {
+    id: r.id, status: r.status, amount: plan.amountK / 100, at: new Date().toISOString(), reason: String(b.reason || '').trim().slice(0, 300),
+    items: plan.sel.map((x) => ({ name: o.items[x.idx].name, color: o.items[x.idx].color || '', size: o.items[x.idx].size, qty: x.qty })), delivery: plan.delivery, restocked: !!b.restock
+  };
+  o.refunds = o.refunds || []; o.refunds.push(refund);
+  plan.sel.forEach((x) => {
+    const it = o.items[x.idx]; it.refundedQty = (it.refundedQty || 0) + x.qty;
+    if (b.restock) { const st = sizeEntry(it.productId, it.colorId, it.size); if (st) st.stock += x.qty; }
+  });
+  if (plan.delivery) o.deliveryRefunded = true;
+  o.refunded = refundedK(o) / 100;
+  // Полный возврат: заказ становится «Возврат», чтобы его нельзя было спутать с действующим
+  if (refundedK(o) >= Math.round(o.total * 100)) { o.payment.status = 'refunded'; if (o.status !== 'returned') { o.statusBefore = o.status; o.status = 'returned'; } }
+  else if (o.bonusEarn > 0) {
+    // частичный возврат: бонусы за возвращённую часть забираем
+    const share = Math.floor(o.bonusEarn * plan.amountK / Math.round(o.total * 100)), u = userOf(o);
+    if (share > 0) { o.bonusEarn -= share; if (o.bonusCredited && u) Pricing.bonusMove(u, -Math.min(u.bonus || 0, share), 'revoke', o, uid); }
+  }
+  syncBonus(o);
+  save();
+  if (mailReady()) { try { await sendRefundMail(o, refund); refund.mailedAt = new Date().toISOString(); save(); } catch (e) { console.error('Письмо о возврате не отправлено:', e.message); } }
+  if (b.restock) processWaitlist().catch(() => {});
+  return { refund };
 }
 async function createPayment(order) {
   const { cfg, secret } = yk();
@@ -242,7 +325,7 @@ async function createPayment(order) {
   };
   if (cfg.sendReceipt) {
     body.receipt = {
-      customer: { email: order.customer.email, phone: order.customer.phone, full_name: `${order.customer.lastName} ${order.customer.firstName}` },
+      customer: receiptCustomer(order),
       items: receiptItems(order, Number(cfg.vatCode) || 1),
       tax_system_code: Number(cfg.taxSystem) || 1
     };
@@ -399,6 +482,12 @@ function sendOrderMails(order) {
 
 /* ---------------- Трек-номер ---------------- */
 const CDEK_TRACK = 'https://www.cdek.ru/ru/tracking/?order_id=';
+function sendRefundMail(o, r) {
+  const cs = db.settings.contacts || {};
+  const m = Mail.renderRefund({ store: db.settings.storeName, logo: brandLogo(), name: o.customer.firstName, number: o.number, amount: r.amount, items: r.items, delivery: r.delivery,
+    full: o.payment.status === 'refunded', url: `${PUBLIC_URL}/#/order/${o.id}`, contacts: [cs.phone, cs.email].filter(Boolean).join(' · ') });
+  return sendMail({ to: o.customer.email, subject: m.subject, html: m.html, text: m.text });
+}
 function sendTrackingMail(o) {
   const cs = db.settings.contacts || {};
   const m = Mail.renderTracking({ store: db.settings.storeName, logo: brandLogo(), name: o.customer.firstName, number: o.number, carrier: o.tracking.carrier, track: o.tracking.number,
@@ -697,6 +786,11 @@ async function api(req, res, url, body) {
   if (p[0] === 'payments' && p[1] === 'yookassa' && M === 'POST') {
     // Уведомление ЮKassa. Статус не берём из тела запроса, а перепроверяем через API.
     const id = body && body.object && body.object.id;
+    // Возврат, оформленный прямо в кабинете ЮKassa, тоже отмечаем в заказе
+    if (/^refund\./.test(String(body && body.event || '')) && id) {
+      try { recordRefund(await ykRequest('GET', '/refunds/' + id)); } catch (e) { console.error(e.message); }
+      return {};
+    }
     const order = id && db.orders.find((o) => o.payment.providerId === id);
     if (order) { try { applyPayment(order, await ykRequest('GET', '/payments/' + id)); } catch (e) { console.error(e.message); } }
     return {};
@@ -775,9 +869,15 @@ async function api(req, res, url, body) {
       db.tickets.forEach((t) => { if (ids.has(t.orderId)) { t.orderId = ''; } });
       save(); const notify = await processWaitlist(); return { deleted: ids.size, notify };
     }
+    // Возврат денег через ЮKassa: dry — только посчитать сумму
+    if (p[1] === 'orders' && p[2] && p[3] === 'refund' && M === 'POST') {
+      const o = db.orders.find((x) => x.id === p[2]); if (!o) fail(404, 'Заказ не найден');
+      const r = await refundOrder(o, body);
+      return Object.assign({ order: orderView(o) }, r);
+    }
     if (p[1] === 'orders' && p[2] && M === 'PATCH') {
       const o = db.orders.find((x) => x.id === p[2]); if (!o) fail(404, 'Заказ не найден');
-      const statuses = ['new', 'processing', 'shipped', 'done', 'canceled'], pays = ['pending', 'paid', 'canceled', 'refunded'];
+      const statuses = ['new', 'processing', 'shipped', 'done', 'canceled', 'returned'], pays = ['pending', 'paid', 'canceled', 'refunded'];
       if (body.status && statuses.includes(body.status)) {
         const pc = o.promoCode && db.promocodes.find((x) => x.code === o.promoCode);
         if (body.status === 'canceled' && o.status !== 'canceled') { restock(o); if (pc) pc.used = Math.max(0, (pc.used || 0) - 1); }

@@ -234,7 +234,24 @@
     return { subject: subject, html: frame(ctx, subject, 'Трек-номер ' + ctx.track + ' — отследите посылку', inner, footer), text: text };
   }
 
-  var api = { renderTracking: renderTracking, renderSupport: renderSupport, DEFAULT_NOTIFY: DEFAULT_NOTIFY, PLACEHOLDERS: PLACEHOLDERS, tplOf: tplOf, readyRequests: readyRequests, render: render, renderOrder: renderOrder, renderCode: renderCode, renderWelcome: renderWelcome };
+  function renderRefund(ctx) {
+    var sum = Number(ctx.amount || 0).toLocaleString('ru-RU') + ' ₽';
+    var subject = 'Возврат ' + sum + ' по заказу № ' + ctx.number;
+    var list = (ctx.items || []).map(function (i) { return esc(i.name) + (i.color ? ', ' + esc(i.color) : '') + ', размер ' + esc(i.size) + ' — ' + i.qty + ' шт.'; });
+    if (ctx.delivery) list.push('Доставка');
+    var box = '<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:24px auto 0;"><tr><td align="center" style="border:1px solid #121417;padding:16px 28px;font-family:' + SANS + ';">' +
+      '<div style="font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#464B52;">Сумма возврата</div>' +
+      '<div style="margin-top:8px;font-size:26px;font-weight:600;color:#121417;">' + esc(sum) + '</div></td></tr></table>';
+    var inner = eyebrow('Возврат денег') + h1((ctx.name ? ctx.name + ', мы' : 'Мы') + ' вернули деньги') +
+      para((ctx.full ? 'Оформили полный возврат по заказу № ' : 'Оформили возврат по заказу № ') + esc(ctx.number) + '. Деньги придут туда же, откуда была оплата: на карту — обычно за 1–3 рабочих дня, иногда банку нужно до 30 дней; через СБП — быстрее.') +
+      box + (list.length ? para('<b>За что возврат:</b><br>' + list.join('<br>'), 'margin:22px 0 0;font-size:14px;') : '') +
+      para('<a href="' + esc(ctx.url) + '" style="color:#121417;">Открыть заказ на сайте</a>', 'margin:22px 0 0;font-size:14px;');
+    var footer = 'Если деньги не пришли за 10 рабочих дней, ответьте на это письмо — поможем разобраться.' + (ctx.contacts ? '<br>' + esc(ctx.contacts) : '');
+    var text = 'Возврат по заказу № ' + ctx.number + ': ' + sum + '.\n' + (list.length ? 'За что: ' + list.join('; ').replace(/<[^>]+>/g, '') + '\n' : '') + 'Деньги придут на карту или счёт, с которого была оплата.\n\nЗаказ на сайте: ' + ctx.url;
+    return { subject: subject, html: frame(ctx, subject, 'Возврат ' + sum + ' — деньги уже в пути', inner, footer), text: text };
+  }
+
+  var api = { renderRefund: renderRefund, renderTracking: renderTracking, renderSupport: renderSupport, DEFAULT_NOTIFY: DEFAULT_NOTIFY, PLACEHOLDERS: PLACEHOLDERS, tplOf: tplOf, readyRequests: readyRequests, render: render, renderOrder: renderOrder, renderCode: renderCode, renderWelcome: renderWelcome };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Mail = api;
 })(this);

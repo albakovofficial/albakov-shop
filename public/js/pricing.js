@@ -247,7 +247,7 @@
       var after = out.subtotal - out.promoDiscount;
       var free = freeShipping || (m.freeFrom && after >= m.freeFrom);
       // Цена по тарифу СДЭК приходит снаружи (opts.deliveryPrice); пока пункт не выбран — «рассчитаем после выбора»
-      var auto = m.priceAuto && isPvzMethod(m) && opts.cdekAuto, known = typeof opts.deliveryPrice === 'number';
+      var auto = m.priceAuto && cdekMode(m) && opts.cdekAuto, known = typeof opts.deliveryPrice === 'number';
       var base = auto ? (known ? opts.deliveryPrice : 0) : m.price;
       out.delivery = { id: m.id, name: m.name, price: free ? 0 : Math.round(base || 0), free: !!free };
       if (auto && !known && !free) out.delivery.pending = true;
@@ -317,12 +317,44 @@
   // Способ доставки «до пункта выдачи СДЭК»: пункт выбирают из списка СДЭК. Флаг pickupPoint задаётся в панели;
   // если его ещё не трогали — узнаём по названию («СДЭК, пункт выдачи»)
   function isPvzMethod(m) {
-    if (!m || m.needsAddress === false) return false;
+    if (!m || m.needsAddress === false || m.cdekDoor === true) return false;
     if (typeof m.pickupPoint === 'boolean') return m.pickupPoint;
     return /сдэк|cdek/i.test(m.name || '') && /пункт|пвз|постамат|выдач/i.test((m.name || '') + ' ' + (m.desc || ''));
   }
 
-  var api = { isPvzMethod: isPvzMethod, bonusConf: bonusConf, bonusFor: bonusFor, bonusMove: bonusMove, syncOrderBonus: syncOrderBonus, badgesOf: badgesOf, inkFor: inkFor, BADGE_KEYS: BADGE_KEYS, forGender: forGender, migrateData: migrateData, migrateProduct: migrateProduct, colorsOf: colorsOf, colorOf: colorOf, stockOf: stockOf, productPrice: productPrice, calcCart: calcCart, checkCode: checkCode, inWindow: inWindow, format: format };
+  // Курьер СДЭК до двери: город из подсказок СДЭК + улица, дом, квартира
+  function isDoorMethod(m) { return !!(m && m.needsAddress !== false && m.cdekDoor === true); }
+  function cdekMode(m) { return isDoorMethod(m) ? 'door' : isPvzMethod(m) ? 'pvz' : null; }
+
+  /* Посылка для СДЭК: вес вещей складывается, упаковка — по самой крупной вещи;
+     если вещей много — на размер больше. Вес и упаковка задаются в карточке товара */
+  var DEFAULT_PACKS = [
+    { id: 'bag', name: 'Пакет', length: 30, width: 25, height: 5, weight: 20 },
+    { id: 'm', name: 'Коробка M', length: 40, width: 30, height: 10, weight: 150 },
+    { id: 'l', name: 'Коробка L', length: 50, width: 40, height: 20, weight: 300 }
+  ];
+  function cdekPacks(c) {
+    var list = c && Array.isArray(c.packs) && c.packs.length ? c.packs : DEFAULT_PACKS;
+    return list.slice().sort(function (a, b) { return a.length * a.width * a.height - b.length * b.width * b.height; });
+  }
+  function parcelFor(items, products, c) {
+    var packs = cdekPacks(c), def = Math.max(50, Number(c && c.pkg && c.pkg.weight) || 1000), n = 0, w = 0, idx = -1;
+    var defIdx = Math.max(0, packs.findIndex(function (x) { return c && x.id === c.defaultPack; }));
+    (items || []).forEach(function (it) {
+      var q = Math.max(0, Math.floor(Number(it.qty) || 0)); if (!q) return;
+      var p = (products || []).find(function (x) { return x.id === it.productId; }) || {};
+      n += q; w += (Number(p.weight) > 0 ? Number(p.weight) : def) * q;
+      var k = p.pack ? packs.findIndex(function (x) { return x.id === p.pack; }) : -1;
+      idx = Math.max(idx, k >= 0 ? k : defIdx);
+    });
+    if (idx < 0) idx = defIdx;
+    if (n >= 3) idx++;
+    if (n >= 6) idx++;
+    var pk = packs[Math.min(idx, packs.length - 1)];
+    return { weight: Math.min(30000, Math.max(50, Math.round(w + (Number(pk.weight) || 0)))), length: pk.length, width: pk.width, height: pk.height, pack: pk.name, count: n };
+  }
+
+  var api = { isPvzMethod: isPvzMethod, isDoorMethod: isDoorMethod, cdekMode: cdekMode, cdekPacks: cdekPacks, parcelFor: parcelFor, DEFAULT_PACKS: DEFAULT_PACKS, bonusConf: bonusConf, bonusFor: bonusFor, bonusMove: bonusMove, syncOrderBonus: syncOrderBonus, badgesOf: badgesOf, inkFor: inkFor, BADGE_KEYS: BADGE_KEYS, forGender: forGender, migrateData: migrateData, migrateProduct: migrateProduct, colorsOf: colorsOf, colorOf: colorOf, stockOf: stockOf, productPrice: productPrice, calcCart: calcCart, checkCode: checkCode, inWindow: inWindow, format: format };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Pricing = api;
 })(this);

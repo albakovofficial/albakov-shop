@@ -354,19 +354,19 @@
           '<p class="muted" style="font-size:13px;margin:0">После «Сохранить» покупатель получит письмо со ссылкой для отслеживания, а заказ станет «Передан в доставку». Номер также появится у покупателя на странице заказа.</p></div>';
   }
   /* ---------- Отправление СДЭК в заказе ---------- */
-  function useCdek(o) { return !!(A().D.cdekReady && ((o.delivery && o.delivery.pvz) || o.cdek)); }
+  function useCdek(o) { return !!(A().D.cdekReady && ((o.delivery && (o.delivery.pvz || o.delivery.door)) || o.cdek)); }
   var CDEK_STEP = { ACCEPTED: 'Заявка принята СДЭК', CREATED: 'Создано — отнесите посылку в пункт СДЭК' };
   function cdekCard(o) {
-    var c = o.cdek, sp = (DATA.settings.cdek || {}).shipmentPoint, pv = o.delivery.pvz || {};
-    var to = '<div class="cs-route"><div><small>Отправляете из</small><b>' + esc(sp ? sp.address : 'пункт не выбран') + '</b></div><span aria-hidden="true">→</span><div><small>Получатель забирает</small><b>' + esc(pv.address || o.delivery.address || '—') + '</b><small>' + esc(o.delivery.city || '') + (pv.code ? ' · ' + esc(pv.code) : '') + '</small></div></div>';
+    var c = o.cdek, sp = (DATA.settings.cdek || {}).shipmentPoint, pv = o.delivery.pvz || {}, door = o.delivery.door;
+    var to = '<div class="cs-route"><div><small>Отправляете из</small><b>' + esc(sp ? sp.address : 'пункт не выбран') + '</b></div><span aria-hidden="true">→</span><div><small>' + (door ? 'Курьер привезёт' : 'Получатель забирает') + '</small><b>' + esc(pv.address || o.delivery.address || '—') + '</b><small>' + esc(o.delivery.city || '') + (pv.code ? ' · ' + esc(pv.code) : '') + '</small></div></div>';
     if (!c) {
-      var pk = Object.assign({ weight: 1000, length: 30, width: 25, height: 10 }, (DATA.settings.cdek || {}).pkg);
-      pk.weight = Math.min(30000, pk.weight * Math.max(1, o.items.reduce(function (s, i) { return s + i.qty - (i.refundedQty || 0); }, 0)));
+      // посылка по карточкам товаров: вес вещей и подходящая упаковка
+      var pk = Pricing.parcelFor(o.items.map(function (i) { return { productId: i.productId, qty: i.qty - (i.refundedQty || 0) }; }), DATA.products, DATA.settings.cdek || {});
       var unpaid = o.payment.method === 'online' && o.payment.status !== 'paid';
       return '<div class="adm-card cs-order"><h3 class="adm-h3">Отправка СДЭК</h3>' + to +
         (o.payment.method === 'cod' ? '<p class="cs-cod">Оплата при получении: СДЭК возьмёт с покупателя <b>' + fmt(o.total - (o.refunded || 0)) + '</b></p>' : '') +
         (!sp ? '<p class="rf-note">Сначала укажите пункт отгрузки: «Оплата и доставка» → «Отправка заказов в СДЭК».</p>' : '') +
-        '<div class="pm-f"><span>Посылка</span><div class="cs-pkg"><label><input class="input num" id="coW" type="number" min="50" step="50" value="' + pk.weight + '"><i>г</i></label><label><input class="input num" id="coL" type="number" min="1" value="' + pk.length + '"><i>см</i></label><span>×</span><label><input class="input num" id="coWd" type="number" min="1" value="' + pk.width + '"><i>см</i></label><span>×</span><label><input class="input num" id="coH" type="number" min="1" value="' + pk.height + '"><i>см</i></label></div></div>' +
+        '<div class="pm-f"><span>Посылка · ' + esc(pk.pack) + '</span><div class="cs-pkg"><label><input class="input num" id="coW" type="number" min="50" step="50" value="' + pk.weight + '"><i>г</i></label><label><input class="input num" id="coL" type="number" min="1" value="' + pk.length + '"><i>см</i></label><span>×</span><label><input class="input num" id="coWd" type="number" min="1" value="' + pk.width + '"><i>см</i></label><span>×</span><label><input class="input num" id="coH" type="number" min="1" value="' + pk.height + '"><i>см</i></label></div></div>' +
         '<p class="form-error" id="csErr"></p><button class="btn" type="button" id="csCreate"' + (unpaid || !sp || ['canceled', 'returned'].includes(o.status) ? ' disabled' : '') + '>' + (unpaid ? 'Заказ ещё не оплачен' : 'Создать отправление в СДЭК') + '</button>' +
         '<p class="muted" style="font-size:13px;margin:0">СДЭК присвоит номер. Когда сдадите посылку в пункт, покупатель автоматически получит письмо с трек-номером, а заказ станет «Передан в доставку».</p></div>';
     }
@@ -560,6 +560,9 @@
           { k: 'compareAt', label: 'Старая цена, ₽', type: 'number', hint: 'Если больше цены — показывается зачёркнутой. Оставьте 0, если скидки нет.' },
           { k: 'badges', type: 'badges' },
           { k: 'active', label: 'Показывать в магазине', type: 'checkbox' },
+          { section: 'Доставка' },
+          { k: 'weight', label: 'Вес в упаковке, г', type: 'number', hint: 'Для цены доставки СДЭК. Например, футболка 300, пальто 1800. Пусто — возьмётся вес из настроек СДЭК' },
+          { k: 'pack', label: 'Упаковка', type: 'select', options: [['', 'По умолчанию из настроек СДЭК']].concat(Pricing.cdekPacks((DATA.settings && DATA.settings.cdek) || {}).map(function (x) { return [x.id, x.name + ' · ' + x.length + '×' + x.width + '×' + x.height + ' см']; })) },
           { section: 'Описание' },
           { k: 'description', label: 'Описание', type: 'textarea' },
           { k: 'composition', label: 'Состав', type: 'textarea', rows: 2 },
@@ -995,7 +998,7 @@
   /* ================= Оплата, касса, доставка =================
      Карточки вместо голой формы: у способа оплаты — переключатель и превью «как увидит покупатель»,
      у ЮKassa — статус подключения, у доставки — карточка на каждый способ с понятными полями. */
-  function payIc(n) { return '<img src="img/benefits/' + n + '.webp?v=13.21.1" alt="" width="52" height="52" decoding="async">'; }
+  function payIc(n) { return '<img src="img/benefits/' + n + '.webp?v=13.22.0" alt="" width="52" height="52" decoding="async">'; }
   var PAY_IC = { card: payIc('payment'), cash: payIc('cash'), truck: payIc('delivery'), pin: payIc('pin') };
   function switchHtml(id, on, label) {
     return '<label class="pm-switch"><input type="checkbox" id="' + id + '"' + (on ? ' checked' : '') + '><span class="pm-track" aria-hidden="true"></span><span class="sr">' + esc(label) + '</span></label>';
@@ -1003,7 +1006,7 @@
   function rub(n) { return Number(n || 0).toLocaleString('ru-RU') + ' ₽'; }
   function deliverySummary(d) {
     var price = Number(d.price) || 0, free = Number(d.freeFrom) || 0;
-    if (d.priceAuto && Pricing.isPvzMethod(d)) return 'по тарифу СДЭК' + (Number(d.markup) ? ' + ' + rub(d.markup) : '') + (free ? ', бесплатно от ' + rub(free) : '');
+    if (d.priceAuto && Pricing.cdekMode(d)) return 'по тарифу СДЭК' + (Number(d.markup) ? ' + ' + rub(d.markup) : '') + (free ? ', бесплатно от ' + rub(free) : '');
     if (!price) return 'Бесплатно';
     return rub(price) + (free ? ', бесплатно от ' + rub(free) : '');
   }
@@ -1021,8 +1024,9 @@
           '<label class="dm-f dm-num"><span>Бесплатно от суммы заказа</span><span class="dm-money"><input class="input num" type="number" min="0" step="500" data-d="freeFrom" value="' + (Number(d.freeFrom) || 0) + '"><i>₽</i></span><small>0 — не делать бесплатной</small></label>' +
           '<div class="dm-f dm-addr"><span>Адрес покупателя</span><label class="dm-toggle">' + '<input type="checkbox" data-d="needsAddress"' + (d.needsAddress !== false ? ' checked' : '') + '><span class="pm-track" aria-hidden="true"></span><b>' + (d.needsAddress !== false ? 'Спросить город и адрес' : 'Не нужен — самовывоз') + '</b></label></div>' +
         '</div>' +
-        '<label class="dm-pvz"' + (d.needsAddress === false ? ' hidden' : '') + '><input type="checkbox" data-d="pickupPoint"' + (Pricing.isPvzMethod(d) ? ' checked' : '') + '><span><b>До пункта выдачи СДЭК</b><small>Покупатель выбирает город с областью и пункт из списка СДЭК, а не печатает адрес сам</small></span></label>' +
-        '<div class="dm-auto"' + (d.needsAddress === false || !Pricing.isPvzMethod(d) ? ' hidden' : '') + '><label class="dm-pvz"><input type="checkbox" data-d="priceAuto"' + (d.priceAuto ? ' checked' : '') + '><span><b>Цена по тарифу СДЭК</b><small>Стоимость считается по городу покупателя из вашего пункта отгрузки. «Стоимость» выше — запасная, если СДЭК не ответил</small></span></label>' +
+        '<div class="dm-pvz dm-mode"' + (d.needsAddress === false ? ' hidden' : '') + '><span><b>СДЭК</b><small>Город покупатель выбирает из подсказок СДЭК — с областью, без ошибок</small></span>' +
+          '<select class="select" data-d="cdekMode" aria-label="Режим СДЭК">' + [['', 'Не СДЭК, адрес вручную'], ['pvz', 'Пункт выдачи из списка'], ['door', 'Курьер до двери']].map(function (o2) { return '<option value="' + o2[0] + '"' + ((Pricing.cdekMode(d) || '') === o2[0] ? ' selected' : '') + '>' + o2[1] + '</option>'; }).join('') + '</select></div>' +
+        '<div class="dm-auto"' + (d.needsAddress === false || !Pricing.cdekMode(d) ? ' hidden' : '') + '><label class="dm-pvz"><input type="checkbox" data-d="priceAuto"' + (d.priceAuto ? ' checked' : '') + '><span><b>Цена по тарифу СДЭК</b><small>Стоимость считается по городу покупателя из вашего пункта отгрузки. «Стоимость» выше — запасная, если СДЭК не ответил</small></span></label>' +
           '<label class="dm-f dm-num dm-markup"><span>Наценка к тарифу</span><span class="dm-money"><input class="input num" type="number" min="0" step="10" data-d="markup" value="' + (Number(d.markup) || 0) + '"><i>₽</i></span><small>Например, на упаковку. Итог округляется до 10 ₽</small></label></div>' +
         '<p class="dm-preview">Покупатель увидит: <b>' + esc(d.name || 'Без названия') + '</b>' + (d.desc ? ' · ' + esc(d.desc) : '') + ' — <span>' + esc(deliverySummary(d)) + '</span></p>' +
       '</div>' +
@@ -1032,12 +1036,19 @@
   function readDelivery(box) {
     return $$('.dm', box).map(function (el) {
       var v = function (k) { return $('[data-d="' + k + '"]', el); };
-      return { id: el.getAttribute('data-id'), name: v('name').value.trim(), desc: v('desc').value.trim(), price: Math.max(0, Number(v('price').value) || 0), freeFrom: Math.max(0, Number(v('freeFrom').value) || 0), needsAddress: v('needsAddress').checked, pickupPoint: v('needsAddress').checked && v('pickupPoint').checked,
-        priceAuto: v('needsAddress').checked && v('pickupPoint').checked && v('priceAuto').checked, markup: Math.max(0, Number(v('markup').value) || 0) };
+      return { id: el.getAttribute('data-id'), name: v('name').value.trim(), desc: v('desc').value.trim(), price: Math.max(0, Number(v('price').value) || 0), freeFrom: Math.max(0, Number(v('freeFrom').value) || 0), needsAddress: v('needsAddress').checked, pickupPoint: v('needsAddress').checked && v('cdekMode').value === 'pvz', cdekDoor: v('needsAddress').checked && v('cdekMode').value === 'door',
+        priceAuto: v('needsAddress').checked && !!v('cdekMode').value && v('priceAuto').checked, markup: Math.max(0, Number(v('markup').value) || 0) };
     });
   }
   /* ---------- СДЭК: откуда отправляем, упаковка, тариф, услуги ---------- */
   var CDEK_TARIFFS = [[136, 'Посылка склад–склад'], [234, 'Экономичная посылка склад–склад']];
+  var CDEK_DOOR = [[137, 'Посылка склад–дверь'], [233, 'Экономичная посылка склад–дверь']];
+  function packRow(x) {
+    var n = function (k, v, w) { return '<label><input class="input num" data-pk="' + k + '" type="number" min="0" value="' + (Number(v) || 0) + '"><i>' + w + '</i></label>'; };
+    return '<div class="cs-pack" data-id="' + esc(x.id) + '"><input class="input" data-pk="name" value="' + esc(x.name) + '" placeholder="Название" aria-label="Название упаковки">' +
+      '<div class="cs-pkg">' + n('length', x.length, 'см') + '<span>×</span>' + n('width', x.width, 'см') + '<span>×</span>' + n('height', x.height, 'см') + n('weight', x.weight, 'г') + '</div>' +
+      '<button type="button" class="link" data-pk-rm aria-label="Удалить упаковку">✕</button></div>';
+  }
   function cdekShipHtml(c) {
     var pk = Object.assign({ weight: 1000, length: 30, width: 25, height: 10 }, c.pkg), sv = c.services || {}, sp = c.shipmentPoint;
     return '<div class="pm-card pm-wide cs-card" id="cdekShip"><div class="pm-top pm-top-flat"><div><b>Отправка заказов в СДЭК</b><span>В заказе появится кнопка «Создать отправление в СДЭК»: заявка, трек-номер покупателю и наклейка на посылку — без личного кабинета СДЭК</span></div></div>' +
@@ -1046,7 +1057,13 @@
         '<div id="csPointPick" class="cs-pick"' + (sp ? ' hidden' : '') + '><div class="pvz-combo"><input class="input" id="csCity" placeholder="Ваш город, например «Москва»" autocomplete="off"><ul class="pvz-sug" id="csSug" hidden></ul></div><select class="select" id="csPoints" hidden></select></div></div>' +
       '<div class="pm-two">' +
         '<label class="pm-f"><span>Тариф</span><select class="select" id="csTariff">' + CDEK_TARIFFS.map(function (t) { return '<option value="' + t[0] + '"' + (Number(c.tariff || 136) === t[0] ? ' selected' : '') + '>' + t[1] + '</option>'; }).join('') + '</select><small>В постаматы — тариф «склад–постамат», подставится сам</small></label>' +
-        '<div class="pm-f"><span>Вес одной вещи в упаковке · размер коробки</span><div class="cs-pkg"><label><input class="input num" id="csW" type="number" min="50" step="50" value="' + pk.weight + '"><i>г</i></label><label><input class="input num" id="csL" type="number" min="1" value="' + pk.length + '"><i>см</i></label><span>×</span><label><input class="input num" id="csWd" type="number" min="1" value="' + pk.width + '"><i>см</i></label><span>×</span><label><input class="input num" id="csH" type="number" min="1" value="' + pk.height + '"><i>см</i></label></div><small>Вес посылки = вес вещи × количество. Используется для цены доставки и заявки; в заказе можно поправить</small></div>' +
+        '<label class="pm-f"><span>Тариф для курьера</span><select class="select" id="csTariffDoor">' + CDEK_DOOR.map(function (t) { return '<option value="' + t[0] + '"' + (Number(c.tariffDoor || 137) === t[0] ? ' selected' : '') + '>' + t[1] + '</option>'; }).join('') + '</select><small>Вы сдаёте посылку в пункт, курьер везёт до двери</small></label>' +
+      '</div>' +
+      '<div class="pm-f"><span>Упаковки</span><small>Размер и вес самой упаковки. В карточке товара выбираете, в какую упаковку он кладётся; посылка берётся по самой крупной вещи, а от 3 вещей — на размер больше</small>' +
+        '<div class="cs-packs" id="csPacks">' + Pricing.cdekPacks(c).map(packRow).join('') + '</div><button type="button" class="link" id="csPackAdd" style="justify-self:start;font-size:13px">+ Добавить упаковку</button></div>' +
+      '<div class="pm-two">' +
+        '<label class="pm-f"><span>Вес вещи, если в карточке не указан</span><span class="dm-money"><input class="input num" id="csW" type="number" min="50" step="50" value="' + pk.weight + '"><i>г</i></span></label>' +
+        '<label class="pm-f"><span>Упаковка, если в карточке не выбрана</span><select class="select" id="csDefPack">' + Pricing.cdekPacks(c).map(function (x) { return '<option value="' + esc(x.id) + '"' + (c.defaultPack === x.id ? ' selected' : '') + '>' + esc(x.name) + '</option>'; }).join('') + '</select></label>' +
       '</div>' +
       '<div class="cs-sv"><span class="cs-sv-h">Услуги для покупателя (включите, если они есть в вашем договоре со СДЭК)</span>' +
         '<label class="check"><input type="checkbox" id="csPart"' + (sv.partDeliv ? ' checked' : '') + '> <span><b>Частичный выкуп</b> — покупатель забирает только то, что подошло, остальное СДЭК везёт вам обратно</span></label>' +
@@ -1076,10 +1093,14 @@
       pick = { code: p.code, address: p.address, city: p.city + (p.region && p.region !== p.city ? ', ' + p.region : ''), cityCode: p.cityCode };
       $('#csPointAddr').textContent = pick.address; $('#csPointCity').textContent = pick.city + ' · код ' + pick.code; $('#csPointNow').hidden = false; $('#csPointPick').hidden = true;
     });
+    $('#csPackAdd').addEventListener('click', function () { $('#csPacks').insertAdjacentHTML('beforeend', packRow({ id: 'pk' + Date.now().toString(36), name: '', length: 30, width: 20, height: 10, weight: 50 })); });
+    $('#csPacks').addEventListener('click', function (e) { var b = e.target.closest('[data-pk-rm]'); if (b) b.closest('.cs-pack').remove(); });
     $('#csSave').addEventListener('click', async function () {
       var el = $('#csState');
       try {
-        var r = await A().API.adminCdek({ check: false, shipmentPoint: pick, tariff: Number($('#csTariff').value), pkg: { weight: $('#csW').value, length: $('#csL').value, width: $('#csWd').value, height: $('#csH').value }, services: { partDeliv: $('#csPart').checked, tryOn: $('#csTry').checked } });
+        var packs = $$('.cs-pack', box).map(function (r) { var v = function (k) { return $('[data-pk="' + k + '"]', r).value; }; return { id: r.dataset.id, name: v('name').trim() || 'Упаковка', length: v('length'), width: v('width'), height: v('height'), weight: v('weight') }; });
+        if (!packs.length) { el.textContent = 'Нужна хотя бы одна упаковка'; el.className = 'warn'; return; }
+        var r = await A().API.adminCdek({ check: false, shipmentPoint: pick, tariff: Number($('#csTariff').value), tariffDoor: Number($('#csTariffDoor').value), packs: packs, defaultPack: $('#csDefPack').value, pkg: { weight: $('#csW').value, length: 30, width: 25, height: 10 }, services: { partDeliv: $('#csPart').checked, tryOn: $('#csTry').checked } });
         DATA.settings.cdek = r.settings.cdek; s.cdek = r.settings.cdek;
         el.textContent = pick ? 'Сохранено' : 'Сохранено. Укажите пункт отгрузки — без него отправление не создать'; el.className = pick ? 'ok' : 'warn';
       } catch (e) { el.textContent = A().errMsg(e); el.className = 'warn'; }
@@ -1128,7 +1149,7 @@
       // ---- Доставка
       '<section class="pm-sec"><div class="pm-sec-h"><h2>Способы доставки</h2><p>Порядок здесь = порядок при оформлении. Первый способ выбран у покупателя по умолчанию.</p></div>' +
       '<div class="dm-list" id="dmList">' + ((s.delivery && s.delivery.methods) || []).map(deliveryCard).join('') + '</div>' +
-      '<div class="dm-add"><button type="button" class="btn ghost" data-dm-add="courier">+ Доставка с адресом</button><button type="button" class="btn ghost" data-dm-add="pickup">+ Самовывоз</button></div>' +
+      '<div class="dm-add"><button type="button" class="btn ghost" data-dm-add="courier">+ Доставка с адресом</button><button type="button" class="btn ghost" data-dm-add="door">+ Курьер СДЭК</button><button type="button" class="btn ghost" data-dm-add="pickup">+ Самовывоз</button></div>' +
       '</section>' +
 
       // ---- СДЭК
@@ -1157,7 +1178,7 @@
       $('.dm-addr b', el).textContent = d.needsAddress ? 'Спросить город и адрес' : 'Не нужен — самовывоз';
       $('.dm-ic', el).innerHTML = d.needsAddress ? PAY_IC.truck : PAY_IC.pin;
       $('.dm-pvz', el).hidden = !d.needsAddress;
-      $('.dm-auto', el).hidden = !d.needsAddress || !d.pickupPoint;
+      $('.dm-auto', el).hidden = !d.needsAddress || !(d.pickupPoint || d.cdekDoor);
     };
     list.addEventListener('input', function (e) { var el = e.target.closest('.dm'); if (el) refresh(el); });
     list.addEventListener('change', function (e) { var el = e.target.closest('.dm'); if (el) refresh(el); });
@@ -1169,7 +1190,10 @@
       if (act === 'rm') { if (b.classList.contains('armed')) el.remove(); else { b.classList.add('armed'); b.textContent = 'Удалить?'; setTimeout(function () { if (document.body.contains(b)) { b.classList.remove('armed'); b.textContent = '✕'; } }, 3000); } }
     });
     $$('[data-dm-add]', m).forEach(function (b) { b.addEventListener('click', function () {
-      var pick = b.getAttribute('data-dm-add') === 'pickup' ? { name: 'Самовывоз', desc: '', price: 0, freeFrom: 0, needsAddress: false } : { name: '', desc: '', price: 0, freeFrom: 0, needsAddress: true };
+      var kind = b.getAttribute('data-dm-add');
+      var pick = kind === 'pickup' ? { name: 'Самовывоз', desc: '', price: 0, freeFrom: 0, needsAddress: false }
+        : kind === 'door' ? { name: 'Курьером СДЭК', desc: 'До двери по всей России', price: 600, freeFrom: 0, needsAddress: true, cdekDoor: true, pickupPoint: false, priceAuto: true, markup: 0 }
+        : { name: '', desc: '', price: 0, freeFrom: 0, needsAddress: true, pickupPoint: false };
       pick.id = uid('d'); list.insertAdjacentHTML('beforeend', deliveryCard(pick)); $('input', list.lastElementChild).focus();
     }); });
 

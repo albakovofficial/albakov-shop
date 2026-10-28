@@ -1887,3 +1887,16 @@ input:focus-visible + .pm-track { outline: 2px solid var(--accent); outline-offs
 .dm-auto { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 12px; align-items: start; }
 .dm-auto[hidden] { display: none; }
 @media (max-width: 700px) { .dm-auto { grid-template-columns: 1fr; } }
+.dm-mode { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 14px; align-items: center; cursor: default; }
+.dm-mode .select { background: var(--paper); }
+@media (max-width: 700px) { .dm-mode { grid-template-columns: 1fr; } }
+.cs-packs { display: grid; gap: 6px; margin-top: 8px; }
+.cs-pack { display: grid; grid-template-columns: minmax(140px, 1fr) auto auto; gap: 10px; align-items: center; }
+.cs-pack .cs-pkg .input { width: 84px; }
+.cs-pack > .input { min-height: 42px; height: 42px; font-size: 14px; }
+.cs-pack .cs-pkg .input { height: 42px; min-height: 42px; }
+.cs-pack [data-pk-rm] { font-size: 13px; color: var(--muted); }
+@media (max-width: 700px) { .cs-pack { grid-template-columns: 1fr auto; } .cs-pack .cs-pkg { grid-column: 1 / -1; } }
+.pvz-door { display: grid; gap: 6px; }
+.pvz-door-note { margin: 0; font-size: 13px; color: var(--muted); }
+.pvz-door-note #pvzDeliv { color: var(--text); font-weight: 500; }

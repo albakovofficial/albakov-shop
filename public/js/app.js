@@ -490,7 +490,7 @@
     var cards = h.benefits.map(function (b, i) {
       var ic = benefitIcon(b);
       return '<div class="benefit' + (ic ? '' : ' no-ico') + '" style="--i:' + i + (ic ? ';--glow:' + BENEFIT_ICONS[ic] : '') + '">' +
-        (ic ? '<div class="benefit-ico"><img src="img/benefits/' + ic + '.webp?v=13.21.1" alt="" width="160" height="160" loading="lazy" decoding="async"></div>' : '') +
+        (ic ? '<div class="benefit-ico"><img src="img/benefits/' + ic + '.webp?v=13.22.0" alt="" width="160" height="160" loading="lazy" decoding="async"></div>' : '') +
         '<div class="benefit-body"><h3>' + glue(b.title) + '</h3>' + (b.text ? '<p>' + glue(b.text) + '</p>' : '') + '</div></div>';
     }).join('');
     return '<section class="section benefits-sec"><div class="wrap">' + head + '<div class="benefits">' + cards + '</div></div></section>';
@@ -992,7 +992,7 @@
       '<p class="pvz-hint">Выберите свой населённый пункт из списка — область подставится сама. Например, Мурино и Кудрово — это Ленинградская область, а не Санкт-Петербург.</p></div>' +
       '<div class="pvz-pick" id="pvzPick" hidden></div></div>';
   }
-  function optIc(n) { return '<span class="opt-ic"><img src="img/benefits/' + n + '.webp?v=13.21.1" alt="" width="48" height="48" decoding="async"></span>'; }
+  function optIc(n) { return '<span class="opt-ic"><img src="img/benefits/' + n + '.webp?v=13.22.0" alt="" width="48" height="48" decoding="async"></span>'; }
   function coStep(n, id, title, hint, body) {
     return '<section class="cstep" id="cs-' + id + '"><header class="cstep-head"><span class="cstep-n" aria-hidden="true"><i>' + n + '</i><svg viewBox="0 0 24 24"><path d="m6 12.5 4 4 8-9"/></svg></span>' +
       '<div><h3>' + title + '</h3><p>' + hint + '</p></div></header><div class="cstep-body">' + body + '</div></section>';
@@ -1003,7 +1003,9 @@
     if (!D.payReady) pay.online = false; // ЮKassa ещё не подключена — онлайн-оплату не предлагаем
     var st = { deliveryId: methods[0] && methods[0].id, payment: pay.online ? 'online' : 'cod', code: '', useBonus: false, city: null, pvz: null, sumSeq: 0 };
     function curMethod() { return methods.find(function (x) { return x.id === st.deliveryId; }); }
-    function pvzMode() { return !!(D.cdekReady && Pricing.isPvzMethod(curMethod())); }
+    function cdekMode() { return D.cdekReady ? Pricing.cdekMode(curMethod()) : null; }
+    function pvzMode() { return cdekMode() === 'pvz'; }
+    function doorMode() { return cdekMode() === 'door'; }
     v.innerHTML = '<div class="wrap"><div class="page-head"><div class="crumbs"><a href="#/cart">Корзина</a><span>/</span><span>Оформление</span></div><h1>Оформление заказа</h1></div>' +
       '<form class="checkout" id="coForm" novalidate><div>' +
       (!API.user ? '<div class="co-login"><span class="co-login-ic" aria-hidden="true">Б</span><p><b>Уже покупали у нас?</b> <a class="link" href="#/account?back=checkout">Войдите</a>, чтобы копить бонусы и видеть историю заказов. Можно оформить и без регистрации.</p></div>' : '') +
@@ -1043,17 +1045,19 @@
       $('#delivOpts').innerHTML = methods.map(function (m) { return '<label class="option ico' + (st.deliveryId === m.id ? ' on' : '') + '"><input type="radio" name="deliv" value="' + esc(m.id) + '"' + (st.deliveryId === m.id ? ' checked' : '') + '>' + optIc(m.needsAddress === false ? 'pin' : 'delivery') + '<span><b>' + esc(m.name) + '</b><small>' + esc(m.desc || '') + (m.freeFrom ? ' · бесплатно от ' + fmt(m.freeFrom) : '') + '</small></span><span class="num opt-price" data-dp="' + esc(m.id) + '"></span></label>'; }).join('');
       $$('#payOpts .option').forEach(function (o) { var i = $('input', o); i.checked = i.value === st.payment; o.classList.toggle('on', i.checked); });
       var m = methods.find(function (x) { return x.id === st.deliveryId; });
-      var pm = pvzMode();
-      $('#addrBox').hidden = !(m && m.needsAddress !== false) || pm;
-      $('#pvzBox').hidden = !pm;
+      var cm = cdekMode(), pm = cm === 'pvz';
+      $('#addrBox').hidden = !(m && m.needsAddress !== false) || !!cm;
+      $('#pvzBox').hidden = !cm;
       // СДЭК без подключённого подбора — вводят адрес пункта вручную, с подсказкой про область
       var manualPvz = !pm && Pricing.isPvzMethod(m);
       $('#co-addr-l').textContent = manualPvz ? 'Адрес пункта выдачи СДЭК' : 'Адрес';
       $('#co-addr').placeholder = manualPvz ? 'Например, Петровский бульвар, 7' : 'Улица, дом, квартира';
       $('#addrHint').hidden = !manualPvz;
-      if (pm && !st.pvzInit) { st.pvzInit = true; pvzInit(); }
+      if (cm && !st.pvzInit) { st.pvzInit = true; st.mode = cm; pvzInit(); }
+      // сменили пункт выдачи ↔ курьер: город оставляем, перерисовываем пункты или поле адреса
+      else if (cm && st.mode !== cm) { st.mode = cm; if (st.city) pickCity(st.city, st.pvz && st.pvz.code); }
       // подсказки под оплатой зависят от выбранного способа
-      if ($('#codHint')) $('#codHint').textContent = pm ? 'Наличными или картой в пункте выдачи СДЭК' : 'Наличными или картой при получении';
+      if ($('#codHint')) $('#codHint').textContent = cm === 'door' ? 'Наличными или картой курьеру' : pm ? 'Наличными или картой в пункте выдачи СДЭК' : 'Наличными или картой при получении';
       $('#cs-pay .cstep-head p').textContent = st.payment === 'cod' ? 'Оплатите заказ при получении — наличными или картой' : 'Оплатите заказ сразу после подтверждения';
       if ($('#coSecure')) $('#coSecure').hidden = st.payment !== 'online' || st.free;
       submitLabel(); coProgress();
@@ -1064,14 +1068,14 @@
       var ph = String($('#co-phone').value).replace(/\D/g, ''), em = $('#co-email').value.trim();
       var buyer = $('#co-first').value.trim() && ph.length === 11 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em);
       var m = methods.find(function (x) { return x.id === st.deliveryId; });
-      var deliv = m && (m.needsAddress === false || (pvzMode() ? !!st.pvz : $('#co-city').value.trim() && $('#co-addr').value.trim()));
+      var deliv = m && (m.needsAddress === false || (doorMode() ? !!st.city && (st.addr || '').trim().length >= 5 : pvzMode() ? !!st.pvz : $('#co-city').value.trim() && $('#co-addr').value.trim()));
       var payOk = !!$('#payOpts input:checked') || !$('#payOpts').children.length || $('#payOpts').hidden;
       [['buyer', buyer], ['deliv', deliv], ['pay', payOk && $('#payOpts').children.length]].forEach(function (x) { $('#cs-' + x[0]).classList.toggle('done', !!x[1]); });
     }
     async function drawSum() {
       var contact = { email: $('#co-email').value, phone: $('#co-phone').value }, my = ++st.sumSeq;
       // цена СДЭК считается по городу выбранного пункта
-      var extra = pvzMode() && st.city ? { cityCode: st.city.code, pvzType: st.pvz ? st.pvz.type : 'pvz' } : null;
+      var extra = cdekMode() && st.city ? { cityCode: st.city.code, pvzType: doorMode() ? 'door' : st.pvz ? st.pvz.type : 'pvz' } : null;
       var q = await cartQuote(st.code, st.deliveryId, contact, st.useBonus, extra);
       if (my !== st.sumSeq) return q;
       st.q = q;
@@ -1079,11 +1083,11 @@
       methods.forEach(function (m) {
         var el = $('[data-dp="' + m.id + '"]'); if (!el) return;
         var after = q.subtotal - q.promoDiscount, free = (m.freeFrom && after >= m.freeFrom) || (q.promo && q.promo.ok && q.promo.type === 'shipping');
-        var auto = m.priceAuto && Pricing.isPvzMethod(m) && D.cdekReady;
+        var auto = m.priceAuto && Pricing.cdekMode(m) && D.cdekReady;
         if (auto) { var cur = q.delivery && q.delivery.id === m.id; el.textContent = free ? 'Бесплатно' : cur && !q.delivery.pending ? (q.deliveryPrice ? fmt(q.deliveryPrice) : 'Бесплатно') : 'По тарифу СДЭК'; el.classList.toggle('calc', !free && !(cur && !q.delivery.pending)); return; }
         el.textContent = free || !m.price ? 'Бесплатно' : fmt(m.price);
       });
-      if (st.pvz && $('#pvzDeliv')) $('#pvzDeliv').innerHTML = delivLine(q);
+      if ($('#pvzDeliv')) $('#pvzDeliv').innerHTML = delivLine(q);
       var msg = $('#promoMsg');
       if (q.promo && PROMO_REASONS[q.promo.reason]) { msg.className = 'promo-msg'; msg.innerHTML = promoPlaque(q.promo); }
       else if (q.promo) { msg.textContent = q.promo.message; msg.className = 'promo-msg ' + (q.promo.ok ? 'ok' : 'bad'); } else { msg.textContent = ''; msg.className = 'promo-msg'; }
@@ -1108,7 +1112,7 @@
     }
     /* ---- Пункт выдачи СДЭК: населённый пункт из списка (с областью) → пункт на карте адресов ---- */
     var LS_PVZ = 'albakov:pvz';
-    function pvzSave() { try { localStorage.setItem(LS_PVZ, JSON.stringify({ city: st.city, pvz: st.pvz && st.pvz.code })); } catch (e) {} }
+    function pvzSave() { try { localStorage.setItem(LS_PVZ, JSON.stringify({ city: st.city, pvz: st.pvz && st.pvz.code, addr: st.addr || '' })); } catch (e) {} }
     function pvzInit() {
       var q = $('#pvz-q'), sug = $('#pvzSug'), timer = 0, seq = 0, items = [], act = -1;
       function close() { sug.hidden = true; q.setAttribute('aria-expanded', 'false'); act = -1; }
@@ -1140,13 +1144,22 @@
       $('#pvzBox').addEventListener('change', function (e) {
         if (e.target.name === 'pvz') { st.pvz = (st.points || []).find(function (x) { return x.code === e.target.value; }) || null; $('#pvzBox').classList.remove('invalid'); pvzSave(); drawPoints(); coProgress(); drawSum(); }
       });
-      $('#pvzBox').addEventListener('input', function (e) { if (e.target.id === 'pvz-f') { st.filter = e.target.value; drawPoints(true); } });
-      try { var saved = JSON.parse(localStorage.getItem(LS_PVZ) || 'null'); if (saved && saved.city && saved.city.code) pickCity(saved.city, saved.pvz); } catch (e) {}
+      $('#pvzBox').addEventListener('input', function (e) {
+        if (e.target.id === 'pvz-f') { st.filter = e.target.value; drawPoints(true); }
+        if (e.target.id === 'door-addr') { st.addr = e.target.value; e.target.classList.remove('invalid'); pvzSave(); coProgress(); }
+      });
+      try { var saved = JSON.parse(localStorage.getItem(LS_PVZ) || 'null'); if (saved && saved.city && saved.city.code) { st.addr = saved.addr || ''; pickCity(saved.city, saved.pvz); } } catch (e) {}
     }
     async function pickCity(c, keep) {
       st.city = c; st.pvz = null; st.points = null; st.filter = ''; st.q = null;
       $('#pvz-q').value = c.city; $('#pvzSug').hidden = true; $('#pvzCityBox').hidden = true;
       var box = $('#pvzPick'); box.hidden = false;
+      if (doorMode()) {
+        // курьер: после города — только улица, дом, квартира
+        box.innerHTML = cityChip() + '<label class="field pvz-door"><span>Улица, дом, квартира</span><input class="input" id="door-addr" autocomplete="street-address" placeholder="Например, ул. Ленина, 5, кв. 12" value="' + esc(st.addr || '') + '"></label>' +
+          '<p class="pvz-door-note"><span id="pvzDeliv">' + delivLine(st.q) + '</span>' + (doorTry() ? ' · ' + doorTry() : '') + '</p>';
+        pvzSave(); coProgress(); drawSum(); return;
+      }
       box.innerHTML = cityChip() + '<div class="pvz-load">Загружаем пункты выдачи…</div>';
       try {
         var pts = await API.cdekPoints(c.code); if (st.city !== c) return;
@@ -1165,6 +1178,10 @@
     function delivLine(q) {
       var d = q && q.delivery; if (!d || d.pending) return 'Считаем стоимость доставки…';
       return 'Доставка ' + (d.days ? d.days + ' ' + plural(Number(String(d.days).split('–').pop()), 'день', 'дня', 'дней') + ' · ' : '') + (d.price ? fmt(d.price) : 'бесплатно');
+    }
+    function doorTry() {
+      var sv = (D.settings.cdek && D.settings.cdek.services) || {};
+      return sv.tryOn ? 'курьер подождёт, пока вы примерите' + (sv.partDeliv ? ', оплачиваете только то, что подошло' : '') : '';
     }
     function codNow() { return st.payment === 'cod' && pvzMode(); }
     function codNote(p) {
@@ -1225,6 +1242,7 @@
       $('#co-email').classList.toggle('invalid', !validEmail(f.email)); if (!validEmail(f.email)) bad.push(1);
       var needAddr = !$('#addrBox').hidden;
       if (pvzMode() && !st.pvz) { bad.push(1); $('#pvzBox').classList.add('invalid'); $('#pvz-q').focus(); }
+      if (doorMode() && (!st.city || (st.addr || '').trim().length < 5)) { bad.push(1); $('#pvzBox').classList.add('invalid'); if (!st.city) $('#pvz-q').focus(); else { $('#door-addr').classList.add('invalid'); $('#door-addr').focus(); } }
       if (needAddr) [['co-city'], ['co-addr']].forEach(function (x) { var el = $('#' + x[0]); el.classList.toggle('invalid', !el.value.trim()); if (!el.value.trim()) bad.push(1); });
       var err = $('#coErr');
       if (bad.length) { err.textContent = 'Заполните выделенные поля'; return; }
@@ -1233,7 +1251,7 @@
       err.textContent = '';
       var btn = $('#coSubmit'); btn.disabled = true; btn.textContent = st.payment === 'online' && !st.free ? 'Переходим к оплате…' : 'Оформляем…';
       try {
-        var r = await API.placeOrder({ lines: Cart.get(), code: st.code, deliveryId: st.deliveryId, payment: st.payment, useBonus: st.useBonus, customer: f, city: needAddr ? $('#co-city').value.trim() : '', address: needAddr ? $('#co-addr').value.trim() : '', pvz: pvzMode() && st.pvz ? st.pvz.code : '', cityCode: pvzMode() && st.city ? st.city.code : '', pvzType: st.pvz ? st.pvz.type : '', comment: $('#co-comment').value.trim(), consent: true });
+        var r = await API.placeOrder({ lines: Cart.get(), code: st.code, deliveryId: st.deliveryId, payment: st.payment, useBonus: st.useBonus, customer: f, city: needAddr ? $('#co-city').value.trim() : '', address: needAddr ? $('#co-addr').value.trim() : doorMode() ? (st.addr || '').trim() : '', pvz: pvzMode() && st.pvz ? st.pvz.code : '', cityCode: cdekMode() && st.city ? st.city.code : '', pvzType: st.pvz ? st.pvz.type : '', comment: $('#co-comment').value.trim(), consent: true });
         Cart.clear();
         if (r.payUrl) { location.href = r.payUrl; return; }
         go('#/order/' + r.order.id);

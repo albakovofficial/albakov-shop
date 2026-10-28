@@ -113,11 +113,11 @@ const CDEK_PKG = { weight: 1000, length: 30, width: 25, height: 10 };
 const cdekPkg = (x) => { const d = Object.assign({}, CDEK_PKG, cdekCfg().pkg, x); const n = (v, lo, hi) => Math.min(hi, Math.max(lo, Math.round(Number(v) || 0))); return { weight: n(d.weight, 50, 30000), length: n(d.length, 1, 150), width: n(d.width, 1, 150), height: n(d.height, 1, 150) }; };
 // Заявка на отправление: товары с объявленной стоимостью, оплата уже получена онлайн (к оплате при получении — 0)
 function cdekOrderBody(o, pkg) {
-  const c = cdekCfg(), pv = o.delivery && o.delivery.pvz;
-  if (!pv || !pv.code) fail(400, 'Покупатель не выбрал пункт выдачи СДЭК из списка — создайте отправление в личном кабинете СДЭК вручную');
+  const c = cdekCfg(), pv = o.delivery && o.delivery.pvz, dr = o.delivery && o.delivery.door;
+  if ((!pv || !pv.code) && (!dr || !dr.cityCode)) fail(400, 'У заказа нет пункта выдачи или адреса из подсказок СДЭК — создайте отправление в личном кабинете СДЭК вручную');
   if (!c.shipmentPoint || !c.shipmentPoint.code) fail(400, 'Укажите в «Оплата и доставка» пункт СДЭК, куда вы сдаёте посылки');
   const paid = o.payment.status === 'paid' || o.payment.method === 'bonus';
-  if (!paid && o.payment.method === 'cod' && pv.cod === false) fail(400, 'Покупатель выбрал пункт без оплаты при получении — свяжитесь с ним или примите оплату онлайн');
+  if (!paid && o.payment.method === 'cod' && pv && pv.cod === false) fail(400, 'Покупатель выбрал пункт без оплаты при получении — свяжитесь с ним или примите оплату онлайн');
   // Оплата при получении: СДЭК возьмёт с покупателя ровно сумму заказа — цену каждой вещи со скидками и бонусами плюс доставку
   const net = netLines(o);
   const items = [];
@@ -129,17 +129,23 @@ function cdekOrderBody(o, pkg) {
     else { if (qty > 1) add(qty - 1, unit, '-a'); add(1, unit + rest, '-b'); }
   });
   if (!items.length) fail(400, 'В заказе не осталось товаров для отправки');
-  const count = items.reduce((s, x) => s + x.qty, 0), unitW = Math.max(1, Math.floor(pkg.weight / count));
+  // вес каждой вещи — из карточки товара (или поровну, если не указан), но не больше веса посылки
+  const count = items.reduce((s, x) => s + x.qty, 0), even = Math.max(1, Math.floor(pkg.weight / count));
+  const prodW = (x) => { const pr = db.products.find((p) => p.id === x.i.productId); return pr && Number(pr.weight) > 0 ? Math.round(Number(pr.weight)) : 0; };
+  const known = items.reduce((s, x) => s + prodW(x) * x.qty, 0);
+  const unitWOf = (x) => (known > 0 && known <= pkg.weight ? prodW(x) || Math.max(1, Math.floor((pkg.weight - known) / Math.max(1, items.filter((y) => !prodW(y)).reduce((s, y) => s + y.qty, 0)))) : even);
   const services = [];
   if (c.services && c.services.partDeliv) services.push({ code: 'PART_DELIV' });
   if (c.services && c.services.tryOn) services.push({ code: 'TRYING_ON' });
   return {
     type: 1, number: 'ALB-' + o.number + (o.cdekTry ? '-' + o.cdekTry : ''),
-    tariff_code: Number(o.delivery.tariff) || (pv.type === 'postamat' ? Number(c.tariffPostamat) || 368 : Number(c.tariff) || 136),
-    shipment_point: c.shipmentPoint.code, delivery_point: pv.code,
+    tariff_code: Number(o.delivery.tariff) || (dr ? Number(c.tariffDoor) || 137 : pv.type === 'postamat' ? Number(c.tariffPostamat) || 368 : Number(c.tariff) || 136),
+    shipment_point: c.shipmentPoint.code,
+    delivery_point: pv ? pv.code : undefined,
+    to_location: dr ? { code: Number(dr.cityCode), address: dr.address } : undefined,
     recipient: { name: `${o.customer.lastName} ${o.customer.firstName}`.trim(), email: o.customer.email, phones: [{ number: '+' + o.customer.phone }] },
     packages: [{ number: '1', weight: pkg.weight, length: pkg.length, width: pkg.width, height: pkg.height, comment: 'Одежда',
-      items: items.map((x) => ({ name: `${x.i.name}${x.i.color ? ', ' + x.i.color : ''}, ${x.i.size}`.slice(0, 255), ware_key: `${x.i.productId}-${x.i.size}${x.suffix}`.slice(0, 50), payment: { value: x.payK / 100 }, cost: x.i.price, weight: unitW, amount: x.qty })) }],
+      items: items.map((x) => ({ name: `${x.i.name}${x.i.color ? ', ' + x.i.color : ''}, ${x.i.size}`.slice(0, 255), ware_key: `${x.i.productId}-${x.i.size}${x.suffix}`.slice(0, 50), payment: { value: x.payK / 100 }, cost: x.i.price, weight: unitWOf(x), amount: x.qty })) }],
     delivery_recipient_cost: !paid && net.delivK > 0 && !o.deliveryRefunded ? { value: net.delivK / 100 } : undefined,
     services: services.length ? services : undefined,
     comment: o.comment ? o.comment.slice(0, 255) : undefined
@@ -440,17 +446,17 @@ function usedByCustomer(code, user, email, phone) {
     ((user && o.userId === user.id) || (email && o.customer.email === email) || (phone && o.customer.phone === phone)));
 }
 // Цена доставки до пункта выдачи по тарифу СДЭК (+ наценка, округление до 10 ₽ вверх)
-async function cdekShipPrice(m, cityCode, type, count) {
+async function cdekShipPrice(m, cityCode, type, lines) {
   const c = cdekCfg(), from = c.shipmentPoint && c.shipmentPoint.cityCode;
   if (!from || !cityCode) return null;
-  const one = cdekPkg(), pkg = Object.assign({}, one, { weight: Math.min(30000, one.weight * Math.max(1, count)) });
+  const pkg = Pricing.parcelFor(lines, db.products, c);
   const r = await cdekCalcAny(from, cityCode, type, pkg);
   return { price: Math.ceil((r.sum + Math.max(0, Number(m.markup) || 0)) / 10) * 10, days: r.max ? (r.min && r.min !== r.max ? r.min + '–' + r.max : String(r.max)) : '', tariff: r.tariff };
 }
 // Выбранный тариф доступен не на всех направлениях — пробуем следующий подходящий
 function cdekTariffs(type) {
   const c = cdekCfg();
-  const list = type === 'postamat' ? [Number(c.tariffPostamat) || 368, 368] : [Number(c.tariff) || 136, 136, 234];
+  const list = type === 'postamat' ? [Number(c.tariffPostamat) || 368, 368] : type === 'door' ? [Number(c.tariffDoor) || 137, 137] : [Number(c.tariff) || 136, 136, 234];
   return [...new Set(list)];
 }
 async function cdekCalcAny(from, to, type, pkg, log) {
@@ -464,18 +470,19 @@ async function cdekCalcAny(from, to, type, pkg, log) {
 // Расчёт корзины с ценой доставки СДЭК для выбранного города
 async function quoteFull(req, b, strict) {
   const m = (db.settings.delivery.methods || []).find((x) => x.id === b.deliveryId);
-  const auto = !!(m && m.priceAuto && Pricing.isPvzMethod(m) && cdek.ready() && cdekCfg().shipmentPoint && cdekCfg().shipmentPoint.cityCode);
+  const mode = Pricing.cdekMode(m);
+  const auto = !!(m && m.priceAuto && mode && cdek.ready() && cdekCfg().shipmentPoint && cdekCfg().shipmentPoint.cityCode);
   let extra = { cdekAuto: auto };
   if (auto && b.cityCode) {
-    const count = (Array.isArray(b.lines) ? b.lines : []).reduce((s, l) => s + Math.max(1, Math.floor(Number(l.qty) || 1)), 0);
-    try { const p = await cdekShipPrice(m, b.cityCode, b.pvzType, count); if (p) extra = { cdekAuto: true, deliveryPrice: p.price, deliveryDays: p.days, deliveryTariff: p.tariff }; }
+    const lines = (Array.isArray(b.lines) ? b.lines : []).slice(0, 100);
+    try { const p = await cdekShipPrice(m, b.cityCode, mode === 'door' ? 'door' : b.pvzType, lines); if (p) extra = { cdekAuto: true, deliveryPrice: p.price, deliveryDays: p.days, deliveryTariff: p.tariff }; }
     catch (e) {
       console.error('СДЭК расчёт:', e.message);
       // СДЭК не ответил: берём запасную цену из настроек способа
       extra = { cdekAuto: true, deliveryPrice: Math.round(Number(m.price) || 0) };
     }
   }
-  if (auto && strict && typeof extra.deliveryPrice !== 'number') fail(400, 'Выберите пункт выдачи — по нему рассчитаем доставку');
+  if (auto && strict && typeof extra.deliveryPrice !== 'number') fail(400, mode === 'door' ? 'Выберите город из подсказок — по нему рассчитаем доставку' : 'Выберите пункт выдачи — по нему рассчитаем доставку');
   const q = quote(req, b, extra);
   if (q.delivery && extra.deliveryTariff) q.delivery.tariff = extra.deliveryTariff;
   return q;
@@ -510,7 +517,7 @@ async function placeOrder(req, b) {
   if (b.code && !(q.promo && q.promo.ok)) fail(400, q.promo ? q.promo.message : 'Промокод не применён');
   const m = db.settings.delivery.methods.find((x) => x.id === b.deliveryId);
   // Пункт выдачи СДЭК выбирают из списка: адрес и населённый пункт берём из данных СДЭК, а не из того, что набрал покупатель
-  let pvz = null;
+  let pvz = null, door = null;
   if (m && Pricing.isPvzMethod(m) && cdek.ready()) {
     if (!b.pvz || !b.cityCode) fail(400, 'Выберите пункт выдачи СДЭК из списка');
     let list = [];
@@ -519,6 +526,15 @@ async function placeOrder(req, b) {
     if (!pvz) fail(400, 'Этот пункт выдачи больше не работает — выберите другой');
     if (Number(pvz.cityCode) !== Number(b.cityCode)) fail(400, 'Пункт выдачи не из выбранного города — выберите пункт заново');
     if (method === 'cod' && !pvz.cod) fail(400, 'В этом пункте нельзя оплатить при получении — выберите другой пункт или оплату онлайн');
+  } else if (m && Pricing.isDoorMethod(m) && cdek.ready()) {
+    // Курьер: город — только из подсказок СДЭК (с областью), адрес — улица, дом, квартира
+    const addr = String(b.address || '').replace(/\s+/g, ' ').trim().slice(0, 250);
+    if (!b.cityCode) fail(400, 'Выберите город из подсказок');
+    if (addr.length < 5) fail(400, 'Укажите улицу, дом и квартиру');
+    let city = null;
+    try { city = await cdek.cityByCode(b.cityCode); } catch (e) { fail(502, 'СДЭК сейчас не отвечает. Попробуйте оформить заказ через минуту.'); }
+    if (!city) fail(400, 'Город не найден — выберите его из подсказок');
+    door = Object.assign({}, city, { address: addr });
   } else if (m && m.needsAddress !== false && (!String(b.city || '').trim() || !String(b.address || '').trim())) fail(400, 'Укажите город и адрес доставки');
 
   q.lines.forEach((l) => { sizeEntry(l.productId, l.colorId, l.size).stock -= l.qty; });
@@ -531,6 +547,7 @@ async function placeOrder(req, b) {
     subtotal: q.subtotal, saleDiscount: q.saleDiscount, promoCode: q.promo && q.promo.ok ? q.promo.code : '', promoDiscount: q.promoDiscount,
     delivery: Object.assign({}, q.delivery, pvz
       ? { city: pvz.city + (pvz.region ? ' (' + pvz.region + ')' : ''), address: (pvz.type === 'postamat' ? 'Постамат СДЭК ' : 'ПВЗ СДЭК ') + pvz.code + ': ' + pvz.address, pvz: { code: pvz.code, type: pvz.type, cityCode: pvz.cityCode, city: pvz.city, region: pvz.region, address: pvz.address, full: pvz.full, hours: pvz.hours, cod: !!pvz.cod } }
+      : door ? { city: door.city + (door.region ? ' (' + door.region + ')' : ''), address: door.address, door: { cityCode: door.code, city: door.city, region: door.region, address: door.address } }
       : { city: String(b.city || '').slice(0, 100), address: String(b.address || '').slice(0, 300) }), comment: String(b.comment || '').slice(0, 1000),
     total: q.total, payment: { method, status: 'pending', provider: method === 'online' ? pay.provider : null }, status: 'new',
     test: method === 'online' && pay.provider !== 'yookassa' ? true : undefined,
@@ -983,6 +1000,12 @@ async function api(req, res, url, body) {
       }
       if (body.pkg) db.settings.cdek.pkg = cdekPkg(body.pkg);
       if (body.tariff) db.settings.cdek.tariff = Number(body.tariff) || 136;
+      if (body.tariffDoor) db.settings.cdek.tariffDoor = Number(body.tariffDoor) || 137;
+      if (Array.isArray(body.packs)) {
+        const n = (v, lo, hi) => Math.min(hi, Math.max(lo, Math.round(Number(v) || 0)));
+        db.settings.cdek.packs = body.packs.slice(0, 12).map((x, i) => ({ id: String(x.id || 'pk' + i).replace(/[^\w-]/g, '').slice(0, 20) || 'pk' + i, name: String(x.name || 'Упаковка').slice(0, 40), length: n(x.length, 1, 150), width: n(x.width, 1, 150), height: n(x.height, 1, 150), weight: n(x.weight, 0, 5000) }));
+      }
+      if (typeof body.defaultPack === 'string') db.settings.cdek.defaultPack = body.defaultPack.slice(0, 20);
       if (body.services) db.settings.cdek.services = { partDeliv: !!body.services.partDeliv, tryOn: !!body.services.tryOn };
       save();
       const s = process.env.CDEK_CLIENT_SECRET || db.secrets.cdekSecret || '';

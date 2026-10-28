@@ -51,6 +51,7 @@
     async cdekCities(q) { return (await call('GET', 'api/cdek/cities?q=' + encodeURIComponent(q))).cities; },
     async cdekPoints(code) { return (await call('GET', 'api/cdek/points?city=' + encodeURIComponent(code))).points; },
     async adminCdek(body) { return await call('POST', 'api/admin/cdek', body); },
+    async adminCdekOrder(id, method, act, body) { return (await call(method, 'api/admin/orders/' + encodeURIComponent(id) + '/' + act, body)).order; },
     async updateProfile(f) { this.user = (await call('PUT', 'api/me', f)).user; return this.user; },
     async myBonus() { var r = await call('GET', 'api/me'); this.user = r.user; return r; },
     async bonusSeen() { this.user = (await call('POST', 'api/me/bonus-seen')).user; return this.user; },

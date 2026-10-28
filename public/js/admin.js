@@ -346,6 +346,60 @@
       } catch (e) { err.textContent = A().errMsg(e); go.disabled = false; go.classList.remove('danger'); delete go.dataset.armed; go.textContent = 'Вернуть ' + fmt(amount); }
     });
   }
+  function manualTrack(o) {
+    return '<div class="adm-card adm-form trk-card" style="grid-template-columns:1fr"><h3 class="adm-h3">Отправка СДЭК</h3>' +
+          (o.tracking ? '<div class="trk-now"><span>Трек-номер</span><b class="copyable">' + esc(o.tracking.number) + '</b><a class="link" href="' + esc(o.tracking.url) + '" target="_blank" rel="noopener">Отследить</a>' +
+            '<small>' + (o.tracking.mailedAt ? 'Письмо покупателю отправлено ' + esc(new Date(o.tracking.mailedAt).toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })) : 'Письмо покупателю не отправлялось') + '</small></div>' : '') +
+          '<label class="field"><span>' + (o.tracking ? 'Изменить трек-номер' : 'Трек-номер СДЭК') + '</span><input class="input num" id="f-track" value="' + esc(o.tracking ? o.tracking.number : '') + '" placeholder="Например, 1234567890" autocomplete="off" inputmode="numeric"></label>' +
+          '<p class="muted" style="font-size:13px;margin:0">После «Сохранить» покупатель получит письмо со ссылкой для отслеживания, а заказ станет «Передан в доставку». Номер также появится у покупателя на странице заказа.</p></div>';
+  }
+  /* ---------- Отправление СДЭК в заказе ---------- */
+  function useCdek(o) { return !!(A().D.cdekReady && ((o.delivery && o.delivery.pvz) || o.cdek)); }
+  var CDEK_STEP = { ACCEPTED: 'Заявка принята СДЭК', CREATED: 'Создано — отнесите посылку в пункт СДЭК' };
+  function cdekCard(o) {
+    var c = o.cdek, sp = (DATA.settings.cdek || {}).shipmentPoint, pv = o.delivery.pvz || {};
+    var to = '<div class="cs-route"><div><small>Отправляете из</small><b>' + esc(sp ? sp.address : 'пункт не выбран') + '</b></div><span aria-hidden="true">→</span><div><small>Получатель забирает</small><b>' + esc(pv.address || o.delivery.address || '—') + '</b><small>' + esc(o.delivery.city || '') + (pv.code ? ' · ' + esc(pv.code) : '') + '</small></div></div>';
+    if (!c) {
+      var pk = Object.assign({ weight: 1000, length: 30, width: 25, height: 10 }, (DATA.settings.cdek || {}).pkg);
+      var unpaid = o.payment.method === 'online' && o.payment.status !== 'paid';
+      return '<div class="adm-card cs-order"><h3 class="adm-h3">Отправка СДЭК</h3>' + to +
+        (!sp ? '<p class="rf-note">Сначала укажите пункт отгрузки: «Оплата и доставка» → «Отправка заказов в СДЭК».</p>' : '') +
+        '<div class="pm-f"><span>Посылка</span><div class="cs-pkg"><label><input class="input num" id="coW" type="number" min="50" step="50" value="' + pk.weight + '"><i>г</i></label><label><input class="input num" id="coL" type="number" min="1" value="' + pk.length + '"><i>см</i></label><span>×</span><label><input class="input num" id="coWd" type="number" min="1" value="' + pk.width + '"><i>см</i></label><span>×</span><label><input class="input num" id="coH" type="number" min="1" value="' + pk.height + '"><i>см</i></label></div></div>' +
+        '<p class="form-error" id="csErr"></p><button class="btn" type="button" id="csCreate"' + (unpaid || !sp || ['canceled', 'returned'].includes(o.status) ? ' disabled' : '') + '>' + (unpaid ? 'Заказ ещё не оплачен' : 'Создать отправление в СДЭК') + '</button>' +
+        '<p class="muted" style="font-size:13px;margin:0">СДЭК присвоит номер. Когда сдадите посылку в пункт, покупатель автоматически получит письмо с трек-номером, а заказ станет «Передан в доставку».</p></div>';
+    }
+    var waiting = !c.status || c.status === 'ACCEPTED' || c.status === 'CREATED';
+    return '<div class="adm-card cs-order"><h3 class="adm-h3">Отправка СДЭК</h3>' +
+      '<div class="cs-num"><div><small>Номер СДЭК</small><b class="num copyable">' + esc(c.number || 'присваивается…') + '</b></div><span class="cs-st' + (c.status === 'DELIVERED' ? ' ok' : c.status === 'NOT_DELIVERED' ? ' bad' : '') + '">' + esc(CDEK_STEP[c.status] || c.statusName || 'Обновляется') + '</span></div>' + to +
+      (c.statusAt ? '<small class="muted" style="font-size:12px">Обновлено ' + esc(dt(c.statusAt)) + '</small>' : '') +
+      '<div class="cs-acts"><button class="btn" type="button" data-cs-print="barcode"' + (c.number ? '' : ' disabled') + '>Наклейка на посылку</button><button class="btn ghost" type="button" data-cs-print="waybill"' + (c.number ? '' : ' disabled') + '>Накладная</button></div>' +
+      '<div class="cs-acts small"><button class="link" type="button" id="csSync">Обновить статус</button>' + (waiting ? '<button class="link" type="button" id="csCancel">Отменить отправление</button>' : '') + (c.number ? '<a class="link" href="' + esc((o.tracking && o.tracking.url) || ('https://www.cdek.ru/ru/tracking/?order_id=' + encodeURIComponent(c.number))) + '" target="_blank" rel="noopener">Открыть на сайте СДЭК</a>' : '') + '</div>' +
+      (waiting ? '<p class="muted" style="font-size:13px;margin:0">Распечатайте наклейку, приклейте на пакет и сдайте посылку в пункт. После этого покупатель получит трек-номер.</p>' : '') +
+      '<p class="form-error" id="csErr"></p></div>';
+  }
+  function bindCdekOrder(o) {
+    var go = function (p) { return p.then(function () { return afterSave('Готово', '#/admin?s=orders&id=' + o.id); }).catch(function (e) { $('#csErr').textContent = A().errMsg(e); }); };
+    var cr = $('#csCreate');
+    if (cr) cr.addEventListener('click', function () {
+      cr.disabled = true; cr.textContent = 'Создаём в СДЭК…'; $('#csErr').textContent = '';
+      A().API.adminCdekOrder(o.id, 'POST', 'cdek', { pkg: { weight: $('#coW').value, length: $('#coL').value, width: $('#coWd').value, height: $('#coH').value } })
+        .then(function () { return afterSave('Отправление создано в СДЭК', '#/admin?s=orders&id=' + o.id); })
+        .catch(function (e) { $('#csErr').textContent = A().errMsg(e); cr.disabled = false; cr.textContent = 'Создать отправление в СДЭК'; });
+    });
+    if ($('#csSync')) $('#csSync').addEventListener('click', function () { go(A().API.adminCdekOrder(o.id, 'POST', 'cdek-sync')); });
+    if ($('#csCancel')) bindConfirm($('#csCancel'), function () { return go(A().API.adminCdekOrder(o.id, 'DELETE', 'cdek')); });
+    $$('[data-cs-print]').forEach(function (b) { b.addEventListener('click', async function () {
+      var kind = b.dataset.csPrint, w = window.open('', '_blank'), label = b.textContent; b.disabled = true; b.textContent = 'Готовим PDF…';
+      try {
+        var r = await fetch('api/admin/orders/' + encodeURIComponent(o.id) + '/cdek-print?kind=' + kind, { credentials: 'same-origin' });
+        if (!r.ok || !/pdf/.test(r.headers.get('content-type') || '')) { var j = await r.json().catch(function () { return {}; }); throw new Error(j.error || 'Не удалось получить документ'); }
+        var url = URL.createObjectURL(await r.blob()); if (w) w.location = url; else location.href = url;
+      } catch (e) { if (w) w.close(); $('#csErr').textContent = e.message; }
+      b.disabled = false; b.textContent = label;
+    }); });
+    // пока посылка в пути — подтягиваем свежий статус при открытии заказа
+    if (o.cdek && o.cdek.status !== 'DELIVERED' && !o._synced) { o._synced = true; A().API.adminCdekOrder(o.id, 'POST', 'cdek-sync').then(async function (n) { if (n && n.cdek && (n.cdek.status !== o.cdek.status || n.cdek.number !== o.cdek.number) && location.hash.indexOf(o.id) !== -1) { await reload(); DATA.orders.forEach(function (x) { if (x.id === o.id) x._synced = true; }); await A().refresh(); } }).catch(function () {}); }
+  }
   function orderDetail(m, id) {
     var o = DATA.orders.find(function (x) { return x.id === id; });
     if (!o) { m.innerHTML = head('Заказ не найден') + '<a class="link" href="#/admin?s=orders">← К заказам</a>'; return; }
@@ -365,11 +419,7 @@
       '<div style="display:grid;gap:16px;align-content:start"><div class="adm-card" style="display:grid;gap:8px"><h3 class="adm-h3">Покупатель</h3><b>' + esc(c.firstName + ' ' + c.lastName) + '</b><span class="copyable">' + esc(A().fmtPhone(c.phone)) + '</span><span class="copyable">' + esc(c.email) + '</span>' + (o.userId ? '<span class="muted" style="font-size:14px">Зарегистрированный покупатель</span>' : '<span class="muted" style="font-size:14px">Без регистрации</span>') + '</div>' +
         refundCard(o) +
         '<div class="adm-card" style="display:grid;gap:8px"><h3 class="adm-h3">Доставка</h3><span>' + esc(d.name || '—') + '</span>' + (d.city || d.address ? '<span class="copyable">' + esc([d.city, d.address].filter(Boolean).join(', ')) + '</span>' : '') + (o.comment ? '<span class="muted">Комментарий: ' + esc(o.comment) + '</span>' : '') + '</div>' +
-        '<div class="adm-card adm-form trk-card" style="grid-template-columns:1fr"><h3 class="adm-h3">Отправка СДЭК</h3>' +
-          (o.tracking ? '<div class="trk-now"><span>Трек-номер</span><b class="copyable">' + esc(o.tracking.number) + '</b><a class="link" href="' + esc(o.tracking.url) + '" target="_blank" rel="noopener">Отследить</a>' +
-            '<small>' + (o.tracking.mailedAt ? 'Письмо покупателю отправлено ' + esc(new Date(o.tracking.mailedAt).toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })) : 'Письмо покупателю не отправлялось') + '</small></div>' : '') +
-          '<label class="field"><span>' + (o.tracking ? 'Изменить трек-номер' : 'Трек-номер СДЭК') + '</span><input class="input num" id="f-track" value="' + esc(o.tracking ? o.tracking.number : '') + '" placeholder="Например, 1234567890" autocomplete="off" inputmode="numeric"></label>' +
-          '<p class="muted" style="font-size:13px;margin:0">После «Сохранить» покупатель получит письмо со ссылкой для отслеживания, а заказ станет «Передан в доставку». Номер также появится у покупателя на странице заказа.</p></div>' +
+        (useCdek(o) ? cdekCard(o) : manualTrack(o)) +
         '<div class="adm-card adm-form" style="grid-template-columns:1fr"><h3 class="adm-h3">Статус</h3>' +
           fieldHtml({ k: 'status', label: 'Статус заказа', type: 'select', options: Object.keys(A().STATUS).map(function (k) { return [k, A().STATUS[k]]; }) }, o) +
           fieldHtml({ k: 'paymentStatus', label: 'Оплата (' + (o.payment.method === 'online' ? 'онлайн' : o.payment.method === 'bonus' ? 'бонусами' : 'при получении') + ')', type: 'select', options: Object.keys(A().PAY).filter(function (k) { return k !== 'refunded' || o.payment.method !== 'online' || o.payment.status === 'refunded'; }).map(function (k) { return [k, A().PAY[k]]; }) }, { paymentStatus: o.payment.status }) +
@@ -377,12 +427,14 @@
           '<button class="btn" id="oSave">Сохранить</button></div>' +
         '<div class="adm-card" style="display:grid;gap:10px"><h3 class="adm-h3">Удаление</h3><p class="muted" style="font-size:13px;margin:0">Для тестовых и ошибочных заказов. Товар вернётся на склад, промокод и бонусы — как при отмене. Удаление не отменить.</p><button class="btn ghost" id="oDel" type="button">Удалить заказ</button></div></div></div>';
     bindRefund(o);
+    if (useCdek(o)) bindCdekOrder(o);
     bindConfirm($('#oDel'), async function () {
       try { await A().API.adminOrderDelete(o.id); await afterSave('Заказ № ' + o.number + ' удалён', '#/admin?s=orders'); } catch (e) { toast(A().errMsg(e), true); }
     });
     $('#oSave').addEventListener('click', async function () {
-      var track = $('#f-track').value.replace(/\s+/g, '');
-      var patch = { paymentStatus: $('#f-paymentStatus').value, note: $('#f-note').value, track: track };
+      var track = $('#f-track') ? $('#f-track').value.replace(/\s+/g, '') : undefined;
+      var patch = { paymentStatus: $('#f-paymentStatus').value, note: $('#f-note').value };
+      if (track !== undefined) patch.track = track;
       // если вводят новый трек-номер, статус ставит сервер («Передан в доставку»)
       if (!(track && track !== (o.tracking && o.tracking.number))) patch.status = $('#f-status').value;
       try { var r = await A().API.adminOrder(o.id, patch); await afterSave(notifyMsg(r.trackMailed ? 'Трек-номер сохранён, покупателю отправлено письмо' : track && track !== (o.tracking && o.tracking.number) ? 'Трек-номер сохранён. Письмо не отправлено — проверьте настройки почты' : 'Заказ обновлён', r.notify), '#/admin?s=orders&id=' + o.id); }
@@ -940,7 +992,7 @@
   /* ================= Оплата, касса, доставка =================
      Карточки вместо голой формы: у способа оплаты — переключатель и превью «как увидит покупатель»,
      у ЮKassa — статус подключения, у доставки — карточка на каждый способ с понятными полями. */
-  function payIc(n) { return '<img src="img/benefits/' + n + '.webp?v=13.18.0" alt="" width="52" height="52" decoding="async">'; }
+  function payIc(n) { return '<img src="img/benefits/' + n + '.webp?v=13.19.0" alt="" width="52" height="52" decoding="async">'; }
   var PAY_IC = { card: payIc('payment'), cash: payIc('cash'), truck: payIc('delivery'), pin: payIc('pin') };
   function switchHtml(id, on, label) {
     return '<label class="pm-switch"><input type="checkbox" id="' + id + '"' + (on ? ' checked' : '') + '><span class="pm-track" aria-hidden="true"></span><span class="sr">' + esc(label) + '</span></label>';
@@ -975,6 +1027,55 @@
     return $$('.dm', box).map(function (el) {
       var v = function (k) { return $('[data-d="' + k + '"]', el); };
       return { id: el.getAttribute('data-id'), name: v('name').value.trim(), desc: v('desc').value.trim(), price: Math.max(0, Number(v('price').value) || 0), freeFrom: Math.max(0, Number(v('freeFrom').value) || 0), needsAddress: v('needsAddress').checked, pickupPoint: v('needsAddress').checked && v('pickupPoint').checked };
+    });
+  }
+  /* ---------- СДЭК: откуда отправляем, упаковка, тариф, услуги ---------- */
+  var CDEK_TARIFFS = [[136, 'Посылка склад–склад'], [234, 'Экономичная посылка склад–склад']];
+  function cdekShipHtml(c) {
+    var pk = Object.assign({ weight: 1000, length: 30, width: 25, height: 10 }, c.pkg), sv = c.services || {}, sp = c.shipmentPoint;
+    return '<div class="pm-card pm-wide cs-card" id="cdekShip"><div class="pm-top pm-top-flat"><div><b>Отправка заказов в СДЭК</b><span>В заказе появится кнопка «Создать отправление в СДЭК»: заявка, трек-номер покупателю и наклейка на посылку — без личного кабинета СДЭК</span></div></div>' +
+      '<div class="pm-f"><span>Пункт СДЭК, куда вы сдаёте посылки</span>' +
+        '<div id="csPointNow" class="cs-now"' + (sp ? '' : ' hidden') + '><span class="pvz-pin" aria-hidden="true"></span><div><b id="csPointAddr">' + esc(sp ? sp.address : '') + '</b><small id="csPointCity">' + esc(sp ? sp.city + ' · код ' + sp.code : '') + '</small></div><button type="button" class="link" id="csPointChange">Изменить</button></div>' +
+        '<div id="csPointPick" class="cs-pick"' + (sp ? ' hidden' : '') + '><div class="pvz-combo"><input class="input" id="csCity" placeholder="Ваш город, например «Москва»" autocomplete="off"><ul class="pvz-sug" id="csSug" hidden></ul></div><select class="select" id="csPoints" hidden></select></div></div>' +
+      '<div class="pm-two">' +
+        '<label class="pm-f"><span>Тариф</span><select class="select" id="csTariff">' + CDEK_TARIFFS.map(function (t) { return '<option value="' + t[0] + '"' + (Number(c.tariff || 136) === t[0] ? ' selected' : '') + '>' + t[1] + '</option>'; }).join('') + '</select><small>В постаматы — тариф «склад–постамат», подставится сам</small></label>' +
+        '<div class="pm-f"><span>Упаковка по умолчанию</span><div class="cs-pkg"><label><input class="input num" id="csW" type="number" min="50" step="50" value="' + pk.weight + '"><i>г</i></label><label><input class="input num" id="csL" type="number" min="1" value="' + pk.length + '"><i>см</i></label><span>×</span><label><input class="input num" id="csWd" type="number" min="1" value="' + pk.width + '"><i>см</i></label><span>×</span><label><input class="input num" id="csH" type="number" min="1" value="' + pk.height + '"><i>см</i></label></div><small>Вес и размеры можно поправить в конкретном заказе</small></div>' +
+      '</div>' +
+      '<div class="cs-sv"><span class="cs-sv-h">Услуги для покупателя (включите, если они есть в вашем договоре со СДЭК)</span>' +
+        '<label class="check"><input type="checkbox" id="csPart"' + (sv.partDeliv ? ' checked' : '') + '> <span><b>Частичный выкуп</b> — покупатель забирает только то, что подошло, остальное СДЭК везёт вам обратно</span></label>' +
+        '<label class="check"><input type="checkbox" id="csTry"' + (sv.tryOn ? ' checked' : '') + '> <span><b>Примерка</b> — покупатель может примерить вещи при получении</span></label></div>' +
+      '<div class="pm-key-row"><button type="button" class="btn ghost" id="csSave">Сохранить настройки отправки</button><small id="csState"></small></div></div>';
+  }
+  function bindCdekShip(s) {
+    var box = $('#cdekShip'); if (!box) return;
+    var pick = (s.cdek && s.cdek.shipmentPoint) || null, pts = [], timer = 0;
+    $('#csPointChange').addEventListener('click', function () { $('#csPointNow').hidden = true; $('#csPointPick').hidden = false; $('#csCity').focus(); });
+    $('#csCity').addEventListener('input', function () {
+      var v = this.value.trim(); clearTimeout(timer); if (v.length < 2) { $('#csSug').hidden = true; return; }
+      timer = setTimeout(async function () {
+        try { var list = await A().API.cdekCities(v); $('#csSug').innerHTML = list.map(function (c, i) { return '<li data-i="' + i + '"><b>' + esc(c.city) + '</b><span>' + esc(c.region || '') + '</span></li>'; }).join('') || '<li class="none">Не нашли</li>'; $('#csSug').hidden = false; $('#csSug')._list = list; }
+        catch (e) { $('#csSug').innerHTML = '<li class="none">' + esc(A().errMsg(e)) + '</li>'; $('#csSug').hidden = false; }
+      }, 250);
+    });
+    $('#csSug').addEventListener('mousedown', async function (e) {
+      var li = e.target.closest('[data-i]'); if (!li) return; e.preventDefault();
+      var c = this._list[Number(li.dataset.i)]; $('#csCity').value = c.city + (c.region ? ', ' + c.region : ''); this.hidden = true;
+      var sel = $('#csPoints'); sel.hidden = false; sel.innerHTML = '<option>Загружаем пункты…</option>';
+      try { pts = (await A().API.cdekPoints(c.code)).filter(function (p) { return p.type === 'pvz'; }); sel.innerHTML = '<option value="">Выберите пункт</option>' + pts.map(function (p, i) { return '<option value="' + i + '">' + esc(p.address + (p.hours ? ' — ' + p.hours : '')) + '</option>'; }).join(''); }
+      catch (ex) { sel.innerHTML = '<option>' + esc(A().errMsg(ex)) + '</option>'; }
+    });
+    $('#csPoints').addEventListener('change', function () {
+      var p = pts[Number(this.value)]; if (!p) return;
+      pick = { code: p.code, address: p.address, city: p.city + (p.region && p.region !== p.city ? ', ' + p.region : ''), cityCode: p.cityCode };
+      $('#csPointAddr').textContent = pick.address; $('#csPointCity').textContent = pick.city + ' · код ' + pick.code; $('#csPointNow').hidden = false; $('#csPointPick').hidden = true;
+    });
+    $('#csSave').addEventListener('click', async function () {
+      var el = $('#csState');
+      try {
+        var r = await A().API.adminCdek({ check: false, shipmentPoint: pick, tariff: Number($('#csTariff').value), pkg: { weight: $('#csW').value, length: $('#csL').value, width: $('#csWd').value, height: $('#csH').value }, services: { partDeliv: $('#csPart').checked, tryOn: $('#csTry').checked } });
+        DATA.settings.cdek = r.settings.cdek; s.cdek = r.settings.cdek;
+        el.textContent = pick ? 'Сохранено' : 'Сохранено. Укажите пункт отгрузки — без него отправление не создать'; el.className = pick ? 'ok' : 'warn';
+      } catch (e) { el.textContent = A().errMsg(e); el.className = 'warn'; }
     });
   }
   function paymentSettings(m) {
@@ -1032,7 +1133,9 @@
         '</div>' +
         '<label class="check"><input type="checkbox" id="cdekTest"' + (s.cdek && s.cdek.test ? ' checked' : '') + '> <span>Тестовая среда СДЭК (только для проверки, данные учебные)</span></label>' +
         '<div class="pm-key-row"><button type="button" class="btn ghost" id="cdekSave">Сохранить и проверить</button><small id="cdekState" class="' + (A().D.cdekReady ? 'ok' : 'warn') + '">' + (A().D.cdekReady ? 'Ключи сохранены — подбор пунктов работает' : 'Не подключено — покупатели вводят адрес пункта вручную') + '</small></div>' +
-      '</div></section>' +
+      '</div>' +
+      cdekShipHtml(s.cdek || {}) +
+      '</section>' +
 
       '</div><div class="adm-bar"><button class="btn" id="stSave">Сохранить</button><span class="form-error" id="stErr"></span></div>';
 
@@ -1077,12 +1180,14 @@
       try {
         var r = await A().API.adminCdek({ clientId: $('#cdekId').value, secret: $('#cdekSecret').value, test: $('#cdekTest').checked });
         DATA.settings.cdek = r.settings.cdek; s.cdek = r.settings.cdek; $('#cdekSecret').value = '';
-        el.textContent = r.ok ? 'Подключено' + (r.settings.cdek.test ? ' (тестовая среда)' : '') + ' — покупатели выбирают пункт из списка' : r.error || (!r.hasSecret ? 'Введите Secure password' : 'Не удалось проверить ключи');
-        el.className = r.ok ? 'ok' : 'warn';
+        el.textContent = r.checked ? 'Подключено' + (r.settings.cdek.test ? ' (тестовая среда)' : '') + ' — покупатели выбирают пункт из списка' : r.error || (!r.hasSecret ? 'Введите Secure password' : 'Не удалось проверить ключи');
+        el.className = r.checked ? 'ok' : 'warn';
         A().D.cdekReady = !!(r.settings.cdek.clientId && r.hasSecret);
       } catch (e) { el.textContent = A().errMsg(e); el.className = 'warn'; }
       b.disabled = false;
     });
+
+    bindCdekShip(s);
 
     $('#stSave').addEventListener('click', async function () {
       var err = $('#stErr'); err.textContent = '';

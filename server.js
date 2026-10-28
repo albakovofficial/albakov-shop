@@ -108,6 +108,51 @@ const cdek = CdekLib.create(() => {
   const c = (db.settings && db.settings.cdek) || {};
   return { id: process.env.CDEK_CLIENT_ID || c.clientId || '', secret: process.env.CDEK_CLIENT_SECRET || db.secrets.cdekSecret || '', test: !!c.test };
 });
+const cdekCfg = () => (db.settings && db.settings.cdek) || {};
+const CDEK_PKG = { weight: 1000, length: 30, width: 25, height: 10 };
+const cdekPkg = (x) => { const d = Object.assign({}, CDEK_PKG, cdekCfg().pkg, x); const n = (v, lo, hi) => Math.min(hi, Math.max(lo, Math.round(Number(v) || 0))); return { weight: n(d.weight, 50, 30000), length: n(d.length, 1, 150), width: n(d.width, 1, 150), height: n(d.height, 1, 150) }; };
+// Заявка на отправление: товары с объявленной стоимостью, оплата уже получена онлайн (к оплате при получении — 0)
+function cdekOrderBody(o, pkg) {
+  const c = cdekCfg(), pv = o.delivery && o.delivery.pvz;
+  if (!pv || !pv.code) fail(400, 'Покупатель не выбрал пункт выдачи СДЭК из списка — создайте отправление в личном кабинете СДЭК вручную');
+  if (!c.shipmentPoint || !c.shipmentPoint.code) fail(400, 'Укажите в «Оплата и доставка» пункт СДЭК, куда вы сдаёте посылки');
+  const items = o.items.map((i) => ({ i, qty: i.qty - (i.refundedQty || 0) })).filter((x) => x.qty > 0);
+  if (!items.length) fail(400, 'В заказе не осталось товаров для отправки');
+  const count = items.reduce((s, x) => s + x.qty, 0), unitW = Math.max(1, Math.floor(pkg.weight / count));
+  const paid = o.payment.status === 'paid' || o.payment.method === 'bonus';
+  const services = [];
+  if (c.services && c.services.partDeliv) services.push({ code: 'PART_DELIV' });
+  if (c.services && c.services.tryOn) services.push({ code: 'TRYING_ON' });
+  return {
+    type: 1, number: 'ALB-' + o.number + (o.cdekTry ? '-' + o.cdekTry : ''),
+    tariff_code: pv.type === 'postamat' ? Number(c.tariffPostamat) || 368 : Number(c.tariff) || 136,
+    shipment_point: c.shipmentPoint.code, delivery_point: pv.code,
+    recipient: { name: `${o.customer.lastName} ${o.customer.firstName}`.trim(), email: o.customer.email, phones: [{ number: '+' + o.customer.phone }] },
+    packages: [{ number: '1', weight: pkg.weight, length: pkg.length, width: pkg.width, height: pkg.height, comment: 'Одежда',
+      items: items.map((x) => ({ name: `${x.i.name}${x.i.color ? ', ' + x.i.color : ''}, ${x.i.size}`.slice(0, 255), ware_key: `${x.i.productId}-${x.i.size}`.slice(0, 50), payment: { value: paid ? 0 : x.i.price }, cost: x.i.price, weight: unitW, amount: x.qty })) }],
+    services: services.length ? services : undefined,
+    comment: o.comment ? o.comment.slice(0, 255) : undefined
+  };
+}
+// Посылку сдали в СДЭК: дальше статусы, кроме «создан», значат «в пути»
+const CDEK_WAIT = ['', 'ACCEPTED', 'CREATED', 'INVALID', 'REMOVED'];
+async function applyCdek(o, info) {
+  if (!o.cdek || !info) return;
+  Object.assign(o.cdek, { number: info.number || o.cdek.number || '', status: info.status || o.cdek.status, statusName: info.statusName || o.cdek.statusName, statusAt: info.statusAt || o.cdek.statusAt, error: info.error || '' });
+  let mail = false;
+  if (o.cdek.number && !CDEK_WAIT.includes(o.cdek.status) && (!o.tracking || o.tracking.number !== o.cdek.number)) {
+    o.tracking = { carrier: 'СДЭК', number: o.cdek.number, url: CDEK_TRACK + encodeURIComponent(o.cdek.number), at: new Date().toISOString() };
+    if (['new', 'processing'].includes(o.status)) o.status = 'shipped';
+    mail = true;
+  }
+  if (o.cdek.status === 'DELIVERED' && o.status !== 'done' && o.status !== 'returned') o.status = 'done';
+  syncBonus(o); save();
+  if (mail && mailReady()) { try { await sendTrackingMail(o); o.tracking.mailedAt = new Date().toISOString(); save(); } catch (e) { console.error('Письмо с трек-номером не отправлено:', e.message); } }
+}
+async function syncCdek(o) {
+  if (!o.cdek || !o.cdek.uuid || !cdek.ready()) return;
+  await applyCdek(o, await cdek.order(o.cdek.uuid));
+}
 function payReady() { const p = db.settings.payment || {}, k = yk(); return p.provider === 'yookassa' && !!(k.shopId && k.secret); }
 // Хиты продаж: товары, которых больше всего купили за 90 дней (без отменённых и неоплаченных онлайн-заказов).
 // Наружу уходит только порядок товаров — без количества продаж. Выключается в «Главной странице» панели.
@@ -130,7 +175,8 @@ function publicState() {
     payReady: payReady(),
     mailReady: mailReady(),
     cdekReady: cdek.ready(),
-    settings: db.settings,
+    // ключ СДЭК и пункт отгрузки покупателям не нужны — наружу только услуги
+    settings: Object.assign({}, db.settings, { cdek: { services: (cdekCfg().services) || {} } }),
     categories: db.categories,
     sizeCharts: db.sizeCharts,
     products: db.products.filter((p) => p.active !== false),
@@ -797,6 +843,13 @@ async function api(req, res, url, body) {
   if (p[0] === 'support') { const u = user(); if (!u) fail(401, 'Войдите в личный кабинет'); return supportApi(req, p, M, body, u); }
 
   if (p[0] === 'quote' && M === 'POST') return { quote: quote(req, body) };
+  // Уведомление СДЭК о движении посылки. Статус перепроверяем через API
+  if (p[0] === 'cdek' && p[1] === 'webhook' && M === 'POST') {
+    const uuid = body && (body.uuid || (body.attributes && body.attributes.uuid));
+    const o = uuid && db.orders.find((x) => x.cdek && x.cdek.uuid === uuid);
+    if (o) { try { await syncCdek(o); } catch (e) { console.error('СДЭК:', e.message); } }
+    return {};
+  }
   // Подсказки населённых пунктов и пункты выдачи СДЭК
   if (p[0] === 'cdek' && M === 'GET' && (p[1] === 'cities' || p[1] === 'points')) {
     if (!cdek.ready()) fail(503, 'Подбор пунктов СДЭК не подключён');
@@ -868,11 +921,21 @@ async function api(req, res, url, body) {
       if (typeof body.secret === 'string' && body.secret.trim()) db.secrets.cdekSecret = body.secret.trim().slice(0, 200);
       if (body.secret === null) delete db.secrets.cdekSecret;
       if (typeof body.test === 'boolean') db.settings.cdek.test = body.test;
+      if (body.shipmentPoint && typeof body.shipmentPoint === 'object') {
+        const sp = body.shipmentPoint; db.settings.cdek.shipmentPoint = sp.code ? { code: String(sp.code).slice(0, 40), address: String(sp.address || '').slice(0, 200), city: String(sp.city || '').slice(0, 100), cityCode: Number(sp.cityCode) || 0 } : null;
+      }
+      if (body.pkg) db.settings.cdek.pkg = cdekPkg(body.pkg);
+      if (body.tariff) db.settings.cdek.tariff = Number(body.tariff) || 136;
+      if (body.services) db.settings.cdek.services = { partDeliv: !!body.services.partDeliv, tryOn: !!body.services.tryOn };
       save();
       const s = process.env.CDEK_CLIENT_SECRET || db.secrets.cdekSecret || '';
-      let ok = false, error = '';
-      if (cdek.ready()) { try { ok = await cdek.check(); } catch (e) { error = e.message; } }
-      return { settings: db.settings, hasSecret: !!s, mask: s ? s.slice(0, 3) + '…' + s.slice(-3) : '', ok, error, env: !!process.env.CDEK_CLIENT_SECRET };
+      let checked = false, error = '';
+      if (cdek.ready() && body.check !== false) {
+        try { checked = await cdek.check(); } catch (e) { error = e.message; }
+        // уведомления о движении посылок — только для сайта на https
+        if (checked && /^https:/.test(PUBLIC_URL)) { try { await cdek.webhook(PUBLIC_URL + '/api/cdek/webhook'); db.settings.cdek.webhook = true; save(); } catch (e) { console.error('СДЭК webhook:', e.message); } }
+      }
+      return { settings: db.settings, hasSecret: !!s, mask: s ? s.slice(0, 3) + '…' + s.slice(-3) : '', checked, error, env: !!process.env.CDEK_CLIENT_SECRET };
     }
     if (p[1] === 'payment-secret' && M === 'POST') {
       if (typeof body.secret === 'string') { if (body.secret && !/^(live|test)_[\w-]{10,}$/.test(body.secret)) fail(400, 'Ключ должен начинаться с live_ или test_'); db.secrets.yookassaSecret = body.secret; save(); }
@@ -907,6 +970,46 @@ async function api(req, res, url, body) {
       db.orders = db.orders.filter((o) => !ids.has(o.id));
       db.tickets.forEach((t) => { if (ids.has(t.orderId)) { t.orderId = ''; } });
       save(); const notify = await processWaitlist(); return { deleted: ids.size, notify };
+    }
+    // Отправление СДЭК: создать, обновить статус, отменить, распечатать
+    if (p[1] === 'orders' && p[2] && /^cdek/.test(p[3] || '')) {
+      const o = db.orders.find((x) => x.id === p[2]); if (!o) fail(404, 'Заказ не найден');
+      if (!cdek.ready()) fail(400, 'СДЭК не подключён — введите ключи в «Оплата и доставка»');
+      if (p[3] === 'cdek' && M === 'POST') {
+        if (o.cdek && o.cdek.uuid) fail(400, 'Отправление уже создано');
+        if (o.payment.method === 'online' && o.payment.status !== 'paid') fail(400, 'Заказ ещё не оплачен');
+        if (['canceled', 'returned'].includes(o.status)) fail(400, 'Заказ отменён');
+        const pkg = cdekPkg(body.pkg);
+        let uuid;
+        try { uuid = await cdek.createOrder(cdekOrderBody(o, pkg)); }
+        catch (e) { if (e instanceof HttpError) throw e; o.cdekTry = (o.cdekTry || 0) + 1; save(); fail(502, 'СДЭК: ' + e.message); }
+        o.cdekTry = (o.cdekTry || 0) + 1;
+        o.cdek = { uuid, number: '', status: 'ACCEPTED', statusName: 'Заявка принята', createdAt: new Date().toISOString(), pkg };
+        if (o.status === 'new') o.status = 'processing';
+        save();
+        // номер СДЭК присваивает через пару секунд
+        for (let i = 0; i < 4 && !o.cdek.number; i++) { await new Promise((r) => setTimeout(r, 1500)); try { await syncCdek(o); } catch (e) { /* дождёмся уведомления */ } }
+        if (o.cdek.error) { const err = o.cdek.error; delete o.cdek; save(); fail(400, 'СДЭК отклонил заявку: ' + err); }
+        return { order: orderView(o) };
+      }
+      if (p[3] === 'cdek-sync' && M === 'POST') {
+        if (!o.cdek) fail(400, 'Отправления нет');
+        try { await syncCdek(o); } catch (e) { fail(502, 'СДЭК: ' + e.message); }
+        return { order: orderView(o) };
+      }
+      if (p[3] === 'cdek' && M === 'DELETE') {
+        if (!o.cdek) fail(400, 'Отправления нет');
+        if (!CDEK_WAIT.includes(o.cdek.status)) fail(400, 'Посылка уже у СДЭК — отменить можно только через СДЭК');
+        try { await cdek.cancel(o.cdek.uuid); } catch (e) { fail(502, 'СДЭК: ' + e.message); }
+        delete o.cdek; if (o.status === 'processing') o.status = 'new'; save();
+        return { order: orderView(o) };
+      }
+      if (p[3] === 'cdek-print' && M === 'GET') {
+        if (!o.cdek) fail(400, 'Отправления нет');
+        const kind = url.searchParams.get('kind') === 'barcode' ? 'barcode' : 'waybill';
+        let buf; try { buf = await cdek.print(o.cdek.uuid, kind); } catch (e) { fail(502, 'СДЭК: ' + e.message); }
+        return { __file: { buf, type: 'application/pdf', name: (kind === 'barcode' ? 'naklejka-' : 'nakladnaya-') + o.number + '.pdf' } };
+      }
     }
     // Возврат денег через ЮKassa: dry — только посчитать сумму
     if (p[1] === 'orders' && p[2] && p[3] === 'refund' && M === 'POST') {
@@ -1106,6 +1209,10 @@ const server = http.createServer(async (req, res) => {
       }
       const body = ['POST', 'PUT', 'PATCH'].includes(req.method) ? await readBody(req, url.pathname === '/api/admin/upload' ? 12 * 1024 * 1024 : 2 * 1024 * 1024) : {};
       const out = await api(req, res, url, body || {});
+      if (out && out.__file) {
+        res.writeHead(200, { 'Content-Type': out.__file.type, 'Content-Disposition': 'inline; filename="' + out.__file.name + '"', 'Cache-Control': 'no-store' });
+        return res.end(out.__file.buf);
+      }
       send(res, 200, Object.assign({ ok: true }, out));
     } catch (e) {
       if (!(e instanceof HttpError)) console.error(e);

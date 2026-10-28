@@ -10,7 +10,7 @@
 
   var SECTIONS = [
     ['overview', 'Обзор'], ['orders', 'Заказы'], ['support', 'Поддержка'], ['products', 'Товары'], ['categories', 'Категории'], ['sizeCharts', 'Размерные сетки'],
-    ['promotions', 'Акции'], ['promocodes', 'Промокоды'], ['bonus', 'Бонусы'], ['customers', 'Покупатели'], ['notify', 'Сообщить о поступлении'], ['sections', 'Разделы: женщинам / мужчинам'], ['brand', 'Логотип и название'], ['slider', 'Слайдер на главной'], ['home', 'Главная страница'], ['pages', 'Страницы'],
+    ['promotions', 'Акции'], ['promocodes', 'Промокоды'], ['bonus', 'Бонусы'], ['customers', 'Покупатели'], ['notify', 'Сообщить о поступлении'], ['mail', 'Письма'], ['sections', 'Разделы: женщинам / мужчинам'], ['brand', 'Логотип и название'], ['slider', 'Слайдер на главной'], ['home', 'Главная страница'], ['pages', 'Страницы'],
     ['menu', 'Меню, контакты, соцсети'], ['payment', 'Оплата и доставка'], ['settings', 'Настройки']
   ];
   var TAX = [[1, 'ОСН — общая система'], [2, 'УСН «Доходы»'], [3, 'УСН «Доходы минус расходы»'], [5, 'ЕСХН'], [6, 'Патентная система']];
@@ -197,11 +197,42 @@
       '</nav><div class="adm-side-foot"><a href="#/" class="muted">← В магазин</a><button class="muted" id="admOut">Выйти</button></div></aside><section class="adm-main" id="admMain"></section></div>';
     $('#admOut').addEventListener('click', async function () { await API.adminLogout(); DATA = null; location.hash = '#/'; await A().refresh(); });
     var main = $('#admMain');
-    var fn = { overview: overview, orders: orders, support: supportSection, products: products, categories: categories, sizeCharts: sizeCharts, promotions: promotions, promocodes: promocodes, bonus: bonusSection, customers: customers, notify: notifySection, sections: sectionsSettings, brand: brandSection, slider: sliderSection, home: homeSettings, pages: pages, menu: menuSettings, payment: paymentSettings, settings: generalSettings }[s] || overview;
+    var fn = { overview: overview, orders: orders, support: supportSection, products: products, categories: categories, sizeCharts: sizeCharts, promotions: promotions, promocodes: promocodes, bonus: bonusSection, customers: customers, notify: notifySection, mail: mailSection, sections: sectionsSettings, brand: brandSection, slider: sliderSection, home: homeSettings, pages: pages, menu: menuSettings, payment: paymentSettings, settings: generalSettings }[s] || overview;
     fn(main, q);
   }
   function waitBadge() { var n = (DATA.waitlist || []).filter(function (w) { return w.status === 'waiting' || w.status === 'failed'; }).length; return n ? ' <span class="adm-badge muted-badge">' + n + '</span>' : ''; }
   function newOrdersBadge() { var n = DATA.orders.filter(function (o) { return o.status === 'new'; }).length; return n ? ' <span class="adm-badge">' + n + '</span>' : ''; }
+  /* ================= Письма: все письма сайта с примером ================= */
+  async function mailSection(m) {
+    m.innerHTML = head('Письма', '', 'Все письма, которые сайт отправляет сам. Покупателям они приходят с адреса для отправки и с пометкой «отвечать не нужно» — написать вам можно на почту для связи.') + '<div class="loader">…</div>';
+    var r; try { r = await A().API.adminMailCatalog(); } catch (e) { m.querySelector('.loader').outerHTML = '<p class="form-error">' + esc(A().errMsg(e)) + '</p>'; return; }
+    var mi = r.mail;
+    m.innerHTML = head('Письма', '', 'Все письма, которые сайт отправляет сам. Покупателям они приходят с адреса для отправки и с пометкой «отвечать не нужно» — написать вам можно на почту для связи.') +
+      '<div class="ml-top">' +
+        '<div class="ml-a"><span>Отправитель</span><b>' + esc(mi.fromName || '') + ' &lt;' + esc(mi.from || '—') + '&gt;</b><small class="' + (mi.ready ? 'ok' : 'warn') + '">' + (mi.ready ? 'Почта настроена, письма уходят' : 'Не настроена — письма не отправляются') + '</small></div>' +
+        '<div class="ml-a"><span>Пишут вам и получают ответ</span><b>' + esc(mi.support || mi.replyTo || '—') + '</b><small>Указан в письмах; меняется в «Меню, контакты, соцсети»</small></div>' +
+        '<div class="ml-a"><span>Если покупатель всё же ответит</span><b>' + esc(mi.replyTo || '—') + '</b><small>Ответ уйдёт сюда (Reply-To). <a class="link" href="#/admin?s=notify&tab=mail">Настройки почты</a></small></div>' +
+      '</div>' +
+      '<div class="ml-list">' + r.letters.map(function (x, i) {
+        return '<div class="ml-i" data-i="' + i + '"><div class="ml-h"><span class="ml-n">' + (i + 1) + '</span><div><b>' + esc(x.title) + '</b><small>' + esc(x.when) + '</small></div><span class="ml-to">' + esc(x.to) + '</span></div>' +
+          '<div class="ml-subj"><span>Тема</span>' + esc(x.subject) + '</div>' +
+          '<div class="ml-acts"><button class="btn ghost sm" type="button" data-ml-view>Посмотреть письмо</button><span class="ml-send"><input class="input" type="email" value="' + esc(mi.support || '') + '" aria-label="Почта для примера"><button class="link" type="button" data-ml-send>Отправить пример</button></span><span class="ml-st"></span></div>' +
+          '<div class="ml-prev" hidden></div></div>';
+      }).join('') + '</div>';
+    m.addEventListener('click', async function (e) {
+      var it = e.target.closest('.ml-i'); if (!it) return; var x = r.letters[Number(it.dataset.i)];
+      if (e.target.closest('[data-ml-view]')) {
+        var pv = $('.ml-prev', it), b = e.target.closest('[data-ml-view]');
+        if (pv.hidden && !pv.firstChild) { var f = document.createElement('iframe'); f.title = x.title; f.setAttribute('sandbox', 'allow-same-origin'); f.srcdoc = x.html; pv.appendChild(f); f.addEventListener('load', function () { try { f.style.height = (f.contentDocument.documentElement.scrollHeight + 10) + 'px'; } catch (er) { f.style.height = '900px'; } }); }
+        pv.hidden = !pv.hidden; b.textContent = pv.hidden ? 'Посмотреть письмо' : 'Скрыть';
+      }
+      if (e.target.closest('[data-ml-send]')) {
+        var st = $('.ml-st', it), to = $('.ml-send input', it).value.trim(); if (!to) { st.textContent = 'Укажите почту'; st.className = 'ml-st warn'; return; }
+        st.textContent = 'Отправляем…'; st.className = 'ml-st';
+        try { var s = await A().API.adminMailCatalog({ key: x.key, to: to }); st.textContent = 'Отправлено на ' + s.sent; st.className = 'ml-st ok'; } catch (er) { st.textContent = A().errMsg(er); st.className = 'ml-st warn'; }
+      }
+    });
+  }
   function head(title, actions, sub) { return '<div class="adm-head"><div><h1 class="serif">' + esc(title) + '</h1>' + (sub ? '<p class="muted" style="margin-top:6px;font-size:14px;max-width:70ch">' + sub + '</p>' : '') + '</div><div class="adm-actions">' + (actions || '') + '</div></div>'; }
 
   function loginView(v) {
@@ -309,6 +340,7 @@
         '<div class="rf-form" id="rfForm" hidden><p class="rf-hint">Отметьте, за что возвращаете деньги. Сумму посчитаем сами — с учётом промокода и бонусов, которыми платил покупатель.</p>' +
         '<div class="rf-all"><button class="link" type="button" id="rfAll">Отметить всё</button></div>' + lines + dl +
         '<label class="check"><input type="checkbox" id="rfStock" checked> <span>Вернуть товар на склад (вещь вернулась к вам)</span></label>' +
+        (retCost(o) ? '<label class="check"><input type="checkbox" id="rfDeduct" checked> <span>Удержать обратную доставку СДЭК — ' + fmt(retCost(o)) + ' (по оферте её оплачивает покупатель)</span></label>' : '') +
         '<label class="field"><span>Причина, для себя</span><input class="input" id="rfReason" placeholder="Например, не подошёл размер" maxlength="300"></label>' +
         '<div class="rf-total"><span>К возврату</span><b class="num" id="rfAmt">0 ₽</b></div>' +
         '<p class="rf-to">Деньги уйдут <b>' + esc(c.lastName + ' ' + c.firstName) + '</b> туда же, откуда была оплата заказа № ' + esc(o.number) + '. Покупатель получит письмо.</p>' +
@@ -318,6 +350,42 @@
     else if (pm.method === 'online' && pm.status !== 'paid') action = '<p class="rf-note">Заказ не оплачен — возвращать нечего.</p>';
     return '<div class="adm-card rf-card"><h3 class="adm-h3">Оплата и возврат</h3>' + rows + meta + hist + action + '</div>';
   }
+  function retCost(o) { return (o.returns || []).filter(function (r) { return r.cost && !r.deducted; }).reduce(function (s, r) { return s + r.cost; }, 0); }
+  /* ---------- Возврат через СДЭК: обратная заявка, номер и инструкция уходят покупателю письмом ---------- */
+  var RET_ST = { ACCEPTED: 'Заявка принята', CREATED: 'Ждём, когда покупатель сдаст посылку', ACCEPTED_AT_PICK_UP_POINT: 'Пришла в ваш пункт — заберите', DELIVERED: 'Получена вами' };
+  function returnCard(o) {
+    var list = (o.returns || []).map(function (r) {
+      var what = r.items.map(function (i) { return esc(i.name) + ', ' + esc(i.size) + ' × ' + i.qty; }).join('; ');
+      var waiting = ['ACCEPTED', 'CREATED', ''].indexOf(r.status || '') !== -1;
+      return '<div class="ret-row' + (r.status === 'DELIVERED' ? ' done' : r.status === 'ACCEPTED_AT_PICK_UP_POINT' ? ' here' : '') + '"><div class="ret-top"><b class="num copyable">' + esc(r.number || 'номер присваивается…') + '</b><span>' + esc(RET_ST[r.status] || r.statusName || 'Обновляется') + '</span></div>' +
+        '<p>' + what + '</p><small>' + (r.cost ? 'Обратная доставка ' + fmt(r.cost) + (r.deducted ? ' · удержана' : ' · удержится при возврате денег') + ' · ' : '') + (r.mailedAt ? 'инструкция отправлена покупателю' : 'письмо уйдёт, когда СДЭК присвоит номер') + '</small>' +
+        (waiting ? '<button class="link" type="button" data-ret-cancel="' + esc(r.uuid) + '">Отменить возврат</button>' : '') + '</div>';
+    }).join('');
+    var lines = o.items.map(function (i, idx) {
+      var can = i.qty - (i.refundedQty || 0) - (o.returns || []).reduce(function (s, r) { return s + ((r.items.find(function (x) { return x.idx === idx; }) || {}).qty || 0); }, 0);
+      if (can <= 0) return '';
+      return '<label class="rf-line"><input type="checkbox" data-retl="' + idx + '"><span>' + esc(i.name) + '<small>' + (i.color ? esc(i.color) + ' · ' : '') + 'размер ' + esc(i.size) + '</small></span>' +
+        (can > 1 ? '<select class="select rf-qty" data-retq="' + idx + '">' + Array.from({ length: can }, function (_, k) { return '<option value="' + (k + 1) + '"' + (k + 1 === can ? ' selected' : '') + '>' + (k + 1) + ' шт.</option>'; }).join('') + '</select>' : '<span class="muted rf-one">1 шт.</span>') + '</label>';
+    }).join('');
+    return '<div class="adm-card ret-card"><h3 class="adm-h3">Возврат через СДЭК</h3>' +
+      '<p class="muted" style="font-size:13px;margin:0">Покупатель хочет вернуть вещь — отметьте её. Сайт оформит обратную заявку в СДЭК на ваш пункт и пришлёт покупателю номер и инструкцию: отнести в любой пункт и назвать номер.</p>' +
+      list + (lines ? '<div class="rf-form" id="retForm" hidden>' + lines + '<p class="form-error" id="retErr"></p><button class="btn" type="button" id="retGo" disabled>Выберите вещи</button></div><button class="btn ghost" type="button" id="retOpen">Оформить возврат через СДЭК</button>' : '') +
+      ((o.returns || []).length ? '<button class="link" type="button" id="retSync" style="justify-self:start;font-size:13px">Обновить статус возврата</button>' : '') + '</div>';
+  }
+  function bindReturn(o) {
+    var open = $('#retOpen'), form = $('#retForm'), go = $('#retGo');
+    if (open) open.addEventListener('click', function () { form.hidden = !form.hidden; open.textContent = form.hidden ? 'Оформить возврат через СДЭК' : 'Скрыть'; });
+    var sel = function () { return $$('[data-retl]', form).filter(function (x) { return x.checked; }).map(function (x) { var q = $('[data-retq="' + x.dataset.retl + '"]', form); return { idx: Number(x.dataset.retl), qty: q ? Number(q.value) : 1 }; }); };
+    if (form) form.addEventListener('change', function () { var n = sel().length; go.disabled = !n; go.textContent = n ? 'Оформить возврат в СДЭК' : 'Выберите вещи'; delete go.dataset.armed; go.classList.remove('danger'); });
+    if (go) go.addEventListener('click', async function () {
+      if (!go.dataset.armed) { go.dataset.armed = '1'; go.textContent = 'Подтвердить: заявка и письмо покупателю'; return; }
+      go.disabled = true; go.textContent = 'Оформляем в СДЭК…'; $('#retErr').textContent = '';
+      try { var r = await A().API.adminReturn(o.id, 'return-ship', { lines: sel() }); await afterSave('Возврат оформлен' + (r.ret && r.ret.mailedAt ? ', покупателю отправлены номер и инструкция' : ''), '#/admin?s=orders&id=' + o.id); }
+      catch (e) { $('#retErr').textContent = A().errMsg(e); go.disabled = false; delete go.dataset.armed; go.textContent = 'Оформить возврат в СДЭК'; }
+    });
+    if ($('#retSync')) $('#retSync').addEventListener('click', async function () { try { await A().API.adminReturn(o.id, 'return-sync'); await afterSave('Статус обновлён', '#/admin?s=orders&id=' + o.id); } catch (e) { toast(A().errMsg(e), true); } });
+    $$('[data-ret-cancel]').forEach(function (b) { bindConfirm(b, async function () { try { await A().API.adminReturn(o.id, 'return-cancel', { uuid: b.dataset.retCancel }); await afterSave('Возврат отменён', '#/admin?s=orders&id=' + o.id); } catch (e) { toast(A().errMsg(e), true); } }); });
+  }
   function bindRefund(o) {
     var open = $('#rfOpen'); if (!open) return;
     var form = $('#rfForm'), go = $('#rfGo'), err = $('#rfErr'), key, amount = 0, seq = 0;
@@ -325,15 +393,15 @@
     open.addEventListener('click', function () { form.hidden = !form.hidden; open.textContent = form.hidden ? 'Вернуть деньги' : 'Скрыть'; });
     function body(dry) {
       var lines = $$('[data-rl]', form).filter(function (x) { return x.checked; }).map(function (x) { var q = $('[data-rq="' + x.dataset.rl + '"]', form); return { idx: Number(x.dataset.rl), qty: q ? Number(q.value) : 1 }; });
-      return { lines: lines, delivery: !!($('[data-rd]', form) && $('[data-rd]', form).checked), restock: $('#rfStock').checked, reason: $('#rfReason').value, dry: dry, key: key };
+      return { lines: lines, delivery: !!($('[data-rd]', form) && $('[data-rd]', form).checked), restock: $('#rfStock').checked, reason: $('#rfReason').value, dry: dry, key: key, deduct: $('#rfDeduct') && $('#rfDeduct').checked ? retCost(o) : 0 };
     }
     async function calc() {
       var b = body(true), my = ++seq; err.textContent = '';
       if (!b.lines.length && !b.delivery) { amount = 0; $('#rfAmt').textContent = '0 ₽'; go.disabled = true; go.textContent = 'Выберите позиции'; return; }
-      try { var r = await A().API.adminRefund(o.id, b); if (my !== seq) return; amount = r.amount; $('#rfAmt').textContent = fmt(r.amount); go.disabled = false; go.textContent = 'Вернуть ' + fmt(r.amount); delete go.dataset.armed; }
+      try { var r = await A().API.adminRefund(o.id, b); if (my !== seq) return; amount = r.amount; $('#rfAmt').textContent = fmt(r.amount) + (r.deducted ? ' (удержано ' + fmt(r.deducted) + ')' : ''); go.disabled = false; go.textContent = 'Вернуть ' + fmt(r.amount); delete go.dataset.armed; }
       catch (e) { if (my !== seq) return; amount = 0; $('#rfAmt').textContent = '—'; go.disabled = true; go.textContent = 'Вернуть'; err.textContent = A().errMsg(e); }
     }
-    form.addEventListener('change', function (e) { if (e.target.matches('[data-rl], [data-rq], [data-rd]')) calc(); }); // сумму меняют только позиции
+    form.addEventListener('change', function (e) { if (e.target.matches('[data-rl], [data-rq], [data-rd], #rfDeduct')) calc(); }); // сумму меняют только позиции
     $('#rfAll').addEventListener('click', function () { $$('[data-rl], [data-rd]', form).forEach(function (x) { x.checked = true; }); $$('.rf-qty', form).forEach(function (s) { s.value = s.options[s.options.length - 1].value; }); calc(); });
     // Два нажатия: первое показывает, кому и сколько, второе — возвращает
     go.addEventListener('click', async function () {
@@ -420,7 +488,7 @@
         '<div class="sum-row total"><span>Итого деньгами</span><span>' + fmt(o.total) + '</span></div>' +
         (o.bonusEarn ? '<div class="sum-row"><span class="muted">Бонусы за заказ: ' + (o.bonusCredited ? 'начислены' : o.status === 'canceled' ? 'не начисляются — заказ отменён' : 'начислятся ' + (Pricing.bonusConf(DATA.settings).creditOn === 'done' ? 'когда заказ будет выполнен' : 'после оплаты')) + '</span><span class="num">+' + o.bonusEarn + '</span></div>' : '') + '</div>' +
       '<div style="display:grid;gap:16px;align-content:start"><div class="adm-card" style="display:grid;gap:8px"><h3 class="adm-h3">Покупатель</h3><b>' + esc(c.firstName + ' ' + c.lastName) + '</b><span class="copyable">' + esc(A().fmtPhone(c.phone)) + '</span><span class="copyable">' + esc(c.email) + '</span>' + (o.userId ? '<span class="muted" style="font-size:14px">Зарегистрированный покупатель</span>' : '<span class="muted" style="font-size:14px">Без регистрации</span>') + '</div>' +
-        refundCard(o) +
+        refundCard(o) + (useCdek(o) ? returnCard(o) : '') +
         '<div class="adm-card" style="display:grid;gap:8px"><h3 class="adm-h3">Доставка</h3><span>' + esc(d.name || '—') + '</span>' + (d.city || d.address ? '<span class="copyable">' + esc([d.city, d.address].filter(Boolean).join(', ')) + '</span>' : '') + (o.comment ? '<span class="muted">Комментарий: ' + esc(o.comment) + '</span>' : '') + '</div>' +
         (useCdek(o) ? cdekCard(o) : manualTrack(o)) +
         '<div class="adm-card adm-form" style="grid-template-columns:1fr"><h3 class="adm-h3">Статус</h3>' +
@@ -430,7 +498,7 @@
           '<button class="btn" id="oSave">Сохранить</button></div>' +
         '<div class="adm-card" style="display:grid;gap:10px"><h3 class="adm-h3">Удаление</h3><p class="muted" style="font-size:13px;margin:0">Для тестовых и ошибочных заказов. Товар вернётся на склад, промокод и бонусы — как при отмене. Удаление не отменить.</p><button class="btn ghost" id="oDel" type="button">Удалить заказ</button></div></div></div>';
     bindRefund(o);
-    if (useCdek(o)) bindCdekOrder(o);
+    if (useCdek(o)) { bindCdekOrder(o); bindReturn(o); }
     bindConfirm($('#oDel'), async function () {
       try { await A().API.adminOrderDelete(o.id); await afterSave('Заказ № ' + o.number + ' удалён', '#/admin?s=orders'); } catch (e) { toast(A().errMsg(e), true); }
     });
@@ -937,7 +1005,7 @@
       { k: 'editorialText', label: 'Текст', type: 'textarea' },
       { k: 'editorialImage', label: 'Фото', type: 'image' }
     ], {
-      benefits: { title: 'Преимущества', cols: [{ k: 'title', label: 'Заголовок' }, { k: 'text', label: 'Описание', flex: 2 }, { k: 'icon', label: 'Иконка', type: 'select', options: [['auto', 'Иконка: по тексту'], ['delivery', 'Доставка — грузовик'], ['quality', 'Качество — медаль'], ['fabric', 'Ткани — стопка тканей'], ['fitting', 'Примерка — футболка'], ['return', 'Возврат — коробка'], ['payment', 'Оплата — карты'], ['gift', 'Подарок'], ['none', 'Без иконки']] }], get: function (s) { return s.home.benefits; }, set: function (s, v) { s.home.benefits = v; } }
+      benefits: { title: 'Преимущества', cols: [{ k: 'title', label: 'Заголовок' }, { k: 'text', label: 'Описание', flex: 2 }, { k: 'icon', label: 'Иконка', type: 'select', options: [['auto', 'Иконка: по тексту'], ['delivery', 'Доставка — грузовик'], ['quality', 'Качество — медаль'], ['fabric', 'Ткани — стопка тканей'], ['fitting', 'Примерка — футболка'], ['return', 'Возврат — коробка'], ['payment', 'Оплата — карты'], ['gift', 'Подарок / бонусы'], ['cash', 'Наличные'], ['pin', 'Метка на карте'], ['none', 'Без иконки']] }, { k: 'link', label: 'Ссылка (необязательно)', placeholder: '#/page/delivery' }, { k: 'linkText', label: 'Текст ссылки', placeholder: 'Подробнее' }], get: function (s) { return s.home.benefits; }, set: function (s, v) { s.home.benefits = v; } }
     }, function (s) { var o = s.home; o.announcement = s.announcement; return o; }, function (s, o) { s.announcement = o.announcement; delete o.announcement; s.home = Object.assign(s.home, o); });
   }
 
@@ -998,7 +1066,7 @@
   /* ================= Оплата, касса, доставка =================
      Карточки вместо голой формы: у способа оплаты — переключатель и превью «как увидит покупатель»,
      у ЮKassa — статус подключения, у доставки — карточка на каждый способ с понятными полями. */
-  function payIc(n) { return '<img src="img/benefits/' + n + '.webp?v=13.22.0" alt="" width="52" height="52" decoding="async">'; }
+  function payIc(n) { return '<img src="img/benefits/' + n + '.webp?v=13.24.1" alt="" width="52" height="52" decoding="async">'; }
   var PAY_IC = { card: payIc('payment'), cash: payIc('cash'), truck: payIc('delivery'), pin: payIc('pin') };
   function switchHtml(id, on, label) {
     return '<label class="pm-switch"><input type="checkbox" id="' + id + '"' + (on ? ' checked' : '') + '><span class="pm-track" aria-hidden="true"></span><span class="sr">' + esc(label) + '</span></label>';
@@ -1065,6 +1133,10 @@
         '<label class="pm-f"><span>Вес вещи, если в карточке не указан</span><span class="dm-money"><input class="input num" id="csW" type="number" min="50" step="50" value="' + pk.weight + '"><i>г</i></span></label>' +
         '<label class="pm-f"><span>Упаковка, если в карточке не выбрана</span><select class="select" id="csDefPack">' + Pricing.cdekPacks(c).map(function (x) { return '<option value="' + esc(x.id) + '"' + (c.defaultPack === x.id ? ' selected' : '') + '>' + esc(x.name) + '</option>'; }).join('') + '</select></label>' +
       '</div>' +
+      '<div class="pm-two">' +
+        '<label class="pm-f"><span>Возвраты получает (имя или ИП)</span><input class="input" id="csRetName" value="' + esc((c.returnTo && c.returnTo.name) || '') + '" placeholder="ИП Албаков Ибрагим Магомедович"></label>' +
+        '<label class="pm-f"><span>Телефон для возвратов</span><input class="input" id="csRetPhone" type="tel" value="' + esc(c.returnTo && c.returnTo.phone ? A().fmtPhone(c.returnTo.phone) : '') + '" placeholder="+7 (___) ___-__-__"><small>СДЭК позвонит, когда возврат придёт в ваш пункт</small></label>' +
+      '</div>' +
       '<div class="cs-sv"><span class="cs-sv-h">Услуги для покупателя (включите, если они есть в вашем договоре со СДЭК)</span>' +
         '<label class="check"><input type="checkbox" id="csPart"' + (sv.partDeliv ? ' checked' : '') + '> <span><b>Частичный выкуп</b> — покупатель забирает только то, что подошло, остальное СДЭК везёт вам обратно</span></label>' +
         '<label class="check"><input type="checkbox" id="csTry"' + (sv.tryOn ? ' checked' : '') + '> <span><b>Примерка</b> — покупатель может примерить вещи при получении</span></label></div>' +
@@ -1100,7 +1172,7 @@
       try {
         var packs = $$('.cs-pack', box).map(function (r) { var v = function (k) { return $('[data-pk="' + k + '"]', r).value; }; return { id: r.dataset.id, name: v('name').trim() || 'Упаковка', length: v('length'), width: v('width'), height: v('height'), weight: v('weight') }; });
         if (!packs.length) { el.textContent = 'Нужна хотя бы одна упаковка'; el.className = 'warn'; return; }
-        var r = await A().API.adminCdek({ check: false, shipmentPoint: pick, tariff: Number($('#csTariff').value), tariffDoor: Number($('#csTariffDoor').value), packs: packs, defaultPack: $('#csDefPack').value, pkg: { weight: $('#csW').value, length: 30, width: 25, height: 10 }, services: { partDeliv: $('#csPart').checked, tryOn: $('#csTry').checked } });
+        var r = await A().API.adminCdek({ check: false, shipmentPoint: pick, tariff: Number($('#csTariff').value), tariffDoor: Number($('#csTariffDoor').value), packs: packs, defaultPack: $('#csDefPack').value, pkg: { weight: $('#csW').value, length: 30, width: 25, height: 10 }, services: { partDeliv: $('#csPart').checked, tryOn: $('#csTry').checked }, returnTo: { name: $('#csRetName').value, phone: $('#csRetPhone').value } });
         DATA.settings.cdek = r.settings.cdek; s.cdek = r.settings.cdek;
         el.textContent = pick ? 'Сохранено' : 'Сохранено. Укажите пункт отгрузки — без него отправление не создать'; el.className = pick ? 'ok' : 'warn';
       } catch (e) { el.textContent = A().errMsg(e); el.className = 'warn'; }
@@ -1800,7 +1872,7 @@
   }
 
   function mailTab(body, mail) {
-    var PRESETS = { smtpbz: { host: 'connect.smtp.bz', port: 465, security: 'ssl' }, yandex: { host: 'smtp.yandex.ru', port: 465, security: 'ssl' }, mailru: { host: 'smtp.mail.ru', port: 465, security: 'ssl' } };
+    var PRESETS = { smtpbz: { host: 'connect.smtp.bz', port: 2525, security: 'starttls' }, yandex: { host: 'smtp.yandex.ru', port: 465, security: 'ssl' }, mailru: { host: 'smtp.mail.ru', port: 465, security: 'ssl' } };
     var defs = [
       { k: 'host', label: 'Сервер исходящей почты (SMTP)', placeholder: 'smtp.yandex.ru' },
       { k: 'port', label: 'Порт', type: 'number' },

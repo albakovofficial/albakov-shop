@@ -38,9 +38,12 @@ if (!db) {
   db = JSON.parse(JSON.stringify(SEED));
   db.sessions = {};
   db.secrets = {};
-  db.orderSeq = 100000;
+  db.orderSeq = 0;
 }
 db.sessions = db.sessions || {};
+// Нумерация заказов с № 1 (13.12): один раз переводим счётчик со старого начала 100000.
+// Прежние заказы сохраняют свои номера, повторов не будет — занятые номера пропускаются.
+if (!db.orderNumbering) { db.orderSeq = 0; db.orderNumbering = 1; }
 Pricing.migrateData(db, SEED); // цвета товаров, логотип — для данных, созданных до обновления
 db.secrets = db.secrets || {};
 db.waitlist = db.waitlist || [];
@@ -108,7 +111,7 @@ function hitIds() {
   if (home.hitsAuto === false) return [];
   const since = Date.now() - HITS_DAYS * 864e5, sold = new Map();
   for (const o of db.orders) {
-    if (o.status === 'canceled' || Date.parse(o.createdAt) < since) continue;
+    if (o.test || o.status === 'canceled' || Date.parse(o.createdAt) < since) continue;
     if (o.payment && o.payment.method === 'online' && o.payment.status !== 'paid') continue;
     for (const i of o.items || []) sold.set(i.productId, (sold.get(i.productId) || 0) + (Number(i.qty) || 0));
   }
@@ -227,7 +230,9 @@ function receiptItems(order, vatCode) {
   return out.filter((x) => Number(x.amount.value) > 0);
 }
 async function createPayment(order) {
-  const { cfg } = yk();
+  const { cfg, secret } = yk();
+  // Тестовый ключ ЮKassa — заказ тестовый: в панели и статистике не считается
+  if (/^test_/.test(String(secret || ''))) order.test = true;
   const body = {
     amount: { value: rub(order.total * 100), currency: 'RUB' },
     capture: true,
@@ -249,6 +254,7 @@ async function createPayment(order) {
 }
 function applyPayment(order, p) {
   if (!order || !p) return;
+  if (p.test) order.test = true;
   if (p.status === 'succeeded' && p.paid) { if (order.payment.status !== 'paid') { order.payment.status = 'paid'; sendOrderMails(order); } }
   else if (p.status === 'canceled') {
     // оплата не прошла: возвращаем товар и промокод, если заказ ещё не был отменён вручную
@@ -316,13 +322,15 @@ async function placeOrder(req, b) {
 
   q.lines.forEach((l) => { sizeEntry(l.productId, l.colorId, l.size).stock -= l.qty; });
   if (q.promo && q.promo.ok) { const pc = db.promocodes.find((x) => x.code === q.promo.code); if (pc) pc.used = (pc.used || 0) + 1; }
-  db.orderSeq = (db.orderSeq || 100000) + 1;
+  db.orderSeq = Number(db.orderSeq) || 0;
+  do { db.orderSeq++; } while (db.orders.some((o) => o.number === String(db.orderSeq)));
   const order = {
     id: uid('o'), number: String(db.orderSeq), token: crypto.randomBytes(16).toString('hex'), createdAt: new Date().toISOString(), userId: user ? user.id : null, customer, consentAt: new Date().toISOString(),
     items: q.lines.map((l) => ({ productId: l.productId, slug: l.slug, name: l.name, colorId: l.colorId, color: l.color, size: l.size, qty: l.qty, price: l.price, oldPrice: l.oldPrice, image: l.image, art: l.art })),
     subtotal: q.subtotal, saleDiscount: q.saleDiscount, promoCode: q.promo && q.promo.ok ? q.promo.code : '', promoDiscount: q.promoDiscount,
     delivery: Object.assign({}, q.delivery, { city: String(b.city || '').slice(0, 100), address: String(b.address || '').slice(0, 300) }), comment: String(b.comment || '').slice(0, 1000),
     total: q.total, payment: { method, status: 'pending', provider: method === 'online' ? pay.provider : null }, status: 'new',
+    test: method === 'online' && pay.provider !== 'yookassa' ? true : undefined,
     bonusUsed: q.bonusUsed, bonusEarn: user ? q.bonusEarn : 0
   };
   // Весь заказ оплачен бонусами — платить деньгами нечего
@@ -696,7 +704,8 @@ async function api(req, res, url, body) {
     requireAdmin(req);
     if (p[1] === 'data' && M === 'GET') {
       const d = {}; for (const k of ['settings', ...COLLECTIONS, 'orders']) d[k] = db[k];
-      d.orders = db.orders.map(orderView); d.users = db.users.map((u) => Object.assign(publicUser(u), { bonusLog: (u.bonusLog || []).slice(0, 100) }));
+      // Тестовые заказы (оплата в тестовом режиме) в панели не показываются и не считаются
+      d.orders = db.orders.filter((o) => !o.test).map(orderView); d.testOrders = db.orders.filter((o) => o.test).length; d.users = db.users.map((u) => Object.assign(publicUser(u), { bonusLog: (u.bonusLog || []).slice(0, 100) }));
       d.waitlist = db.waitlist.map((w) => { const c = Object.assign({}, w); delete c.token; return c; });
       d.supportNew = db.tickets.filter((t) => t.unreadShop).length;
       // Состояние ночных резервных копий (файл пишет tools/backup.js)
@@ -707,6 +716,14 @@ async function api(req, res, url, body) {
     }
     if (p[1] === 'health' && M === 'GET') return { health: health() };
     if (p[1] === 'support') return supportAdminApi(p, M, body);
+    // Следующий номер заказа (Настройки → Нумерация заказов)
+    if (p[1] === 'order-seq' && M === 'GET') return { next: (Number(db.orderSeq) || 0) + 1 };
+    if (p[1] === 'order-seq' && M === 'POST') {
+      const n = Number(body.next);
+      if (!Number.isInteger(n) || n < 1 || n > 999999999) fail(400, 'Укажите целое число от 1');
+      if (db.orders.some((o) => o.number === String(n))) fail(400, 'Заказ № ' + n + ' уже есть — укажите другой номер');
+      db.orderSeq = n - 1; save(); return { next: n };
+    }
     if (p[1] === 'password' && M === 'POST') {
       if (String(body.password || '').length < 8) fail(400, 'Пароль должен быть не короче 8 символов');
       if (!pwOk(body.password)) fail(400, 'Слишком длинный пароль');
@@ -730,6 +747,24 @@ async function api(req, res, url, body) {
       const name = uid('img') + '.' + (m[1] === 'jpeg' ? 'jpg' : m[1]);
       fs.writeFileSync(path.join(UPLOAD_DIR, name), buf);
       return { url: 'uploads/' + name };
+    }
+    // Удаление заказа: товар возвращается на склад, промокод и бонусы — как при отмене
+    if (p[1] === 'orders' && p[2] && M === 'DELETE') {
+      const drop = p[2] === 'test' ? db.orders.filter((o) => o.test) : db.orders.filter((o) => o.id === p[2]);
+      if (!drop.length) fail(404, p[2] === 'test' ? 'Тестовых заказов нет' : 'Заказ не найден');
+      for (const o of drop) {
+        if (o.status !== 'canceled') {
+          restock(o);
+          const pc = o.promoCode && db.promocodes.find((x) => x.code === o.promoCode);
+          if (pc) pc.used = Math.max(0, (pc.used || 0) - 1);
+          o.status = 'canceled';
+        }
+        syncBonus(o);
+      }
+      const ids = new Set(drop.map((o) => o.id));
+      db.orders = db.orders.filter((o) => !ids.has(o.id));
+      db.tickets.forEach((t) => { if (ids.has(t.orderId)) { t.orderId = ''; } });
+      save(); const notify = await processWaitlist(); return { deleted: ids.size, notify };
     }
     if (p[1] === 'orders' && p[2] && M === 'PATCH') {
       const o = db.orders.find((x) => x.id === p[2]); if (!o) fail(404, 'Заказ не найден');

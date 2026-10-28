@@ -255,9 +255,22 @@
       if (search) { var t = [o.number, o.customer.firstName, o.customer.lastName, o.customer.email, o.customer.phone].join(' ').toLowerCase(); if (t.indexOf(search) === -1) return false; }
       return true;
     });
-    m.innerHTML = head('Заказы', '<input class="input" id="oSearch" placeholder="Номер, имя, телефон" value="' + esc(q.q || '') + '" style="min-height:40px;width:220px">') +
-      '<div class="adm-filter">' + [['all', 'Все']].concat(Object.keys(A().STATUS).map(function (k) { return [k, A().STATUS[k]]; })).map(function (x) { var n = x[0] === 'all' ? DATA.orders.length : DATA.orders.filter(function (o) { return o.status === x[0]; }).length; return '<a class="chip' + (f === x[0] ? ' on' : '') + '" href="#/admin?s=orders&f=' + x[0] + '">' + x[1] + ' <span class="muted" style="margin-left:6px">' + n + '</span></a>'; }).join('') + '</div>' +
-      (list.length ? ordersTable(list) : '<div class="empty"><h3>Заказов нет</h3><p>Они появятся здесь сразу после оформления на сайте.</p></div>');
+    // Фильтр по статусу: число заказов крупно, подпись под ним, цветная точка статуса
+    var F = [['all', 'Все заказы'], ['new', 'Новые'], ['processing', 'Собираются'], ['shipped', 'В доставке'], ['done', 'Выполнены'], ['canceled', 'Отменены']];
+    var cnt = function (k) { return k === 'all' ? DATA.orders.length : DATA.orders.filter(function (o) { return o.status === k; }).length; };
+    var tabs = '<nav class="ost" aria-label="Статус заказов">' + F.map(function (x) {
+      var n = cnt(x[0]);
+      return '<a class="ost-i s-' + x[0] + (f === x[0] ? ' on' : '') + (n ? '' : ' zero') + '" href="#/admin?s=orders&f=' + x[0] + (q.q ? '&q=' + encodeURIComponent(q.q) : '') + '"' + (f === x[0] ? ' aria-current="page"' : '') + '>' +
+        '<b class="num">' + n + '</b><span>' + (x[0] === 'all' ? '' : '<i aria-hidden="true"></i>') + x[1] + '</span></a>';
+    }).join('') + '</nav>';
+    var test = DATA.testOrders ? '<div class="ost-test"><span>Тестовые заказы скрыты и не считаются: ' + DATA.testOrders + '</span><button class="link" type="button" id="delTest">Удалить их</button></div>' : '';
+    var emptyTxt = f === 'all' && !search ? ['Заказов пока нет', 'Они появятся здесь сразу после оформления на сайте.'] : ['Ничего не нашлось', search ? 'Проверьте номер, имя или телефон.' : 'В этом статусе заказов нет.'];
+    m.innerHTML = head('Заказы', '<input class="input" id="oSearch" type="search" placeholder="Номер, имя или телефон" value="' + esc(q.q || '') + '" style="min-height:42px;width:260px" aria-label="Поиск заказа">') +
+      tabs + test +
+      (list.length ? ordersTable(list) : '<div class="empty"><h3>' + emptyTxt[0] + '</h3><p>' + emptyTxt[1] + '</p></div>');
+    if ($('#delTest')) bindConfirm($('#delTest'), async function () {
+      try { var r = await A().API.adminOrderDelete('test'); await afterSave('Удалено тестовых заказов: ' + r.deleted, '#/admin?s=orders'); } catch (e) { toast(A().errMsg(e), true); }
+    });
     var si = $('#oSearch'); si.addEventListener('change', function () { location.hash = '#/admin?s=orders&f=' + f + '&q=' + encodeURIComponent(si.value); });
   }
   function orderDetail(m, id) {
@@ -279,7 +292,11 @@
           fieldHtml({ k: 'status', label: 'Статус заказа', type: 'select', options: Object.keys(A().STATUS).map(function (k) { return [k, A().STATUS[k]]; }) }, o) +
           fieldHtml({ k: 'paymentStatus', label: 'Оплата (' + (o.payment.method === 'online' ? 'онлайн' : o.payment.method === 'bonus' ? 'бонусами' : 'при получении') + ')', type: 'select', options: Object.keys(A().PAY).map(function (k) { return [k, A().PAY[k]]; }) }, { paymentStatus: o.payment.status }) +
           fieldHtml({ k: 'note', label: 'Заметка для себя', type: 'textarea', rows: 2 }, { note: o.adminNote || '' }) +
-          '<button class="btn" id="oSave">Сохранить</button></div></div></div>';
+          '<button class="btn" id="oSave">Сохранить</button></div>' +
+        '<div class="adm-card" style="display:grid;gap:10px"><h3 class="adm-h3">Удаление</h3><p class="muted" style="font-size:13px;margin:0">Для тестовых и ошибочных заказов. Товар вернётся на склад, промокод и бонусы — как при отмене. Удаление не отменить.</p><button class="btn ghost" id="oDel" type="button">Удалить заказ</button></div></div></div>';
+    bindConfirm($('#oDel'), async function () {
+      try { await A().API.adminOrderDelete(o.id); await afterSave('Заказ № ' + o.number + ' удалён', '#/admin?s=orders'); } catch (e) { toast(A().errMsg(e), true); }
+    });
     $('#oSave').addEventListener('click', async function () {
       try { var r = await A().API.adminOrder(o.id, { status: $('#f-status').value, paymentStatus: $('#f-paymentStatus').value, note: $('#f-note').value }); await afterSave(notifyMsg('Заказ обновлён', r.notify), '#/admin?s=orders&id=' + o.id); }
       catch (e) { toast(A().errMsg(e), true); }
@@ -915,12 +932,17 @@
     card.innerHTML = '<h4 class="adm-sub" style="margin-top:0;padding-top:0;border-top:0">Адрес входа в панель</h4>' +
       '<p class="muted" style="font-size:14px">Покупатели не видят ссылку «Управление»: она появляется в подвале только после вашего входа. ' + (hasPath ? 'Сейчас задан секретный адрес входа, адрес #/admin для посторонних не открывается.' : 'Сейчас вход работает по адресу <b>#/admin</b>. Задайте свой адрес, чтобы его нельзя было угадать.') + '</p>' +
       '<div class="promo-form"><input class="input" id="admPath" placeholder="Например, vhod-k7m2q" autocomplete="off" aria-label="Секретный адрес входа"><button type="button" class="btn ghost" id="admPathGen">Придумать</button><button type="button" class="btn ghost" id="admPathSave">Сохранить</button></div><div id="admPathOut"></div>' +
+      '<h4 class="adm-sub">Нумерация заказов</h4><p class="muted" style="font-size:14px">Номер, который получит следующий заказ. Дальше номера идут по порядку: 1, 2, 3… Уже занятые номера пропускаются.</p><div class="promo-form"><input class="input num" type="number" min="1" step="1" id="orderSeq" placeholder="…" aria-label="Номер следующего заказа"><button type="button" class="btn ghost" id="orderSeqSave">Сохранить</button></div>' +
       '<h4 class="adm-sub">Пароль администратора</h4><div class="promo-form"><input class="input" type="password" id="newPass" placeholder="Новый пароль, от 8 символов" autocomplete="new-password" aria-label="Новый пароль"><button type="button" class="btn ghost" id="passSave">Сменить</button></div>' +
       backupStatusHtml(DATA.backup) +
       updateStatusHtml(DATA.update) +
       '<h4 class="adm-sub">Состояние магазина</h4><div id="healthBox"><p class="muted" style="font-size:14px">Проверяю…</p></div>' +
       '<h4 class="adm-sub">Резервная копия</h4><p class="muted" style="font-size:14px">Скопируйте данные магазина, чтобы сохранить их или перенести на сервер.</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn ghost sm" id="bkShow">Показать данные</button>' + '</div><div id="bkBox"></div>';
     m.insertBefore(card, $('.adm-bar', m));
+    A().API.adminOrderSeq().then(function (n) { var el = $('#orderSeq'); if (el) el.value = n; }).catch(function () {});
+    $('#orderSeqSave').addEventListener('click', async function () {
+      try { var n = await A().API.adminOrderSeq(Number($('#orderSeq').value)); $('#orderSeq').value = n; toast('Следующий заказ получит № ' + n); } catch (ex) { toast(A().errMsg(ex), true); }
+    });
     A().API.adminHealth().then(function (h) {
       var box = $('#healthBox'); if (!box) return;
       var dbOk = h.db && h.db.integrity === 'ok', lowDisk = h.disk && h.disk.freeGB < 2, c = (h.db && h.db.counts) || {};

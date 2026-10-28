@@ -38,9 +38,12 @@ if (!db) {
   db = JSON.parse(JSON.stringify(SEED));
   db.sessions = {};
   db.secrets = {};
-  db.orderSeq = 100000;
+  db.orderSeq = 0;
 }
 db.sessions = db.sessions || {};
+// Нумерация заказов с № 1 (13.12): один раз переводим счётчик со старого начала 100000.
+// Прежние заказы сохраняют свои номера, повторов не будет — занятые номера пропускаются.
+if (!db.orderNumbering) { db.orderSeq = 0; db.orderNumbering = 1; }
 Pricing.migrateData(db, SEED); // цвета товаров, логотип — для данных, созданных до обновления
 db.secrets = db.secrets || {};
 db.waitlist = db.waitlist || [];
@@ -316,7 +319,8 @@ async function placeOrder(req, b) {
 
   q.lines.forEach((l) => { sizeEntry(l.productId, l.colorId, l.size).stock -= l.qty; });
   if (q.promo && q.promo.ok) { const pc = db.promocodes.find((x) => x.code === q.promo.code); if (pc) pc.used = (pc.used || 0) + 1; }
-  db.orderSeq = (db.orderSeq || 100000) + 1;
+  db.orderSeq = Number(db.orderSeq) || 0;
+  do { db.orderSeq++; } while (db.orders.some((o) => o.number === String(db.orderSeq)));
   const order = {
     id: uid('o'), number: String(db.orderSeq), token: crypto.randomBytes(16).toString('hex'), createdAt: new Date().toISOString(), userId: user ? user.id : null, customer, consentAt: new Date().toISOString(),
     items: q.lines.map((l) => ({ productId: l.productId, slug: l.slug, name: l.name, colorId: l.colorId, color: l.color, size: l.size, qty: l.qty, price: l.price, oldPrice: l.oldPrice, image: l.image, art: l.art })),
@@ -707,6 +711,14 @@ async function api(req, res, url, body) {
     }
     if (p[1] === 'health' && M === 'GET') return { health: health() };
     if (p[1] === 'support') return supportAdminApi(p, M, body);
+    // Следующий номер заказа (Настройки → Нумерация заказов)
+    if (p[1] === 'order-seq' && M === 'GET') return { next: (Number(db.orderSeq) || 0) + 1 };
+    if (p[1] === 'order-seq' && M === 'POST') {
+      const n = Number(body.next);
+      if (!Number.isInteger(n) || n < 1 || n > 999999999) fail(400, 'Укажите целое число от 1');
+      if (db.orders.some((o) => o.number === String(n))) fail(400, 'Заказ № ' + n + ' уже есть — укажите другой номер');
+      db.orderSeq = n - 1; save(); return { next: n };
+    }
     if (p[1] === 'password' && M === 'POST') {
       if (String(body.password || '').length < 8) fail(400, 'Пароль должен быть не короче 8 символов');
       if (!pwOk(body.password)) fail(400, 'Слишком длинный пароль');

@@ -915,12 +915,17 @@
     card.innerHTML = '<h4 class="adm-sub" style="margin-top:0;padding-top:0;border-top:0">Адрес входа в панель</h4>' +
       '<p class="muted" style="font-size:14px">Покупатели не видят ссылку «Управление»: она появляется в подвале только после вашего входа. ' + (hasPath ? 'Сейчас задан секретный адрес входа, адрес #/admin для посторонних не открывается.' : 'Сейчас вход работает по адресу <b>#/admin</b>. Задайте свой адрес, чтобы его нельзя было угадать.') + '</p>' +
       '<div class="promo-form"><input class="input" id="admPath" placeholder="Например, vhod-k7m2q" autocomplete="off" aria-label="Секретный адрес входа"><button type="button" class="btn ghost" id="admPathGen">Придумать</button><button type="button" class="btn ghost" id="admPathSave">Сохранить</button></div><div id="admPathOut"></div>' +
+      '<h4 class="adm-sub">Нумерация заказов</h4><p class="muted" style="font-size:14px">Номер, который получит следующий заказ. Дальше номера идут по порядку: 1, 2, 3… Уже занятые номера пропускаются.</p><div class="promo-form"><input class="input num" type="number" min="1" step="1" id="orderSeq" placeholder="…" aria-label="Номер следующего заказа"><button type="button" class="btn ghost" id="orderSeqSave">Сохранить</button></div>' +
       '<h4 class="adm-sub">Пароль администратора</h4><div class="promo-form"><input class="input" type="password" id="newPass" placeholder="Новый пароль, от 8 символов" autocomplete="new-password" aria-label="Новый пароль"><button type="button" class="btn ghost" id="passSave">Сменить</button></div>' +
       backupStatusHtml(DATA.backup) +
       updateStatusHtml(DATA.update) +
       '<h4 class="adm-sub">Состояние магазина</h4><div id="healthBox"><p class="muted" style="font-size:14px">Проверяю…</p></div>' +
       '<h4 class="adm-sub">Резервная копия</h4><p class="muted" style="font-size:14px">Скопируйте данные магазина, чтобы сохранить их или перенести на сервер.</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn ghost sm" id="bkShow">Показать данные</button>' + '</div><div id="bkBox"></div>';
     m.insertBefore(card, $('.adm-bar', m));
+    A().API.adminOrderSeq().then(function (n) { var el = $('#orderSeq'); if (el) el.value = n; }).catch(function () {});
+    $('#orderSeqSave').addEventListener('click', async function () {
+      try { var n = await A().API.adminOrderSeq(Number($('#orderSeq').value)); $('#orderSeq').value = n; toast('Следующий заказ получит № ' + n); } catch (ex) { toast(A().errMsg(ex), true); }
+    });
     A().API.adminHealth().then(function (h) {
       var box = $('#healthBox'); if (!box) return;
       var dbOk = h.db && h.db.integrity === 'ok', lowDisk = h.disk && h.disk.freeGB < 2, c = (h.db && h.db.counts) || {};

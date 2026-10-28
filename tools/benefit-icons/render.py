@@ -5,7 +5,7 @@ from PIL import Image
 
 HERE = Path(sys.argv[1])
 OUT = Path(sys.argv[2]); OUT.mkdir(parents=True, exist_ok=True)
-NAMES = ['delivery', 'fitting', 'return', 'payment', 'gift', 'quality', 'fabric']
+NAMES = ['delivery', 'fitting', 'return', 'payment', 'gift', 'quality', 'fabric', 'cash', 'pin']
 only = sys.argv[3].split(',') if len(sys.argv) > 3 else NAMES
 SIZE = int(sys.argv[4]) if len(sys.argv) > 4 else 900
 FINAL = 320  # 2x for a 160px icon

@@ -653,6 +653,8 @@ function embedImages(html) {
   });
   return { html: out, inline };
 }
+// В письмах покупателю: «отвечать не нужно, пишите на …» — адрес для связи из «Меню, контакты»
+Object.defineProperty(Mail.DEFAULTS, 'supportEmail', { get: () => (db.settings.contacts || {}).email || mailCfg().replyTo || '' });
 function sendMail(msg) { const e = embedImages(msg.html); return smtp.send(mailCfg(), Object.assign({}, msg, e)); }
 
 /* ---------------- Письма о заказе: покупателю и магазину ---------------- */
@@ -1118,6 +1120,38 @@ async function api(req, res, url, body) {
       db.orders = db.orders.filter((o) => !ids.has(o.id));
       db.tickets.forEach((t) => { if (ids.has(t.orderId)) { t.orderId = ''; } });
       save(); const notify = await processWaitlist(); return { deleted: ids.size, notify };
+    }
+    // Все письма сайта с примером — для раздела «Письма» в панели
+    if (p[1] === 'mail-catalog' && (M === 'GET' || M === 'POST')) {
+      const cs = db.settings.contacts || {}, mc = mailCfg(), base = { store: db.settings.storeName, logo: brandLogo(), contacts: [cs.phone, cs.email].filter(Boolean).join(' · ') };
+      const pr = db.products.find((x) => x.active !== false) || { name: 'Пальто оверсайз из шерсти', price: 38900 };
+      const item = { name: pr.name, color: 'Графит', size: 'M', qty: 1, price: pr.price, image: absUrl(((Pricing.colorsOf(pr)[0] || {}).images || [])[0] || '') };
+      const order = { id: 'demo', number: '25', customer: { firstName: 'Анна', lastName: 'Смирнова', phone: '79161112233', email: 'anna@example.ru' }, items: [item], subtotal: pr.price, promoDiscount: 0, saleDiscount: 0, bonusUsed: 0,
+        delivery: { name: 'СДЭК, пункт выдачи', price: 380, city: 'Мурино (Ленинградская область)', address: 'ПВЗ СДЭК SPD25: б-р Петровский, 7' }, total: pr.price + 380, payment: { method: 'online', status: 'paid' }, comment: '' };
+      const ord = (kind) => Mail.renderOrder(Object.assign({ kind, url: PUBLIC_URL + '/#/order/demo', order, money: Pricing.format, payLabel: 'оплачено онлайн' }, base));
+      const c = (db.waitlist || [])[0], np = pr, ncol = Pricing.colorsOf(np)[0] || { name: 'Графит', images: [] };
+      const list = [
+        { key: 'code', title: 'Код подтверждения почты', when: 'При регистрации — покупатель вводит код на сайте', to: 'Покупателю', m: Mail.renderCode(Object.assign({ code: '483920', minutes: VERIFY_MIN, name: 'Анна' }, base)) },
+        { key: 'welcome', title: 'Добро пожаловать', when: 'Сразу после регистрации: бонусы и промокод на первый заказ', to: 'Покупателю', m: Mail.renderWelcome(Object.assign({ name: 'Анна', url: PUBLIC_URL + '/', bonusPercent: String(Pricing.bonusConf(db.settings).percent || 5), promo: welcomePromo() }, base)) },
+        { key: 'order', title: 'Заказ принят / оплачен', when: 'Оплата онлайн — после оплаты; при получении — сразу после оформления', to: 'Покупателю', m: ord('customer') },
+        { key: 'order-shop', title: 'Новый заказ', when: 'Одновременно с письмом покупателю', to: 'Магазину — ' + (cs.email || mc.fromEmail || 'почта для связи'), m: ord('shop') },
+        { key: 'tracking', title: 'Заказ отправлен, трек-номер', when: 'Когда посылку приняли в СДЭК (или вы вписали трек-номер вручную)', to: 'Покупателю', m: Mail.renderTracking(Object.assign({ name: 'Анна', number: '25', carrier: 'СДЭК', track: '1234567890', trackUrl: CDEK_TRACK + '1234567890', url: PUBLIC_URL + '/#/order/demo' }, base)) },
+        { key: 'return-ship', title: 'Возврат оформлен: номер СДЭК', when: 'Когда вы оформили возврат через СДЭК в заказе', to: 'Покупателю', m: Mail.renderReturnShip(Object.assign({ name: 'Анна', number: '25', track: '1234567891', items: [item], to: 'б-р Петровский, 7, Мурино', cost: 310, url: PUBLIC_URL + '/#/order/demo' }, base)) },
+        { key: 'refund', title: 'Деньги возвращены', when: 'После «Вернуть деньги» в заказе', to: 'Покупателю', m: Mail.renderRefund(Object.assign({ name: 'Анна', number: '25', amount: pr.price - 310, items: [item], delivery: false, full: true, url: PUBLIC_URL + '/#/order/demo' }, base)) },
+        { key: 'support', title: 'Ответ поддержки', when: 'Когда вы отвечаете на обращение в разделе «Поддержка»', to: 'Покупателю', m: Mail.renderSupport(Object.assign({ kind: 'customer', name: 'Анна', number: '7', topic: 'Размер и посадка', orderNumber: '25', text: 'Здравствуйте! Пальто идёт в размер, при росте 170 советуем M.', url: PUBLIC_URL + '/#/account?tab=support' }, base)) },
+        { key: 'support-shop', title: 'Новое обращение', when: 'Когда покупатель пишет в поддержку на сайте', to: 'Магазину — ' + (cs.email || mc.fromEmail || 'почта для связи'), m: Mail.renderSupport(Object.assign({ kind: 'shop', name: 'Анна', number: '7', topic: 'Размер и посадка', orderNumber: '25', text: 'Подскажите, пальто идёт в размер?', url: PUBLIC_URL + '/#/admin?s=support' }, base)) },
+        { key: 'notify', title: 'Снова в наличии', when: 'Когда появился размер, о котором просили сообщить. Текст меняется в «Сообщить о поступлении»', to: 'Покупателю', m: Mail.render(notifyContext({ size: 'M' }, np, ncol)) }
+      ];
+      // «Отправить пример» — письмо с тестовыми данными на указанный адрес
+      if (M === 'POST') {
+        const x = list.find((y) => y.key === body.key); if (!x) fail(404, 'Письмо не найдено');
+        const to = String(body.to || cs.email || '').trim(); if (!validEmail(to)) fail(400, 'Укажите почту для примера');
+        if (!mailReady()) fail(400, 'Почта для отправки не настроена');
+        try { await sendMail({ to, subject: '[Пример] ' + x.m.subject, html: x.m.html, text: x.m.text }); } catch (e) { fail(502, 'Письмо не отправлено: ' + e.message); }
+        return { sent: to };
+      }
+      return { mail: { ready: mailReady(), from: mc.fromEmail, fromName: mc.fromName, replyTo: mc.replyTo, support: cs.email || '' },
+        letters: list.map((x) => ({ key: x.key, title: x.title, when: x.when, to: x.to, subject: x.m.subject, html: x.m.html, text: x.m.text })) };
     }
     // Проверка расчёта доставки СДЭК до города (для настройки)
     if (p[1] === 'cdek-calc' && M === 'POST') {

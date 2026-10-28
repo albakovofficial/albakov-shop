@@ -84,6 +84,7 @@
     async adminWaitlistSend() { return await call('POST', 'api/admin/waitlist/send'); },
     async adminMail() { return await call('GET', 'api/admin/mail'); },
     async adminMailSave(m) { await call('POST', 'api/admin/mail', { mail: m }); },
+    async adminMailCatalog(body) { return await call(body ? 'POST' : 'GET', 'api/admin/mail-catalog', body); },
     async adminMailTest(to) { await call('POST', 'api/admin/mail/test', { to: to }); },
     async adminMailTestAccount(to) { await call('POST', 'api/admin/mail/test-account', { to: to }); },
     async adminDelete(name, id) { await call('DELETE', 'api/admin/' + name + '/' + encodeURIComponent(id)); return true; },

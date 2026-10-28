@@ -82,7 +82,7 @@
         '</td></tr>' +
         '<tr><td style="padding:28px 8px 0;font-family:' + sans + ';font-size:13px;line-height:1.6;color:#626267;">' + esc(footer) +
           (ctx.contacts ? '<br>' + esc(ctx.contacts) : '') +
-          (ctx.unsubscribe ? '<br><a href="' + esc(ctx.unsubscribe) + '" style="color:#4A4A4F;">Отменить это уведомление</a>' : '') + '</td></tr>' +
+          (ctx.unsubscribe ? '<br><a href="' + esc(ctx.unsubscribe) + '" style="color:#4A4A4F;">Отменить это уведомление</a>' : '') + '<br><br><span style="color:#8A8F96;">' + noReply(ctx) + '</span></td></tr>' +
       '</table></td></tr></table></body></html>';
     var text = heading + '\n\n' + paras.join('\n\n') + '\n\n' + v.product + ' — ' + v.color + ', размер ' + v.size + ', ' + v.price + '\n' + button + ': ' + ctx.url + '\n\n' + footer + (ctx.unsubscribe ? '\nОтменить уведомление: ' + ctx.unsubscribe : '');
     return { subject: subject, html: html, text: text };
@@ -132,7 +132,7 @@
             '<a href="' + esc(ctx.url) + '" style="display:inline-block;padding:16px 34px;font-family:' + sans + ';font-size:13px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;color:#FFFFFF;text-decoration:none;">' + (shop ? 'Открыть в панели' : 'Открыть заказ') + '</a>' +
           '</td></tr></table>' +
         '</td></tr>' +
-        (shop ? '' : '<tr><td style="padding:28px 8px 0;font-family:' + sans + ';font-size:13px;line-height:1.6;color:#626267;">Вопросы по заказу — ответьте на это письмо' + (ctx.contacts ? ' или свяжитесь с нами: ' + esc(ctx.contacts) : '') + '.</td></tr>') +
+        (shop ? '' : '<tr><td style="padding:28px 8px 0;font-family:' + sans + ';font-size:13px;line-height:1.6;color:#626267;">Вопросы по заказу — ' + writeUs(ctx) + ' или в поддержку в личном кабинете.<br><br><span style="color:#8A8F96;">' + noReply(ctx) + '</span></td></tr>') +
       '</table></td></tr></table></body></html>';
     var text = [eyebrow, heading, lead, ''].concat(o.items.map(function (i) { return i.name + ' — ' + [i.color, 'размер ' + i.size, i.qty + ' шт.'].filter(Boolean).join(', ') + ' — ' + money(i.price * i.qty); }))
       .concat(['', 'Итого: ' + money(o.total), where ? 'Адрес: ' + where : '', (shop ? 'Открыть в панели: ' : 'Открыть заказ: ') + ctx.url]).filter(function (x) { return x !== null; }).join('\n');
@@ -150,10 +150,18 @@
         '<tr><td align="center" style="padding:0 0 32px;font-family:' + sans + ';font-size:26px;letter-spacing:9px;color:#141414;">' +
           (ctx.logo ? '<img src="' + esc(ctx.logo.src) + '" alt="' + esc(ctx.store) + '" height="18" style="display:inline-block;height:18px;width:auto;border:0;">' : esc(String(ctx.store || '').toUpperCase())) + '</td></tr>' +
         '<tr><td style="background:#FFFFFF;border:1px solid #E3E6EA;padding:44px 40px 40px;">' + inner + '</td></tr>' +
-        '<tr><td style="padding:26px 8px 0;font-family:' + sans + ';font-size:13px;line-height:1.6;color:#626267;text-align:center;">' + footer + '</td></tr>' +
+        '<tr><td style="padding:26px 8px 0;font-family:' + sans + ';font-size:13px;line-height:1.6;color:#626267;text-align:center;">' + footer + (ctx.shop ? '' : '<br><br><span style="color:#8A8F96;">' + noReply(ctx) + '</span>') + '</td></tr>' +
       '</table></td></tr></table></body></html>';
   }
   var SANS = "Montserrat,'Helvetica Neue',Arial,sans-serif";
+  // Адрес для писем покупателей (info@). Письма уходят с no-reply@ — на них отвечать не нужно
+  var DEFAULTS = { supportEmail: '' };
+  function supportOf(ctx) { return (ctx && ctx.supportEmail) || DEFAULTS.supportEmail || ''; }
+  function noReply(ctx) {
+    var e = supportOf(ctx);
+    return 'Это письмо отправлено автоматически — отвечать на него не нужно.' + (e ? '<br>Написать нам: <a href="mailto:' + esc(e) + '" style="color:#141414;">' + esc(e) + '</a>' : '');
+  }
+  function writeUs(ctx) { var e = supportOf(ctx); return e ? 'напишите нам на <a href="mailto:' + esc(e) + '" style="color:#141414;">' + esc(e) + '</a>' : 'напишите нам'; }
   function eyebrow(t) { return '<div style="font-family:' + SANS + ';font-size:12px;letter-spacing:3px;text-transform:uppercase;color:#2A3036;text-align:center;">' + esc(t) + '</div>'; }
   function h1(t) { return '<h1 style="margin:14px 0 14px;font-family:' + SANS + ';font-weight:300;font-size:32px;line-height:1.15;color:#141414;text-align:center;">' + esc(t) + '</h1>'; }
   function para(t, extra) { return '<p style="margin:0 0 14px;font-family:' + SANS + ';font-size:15px;line-height:1.65;color:#2A3036;text-align:center;' + (extra || '') + '">' + t + '</p>'; }
@@ -216,7 +224,7 @@
       button(shop ? 'Ответить в панели' : 'Открыть переписку', ctx.url);
     var footer = shop ? 'Письмо отправлено с сайта ' + esc(ctx.store) + '.' : 'Ответить можно в личном кабинете, в разделе «Поддержка».' + (ctx.contacts ? '<br>' + esc(ctx.contacts) : '');
     var text = (shop ? (ctx.name || 'Покупатель') + ' пишет' : 'Ответ поддержки ' + ctx.store) + ' — обращение № ' + ctx.number + ' (' + about + ')\n\n' + ctx.text + '\n\n' + ctx.url;
-    return { subject: subject, html: frame(ctx, subject, String(ctx.text).slice(0, 90), inner, footer), text: text };
+    return { subject: subject, html: frame(Object.assign({}, ctx, { shop: shop }), subject, String(ctx.text).slice(0, 90), inner, footer), text: text };
   }
 
   /* Заказ передан в доставку. ctx: { store, logo, name, number, carrier, track, trackUrl, url, contacts } */
@@ -229,7 +237,7 @@
       para('Заказ № ' + esc(ctx.number) + ' передан в ' + esc(ctx.carrier) + '. По трек-номеру можно следить, где посылка, и узнать, когда она прибудет.') +
       box + button('Отследить посылку', ctx.trackUrl) +
       para('<a href="' + esc(ctx.url) + '" style="color:#121417;">Открыть заказ на сайте</a>', 'margin:22px 0 0;font-size:14px;');
-    var footer = 'Если появятся вопросы по доставке, ответьте на это письмо или напишите в поддержку в личном кабинете.' + (ctx.contacts ? '<br>' + esc(ctx.contacts) : '');
+    var footer = 'Если появятся вопросы по доставке, ' + writeUs(ctx) + ' или в поддержку в личном кабинете.' + (ctx.contacts ? '<br>' + esc(ctx.contacts) : '');
     var text = 'Заказ № ' + ctx.number + ' отправлен через ' + ctx.carrier + '.\nТрек-номер: ' + ctx.track + '\nОтследить: ' + ctx.trackUrl + '\n\nЗаказ на сайте: ' + ctx.url;
     return { subject: subject, html: frame(ctx, subject, 'Трек-номер ' + ctx.track + ' — отследите посылку', inner, footer), text: text };
   }
@@ -246,7 +254,7 @@
       para((ctx.full ? 'Оформили полный возврат по заказу № ' : 'Оформили возврат по заказу № ') + esc(ctx.number) + '. Деньги придут туда же, откуда была оплата: на карту — обычно за 1–3 рабочих дня, иногда банку нужно до 30 дней; через СБП — быстрее.') +
       box + (list.length ? para('<b>За что возврат:</b><br>' + list.join('<br>'), 'margin:22px 0 0;font-size:14px;') : '') +
       para('<a href="' + esc(ctx.url) + '" style="color:#121417;">Открыть заказ на сайте</a>', 'margin:22px 0 0;font-size:14px;');
-    var footer = 'Если деньги не пришли за 10 рабочих дней, ответьте на это письмо — поможем разобраться.' + (ctx.contacts ? '<br>' + esc(ctx.contacts) : '');
+    var footer = 'Если деньги не пришли за 10 рабочих дней, ' + writeUs(ctx) + ' — поможем разобраться.' + (ctx.contacts ? '<br>' + esc(ctx.contacts) : '');
     var text = 'Возврат по заказу № ' + ctx.number + ': ' + sum + '.\n' + (list.length ? 'За что: ' + list.join('; ').replace(/<[^>]+>/g, '') + '\n' : '') + 'Деньги придут на карту или счёт, с которого была оплата.\n\nЗаказ на сайте: ' + ctx.url;
     return { subject: subject, html: frame(ctx, subject, 'Возврат ' + sum + ' — деньги уже в пути', inner, footer), text: text };
   }
@@ -267,12 +275,12 @@
       (list.length ? para('<b>Что возвращаете:</b><br>' + list.join('<br>'), 'margin:22px 0 0;font-size:14px;') : '') +
       (ctx.cost ? para('Стоимость обратной доставки — ' + esc(Number(ctx.cost).toLocaleString('ru-RU')) + ' ₽, её удержим из суммы возврата (если вещь надлежащего качества). Платить в пункте СДЭК ничего не нужно.', 'margin:18px 0 0;font-size:14px;color:#464B52;') : para('Платить в пункте СДЭК ничего не нужно.', 'margin:18px 0 0;font-size:14px;color:#464B52;')) +
       para('<a href="' + esc(ctx.url) + '" style="color:#121417;">Открыть заказ на сайте</a>', 'margin:22px 0 0;font-size:14px;');
-    var footer = 'Если появятся вопросы, ответьте на это письмо или напишите в поддержку в личном кабинете.' + (ctx.contacts ? '<br>' + esc(ctx.contacts) : '');
+    var footer = 'Если появятся вопросы, ' + writeUs(ctx) + ' или в поддержку в личном кабинете.' + (ctx.contacts ? '<br>' + esc(ctx.contacts) : '');
     var text = 'Возврат по заказу № ' + ctx.number + ' оформлен.\nНомер для пункта СДЭК: ' + ctx.track + '\n1. Упакуйте вещи с бирками.\n2. Отнесите в любой пункт СДЭК и назовите номер — заполнять ничего не нужно.\n3. Когда посылка придёт и мы её проверим, вернём деньги.' + (ctx.cost ? '\nСтоимость обратной доставки ' + ctx.cost + ' ₽ удержим из суммы возврата.' : '') + '\n\nЗаказ: ' + ctx.url;
     return { subject: subject, html: frame(ctx, subject, 'Номер СДЭК для возврата: ' + ctx.track, inner, footer), text: text };
   }
 
-  var api = { renderReturnShip: renderReturnShip, renderRefund: renderRefund, renderTracking: renderTracking, renderSupport: renderSupport, DEFAULT_NOTIFY: DEFAULT_NOTIFY, PLACEHOLDERS: PLACEHOLDERS, tplOf: tplOf, readyRequests: readyRequests, render: render, renderOrder: renderOrder, renderCode: renderCode, renderWelcome: renderWelcome };
+  var api = { DEFAULTS: DEFAULTS, renderReturnShip: renderReturnShip, renderRefund: renderRefund, renderTracking: renderTracking, renderSupport: renderSupport, DEFAULT_NOTIFY: DEFAULT_NOTIFY, PLACEHOLDERS: PLACEHOLDERS, tplOf: tplOf, readyRequests: readyRequests, render: render, renderOrder: renderOrder, renderCode: renderCode, renderWelcome: renderWelcome };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Mail = api;
 })(this);

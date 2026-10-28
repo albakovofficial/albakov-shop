@@ -10,7 +10,7 @@
 
   var SECTIONS = [
     ['overview', 'Обзор'], ['orders', 'Заказы'], ['support', 'Поддержка'], ['products', 'Товары'], ['categories', 'Категории'], ['sizeCharts', 'Размерные сетки'],
-    ['promotions', 'Акции'], ['promocodes', 'Промокоды'], ['bonus', 'Бонусы'], ['customers', 'Покупатели'], ['notify', 'Сообщить о поступлении'], ['sections', 'Разделы: женщинам / мужчинам'], ['brand', 'Логотип и название'], ['slider', 'Слайдер на главной'], ['home', 'Главная страница'], ['pages', 'Страницы'],
+    ['promotions', 'Акции'], ['promocodes', 'Промокоды'], ['bonus', 'Бонусы'], ['customers', 'Покупатели'], ['notify', 'Сообщить о поступлении'], ['mail', 'Письма'], ['sections', 'Разделы: женщинам / мужчинам'], ['brand', 'Логотип и название'], ['slider', 'Слайдер на главной'], ['home', 'Главная страница'], ['pages', 'Страницы'],
     ['menu', 'Меню, контакты, соцсети'], ['payment', 'Оплата и доставка'], ['settings', 'Настройки']
   ];
   var TAX = [[1, 'ОСН — общая система'], [2, 'УСН «Доходы»'], [3, 'УСН «Доходы минус расходы»'], [5, 'ЕСХН'], [6, 'Патентная система']];
@@ -197,11 +197,42 @@
       '</nav><div class="adm-side-foot"><a href="#/" class="muted">← В магазин</a><button class="muted" id="admOut">Выйти</button></div></aside><section class="adm-main" id="admMain"></section></div>';
     $('#admOut').addEventListener('click', async function () { await API.adminLogout(); DATA = null; location.hash = '#/'; await A().refresh(); });
     var main = $('#admMain');
-    var fn = { overview: overview, orders: orders, support: supportSection, products: products, categories: categories, sizeCharts: sizeCharts, promotions: promotions, promocodes: promocodes, bonus: bonusSection, customers: customers, notify: notifySection, sections: sectionsSettings, brand: brandSection, slider: sliderSection, home: homeSettings, pages: pages, menu: menuSettings, payment: paymentSettings, settings: generalSettings }[s] || overview;
+    var fn = { overview: overview, orders: orders, support: supportSection, products: products, categories: categories, sizeCharts: sizeCharts, promotions: promotions, promocodes: promocodes, bonus: bonusSection, customers: customers, notify: notifySection, mail: mailSection, sections: sectionsSettings, brand: brandSection, slider: sliderSection, home: homeSettings, pages: pages, menu: menuSettings, payment: paymentSettings, settings: generalSettings }[s] || overview;
     fn(main, q);
   }
   function waitBadge() { var n = (DATA.waitlist || []).filter(function (w) { return w.status === 'waiting' || w.status === 'failed'; }).length; return n ? ' <span class="adm-badge muted-badge">' + n + '</span>' : ''; }
   function newOrdersBadge() { var n = DATA.orders.filter(function (o) { return o.status === 'new'; }).length; return n ? ' <span class="adm-badge">' + n + '</span>' : ''; }
+  /* ================= Письма: все письма сайта с примером ================= */
+  async function mailSection(m) {
+    m.innerHTML = head('Письма', '', 'Все письма, которые сайт отправляет сам. Покупателям они приходят с адреса для отправки и с пометкой «отвечать не нужно» — написать вам можно на почту для связи.') + '<div class="loader">…</div>';
+    var r; try { r = await A().API.adminMailCatalog(); } catch (e) { m.querySelector('.loader').outerHTML = '<p class="form-error">' + esc(A().errMsg(e)) + '</p>'; return; }
+    var mi = r.mail;
+    m.innerHTML = head('Письма', '', 'Все письма, которые сайт отправляет сам. Покупателям они приходят с адреса для отправки и с пометкой «отвечать не нужно» — написать вам можно на почту для связи.') +
+      '<div class="ml-top">' +
+        '<div class="ml-a"><span>Отправитель</span><b>' + esc(mi.fromName || '') + ' &lt;' + esc(mi.from || '—') + '&gt;</b><small class="' + (mi.ready ? 'ok' : 'warn') + '">' + (mi.ready ? 'Почта настроена, письма уходят' : 'Не настроена — письма не отправляются') + '</small></div>' +
+        '<div class="ml-a"><span>Пишут вам и получают ответ</span><b>' + esc(mi.support || mi.replyTo || '—') + '</b><small>Указан в письмах; меняется в «Меню, контакты, соцсети»</small></div>' +
+        '<div class="ml-a"><span>Если покупатель всё же ответит</span><b>' + esc(mi.replyTo || '—') + '</b><small>Ответ уйдёт сюда (Reply-To). <a class="link" href="#/admin?s=notify&tab=mail">Настройки почты</a></small></div>' +
+      '</div>' +
+      '<div class="ml-list">' + r.letters.map(function (x, i) {
+        return '<div class="ml-i" data-i="' + i + '"><div class="ml-h"><span class="ml-n">' + (i + 1) + '</span><div><b>' + esc(x.title) + '</b><small>' + esc(x.when) + '</small></div><span class="ml-to">' + esc(x.to) + '</span></div>' +
+          '<div class="ml-subj"><span>Тема</span>' + esc(x.subject) + '</div>' +
+          '<div class="ml-acts"><button class="btn ghost sm" type="button" data-ml-view>Посмотреть письмо</button><span class="ml-send"><input class="input" type="email" value="' + esc(mi.support || '') + '" aria-label="Почта для примера"><button class="link" type="button" data-ml-send>Отправить пример</button></span><span class="ml-st"></span></div>' +
+          '<div class="ml-prev" hidden></div></div>';
+      }).join('') + '</div>';
+    m.addEventListener('click', async function (e) {
+      var it = e.target.closest('.ml-i'); if (!it) return; var x = r.letters[Number(it.dataset.i)];
+      if (e.target.closest('[data-ml-view]')) {
+        var pv = $('.ml-prev', it), b = e.target.closest('[data-ml-view]');
+        if (pv.hidden && !pv.firstChild) { var f = document.createElement('iframe'); f.title = x.title; f.setAttribute('sandbox', 'allow-same-origin'); f.srcdoc = x.html; pv.appendChild(f); f.addEventListener('load', function () { try { f.style.height = (f.contentDocument.documentElement.scrollHeight + 10) + 'px'; } catch (er) { f.style.height = '900px'; } }); }
+        pv.hidden = !pv.hidden; b.textContent = pv.hidden ? 'Посмотреть письмо' : 'Скрыть';
+      }
+      if (e.target.closest('[data-ml-send]')) {
+        var st = $('.ml-st', it), to = $('.ml-send input', it).value.trim(); if (!to) { st.textContent = 'Укажите почту'; st.className = 'ml-st warn'; return; }
+        st.textContent = 'Отправляем…'; st.className = 'ml-st';
+        try { var s = await A().API.adminMailCatalog({ key: x.key, to: to }); st.textContent = 'Отправлено на ' + s.sent; st.className = 'ml-st ok'; } catch (er) { st.textContent = A().errMsg(er); st.className = 'ml-st warn'; }
+      }
+    });
+  }
   function head(title, actions, sub) { return '<div class="adm-head"><div><h1 class="serif">' + esc(title) + '</h1>' + (sub ? '<p class="muted" style="margin-top:6px;font-size:14px;max-width:70ch">' + sub + '</p>' : '') + '</div><div class="adm-actions">' + (actions || '') + '</div></div>'; }
 
   function loginView(v) {

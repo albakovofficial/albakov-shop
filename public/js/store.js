@@ -85,6 +85,7 @@
     async adminDeleteMany(name, ids) { return (await call('POST', 'api/admin/' + name + '/delete-many', { ids: ids })).deleted; },
     async adminOrder(id, patch) { var r = await call('PATCH', 'api/admin/orders/' + encodeURIComponent(id), patch); r.order.notify = r.notify; return r.order; },
     async adminOrderSeq(next) { return (await call(next === undefined ? 'GET' : 'POST', 'api/admin/order-seq', next === undefined ? undefined : { next: next })).next; },
+    async adminOrderDelete(id) { return await call('DELETE', 'api/admin/orders/' + encodeURIComponent(id)); },
     async adminPassword(pw) { await call('POST', 'api/admin/password', { password: pw }); },
     async adminSecret(secret) { return (await call('POST', 'api/admin/payment-secret', secret === undefined ? {} : { secret: secret })); },
     async uploadImage(file) { var data = await readImage(file, 2000, 0.86); return (await call('POST', 'api/admin/upload', { dataUrl: data })).url; },

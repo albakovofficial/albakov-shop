@@ -11,7 +11,7 @@
   var SECTIONS = [
     ['overview', 'Обзор'], ['orders', 'Заказы'], ['support', 'Поддержка'], ['products', 'Товары'], ['categories', 'Категории'], ['sizeCharts', 'Размерные сетки'],
     ['promotions', 'Акции'], ['promocodes', 'Промокоды'], ['bonus', 'Бонусы'], ['customers', 'Покупатели'], ['notify', 'Сообщить о поступлении'], ['sections', 'Разделы: женщинам / мужчинам'], ['brand', 'Логотип и название'], ['slider', 'Слайдер на главной'], ['home', 'Главная страница'], ['pages', 'Страницы'],
-    ['menu', 'Меню, контакты, соцсети'], ['payment', 'Оплата, касса, доставка'], ['settings', 'Настройки']
+    ['menu', 'Меню, контакты, соцсети'], ['payment', 'Оплата и доставка'], ['settings', 'Настройки']
   ];
   var TAX = [[1, 'ОСН — общая система'], [2, 'УСН «Доходы»'], [3, 'УСН «Доходы минус расходы»'], [5, 'ЕСХН'], [6, 'Патентная система']];
   var VAT = [[1, 'Без НДС'], [2, 'НДС 0%'], [7, 'НДС 5%'], [8, 'НДС 7%'], [3, 'НДС 10%'], [4, 'НДС 20% (до 2026)'], [11, 'НДС 22%']];
@@ -850,38 +850,144 @@
     });
   }
 
-  function paymentSettings(m) {
-    settingsForm(m, 'Оплата, касса, доставка',
-      'Онлайн-оплата и фискальные чеки работают через ЮKassa: она передаёт данные чека в подключённую онлайн-кассу (свою или «Чеки от ЮKassa») по 54-ФЗ.' + (A().D.payReady ? ' <b>ЮKassa подключена</b> — покупатели видят онлайн-оплату.' : ' <b>Онлайн-оплата скрыта на сайте</b>, пока не выбран провайдер ЮKassa и не указаны shopId и секретный ключ — до этого покупатели видят только оплату при получении.'), [
-      { section: 'Способы оплаты' },
-      { k: 'online', label: 'Онлайн-оплата картой и СБП', type: 'checkbox' },
-      { k: 'onlineLabel', label: 'Название онлайн-оплаты' },
-      { k: 'cod', label: 'Оплата при получении', type: 'checkbox' },
-      { k: 'codLabel', label: 'Название оплаты при получении' },
-      { section: 'Платёжный сервис' },
-      { k: 'provider', label: 'Провайдер', type: 'select', options: [['demo', 'Тестовый режим (без списания денег)'], ['yookassa', 'ЮKassa']] },
-      { k: 'shopId', label: 'shopId магазина в ЮKassa', hint: 'Личный кабинет ЮKassa → Интеграция → Ключи API' },
-      { section: 'Онлайн-касса (54-ФЗ)' },
-      { k: 'sendReceipt', label: 'Передавать данные для чека', type: 'checkbox', hint: 'Включите, если в ЮKassa подключена онлайн-касса или «Чеки от ЮKassa»' },
-      { k: 'taxSystem', label: 'Система налогообложения', type: 'select', options: TAX },
-      { k: 'vatCode', label: 'Ставка НДС в чеке', type: 'select', options: VAT }
-    ], {
-      delivery: { title: 'Способы доставки', hint: 'Цена в рублях; «бесплатно от» — сумма заказа, с которой доставка бесплатная (0 — никогда). Галочка «адрес» — спрашивать город и адрес.', cols: [{ k: 'name', label: 'Название' }, { k: 'desc', label: 'Описание', flex: 2 }, { k: 'price', label: 'Цена', type: 'number' }, { k: 'freeFrom', label: 'Бесплатно от', type: 'number' }, { k: 'needsAddress', label: 'адрес', type: 'checkbox' }], get: function (s) { return s.delivery.methods; }, set: function (s, v) { s.delivery.methods = v; } }
-    }, function (s) { var p = s.payment; return Object.assign({}, p, { shopId: p.yookassa.shopId, sendReceipt: p.yookassa.sendReceipt, taxSystem: p.yookassa.taxSystem, vatCode: p.yookassa.vatCode }); },
-    function (s, o) {
-      if (!o.online && !o.cod) return 'Оставьте хотя бы один способ оплаты';
-      if (!s.delivery.methods.length) return 'Добавьте хотя бы один способ доставки';
-      s.payment = { provider: o.provider, online: o.online, cod: o.cod, onlineLabel: o.onlineLabel, codLabel: o.codLabel, yookassa: { shopId: o.shopId, sendReceipt: o.sendReceipt, taxSystem: Number(o.taxSystem), vatCode: Number(o.vatCode) } };
-      return '';
+  /* ================= Оплата, касса, доставка =================
+     Карточки вместо голой формы: у способа оплаты — переключатель и превью «как увидит покупатель»,
+     у ЮKassa — статус подключения, у доставки — карточка на каждый способ с понятными полями. */
+  var PAY_IC = {
+    card: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h4"/></svg>',
+    cash: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5 12 4l8 4.5v7L12 20l-8-4.5z"/><path d="M4 8.5 12 13l8-4.5M12 13v7"/></svg>',
+    truck: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7"/><circle cx="7" cy="17.5" r="1.6"/><circle cx="17.5" cy="17.5" r="1.6"/></svg>',
+    pin: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-6.5-6-6.5-11a6.5 6.5 0 0 1 13 0c0 5-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/></svg>'
+  };
+  function switchHtml(id, on, label) {
+    return '<label class="pm-switch"><input type="checkbox" id="' + id + '"' + (on ? ' checked' : '') + '><span class="pm-track" aria-hidden="true"></span><span class="sr">' + esc(label) + '</span></label>';
+  }
+  function rub(n) { return Number(n || 0).toLocaleString('ru-RU') + ' ₽'; }
+  function deliverySummary(d) {
+    var price = Number(d.price) || 0, free = Number(d.freeFrom) || 0;
+    if (!price) return 'Бесплатно';
+    return rub(price) + (free ? ', бесплатно от ' + rub(free) : '');
+  }
+  function deliveryCard(d) {
+    var id = esc(d.id || uid('d'));
+    return '<div class="dm" data-id="' + id + '">' +
+      '<div class="dm-ic">' + (d.needsAddress === false ? PAY_IC.pin : PAY_IC.truck) + '</div>' +
+      '<div class="dm-body">' +
+        '<div class="dm-row dm-row-main">' +
+          '<label class="dm-f dm-name"><span>Название</span><input class="input" data-d="name" value="' + esc(d.name || '') + '" placeholder="Например, Курьер по Москве"></label>' +
+          '<label class="dm-f dm-desc"><span>Срок или пояснение</span><input class="input" data-d="desc" value="' + esc(d.desc || '') + '" placeholder="Например, 1–2 дня, с примеркой"></label>' +
+        '</div>' +
+        '<div class="dm-row">' +
+          '<label class="dm-f dm-num"><span>Стоимость</span><span class="dm-money"><input class="input num" type="number" min="0" step="10" data-d="price" value="' + (Number(d.price) || 0) + '"><i>₽</i></span><small>0 — бесплатно всегда</small></label>' +
+          '<label class="dm-f dm-num"><span>Бесплатно от суммы заказа</span><span class="dm-money"><input class="input num" type="number" min="0" step="500" data-d="freeFrom" value="' + (Number(d.freeFrom) || 0) + '"><i>₽</i></span><small>0 — не делать бесплатной</small></label>' +
+          '<div class="dm-f dm-addr"><span>Адрес покупателя</span><label class="dm-toggle">' + '<input type="checkbox" data-d="needsAddress"' + (d.needsAddress !== false ? ' checked' : '') + '><span class="pm-track" aria-hidden="true"></span><b>' + (d.needsAddress !== false ? 'Спросить город и адрес' : 'Не нужен — самовывоз') + '</b></label></div>' +
+        '</div>' +
+        '<p class="dm-preview">Покупатель увидит: <b>' + esc(d.name || 'Без названия') + '</b>' + (d.desc ? ' · ' + esc(d.desc) : '') + ' — <span>' + esc(deliverySummary(d)) + '</span></p>' +
+      '</div>' +
+      '<div class="dm-tools"><button type="button" data-dm="up" aria-label="Поднять выше" title="Выше">↑</button><button type="button" data-dm="down" aria-label="Опустить ниже" title="Ниже">↓</button><button type="button" data-dm="rm" aria-label="Удалить способ доставки" title="Удалить">✕</button></div>' +
+    '</div>';
+  }
+  function readDelivery(box) {
+    return $$('.dm', box).map(function (el) {
+      var v = function (k) { return $('[data-d="' + k + '"]', el); };
+      return { id: el.getAttribute('data-id'), name: v('name').value.trim(), desc: v('desc').value.trim(), price: Math.max(0, Number(v('price').value) || 0), freeFrom: Math.max(0, Number(v('freeFrom').value) || 0), needsAddress: v('needsAddress').checked };
     });
-    // Секретный ключ хранится только на сервере
-    var card = document.createElement('div'); card.className = 'adm-card'; card.style.marginTop = '20px';
-    card.innerHTML = '<h4 class="adm-sub" style="margin-top:0;padding-top:0;border-top:0">Секретный ключ ЮKassa</h4>' +
-      '<p class="muted" style="font-size:14px;margin-bottom:12px" id="secState">Проверяем…</p><div class="promo-form"><input class="input" id="secKey" type="password" placeholder="live_… или test_…" autocomplete="off" aria-label="Секретный ключ"><button type="button" class="btn ghost" id="secSave">Сохранить ключ</button></div><p class="muted" style="font-size:13px;margin-top:10px">Адрес для уведомлений ЮKassa (HTTP-уведомления, событие payment.succeeded и payment.canceled): <span class="copyable">' + esc(location.origin + '/api/payments/yookassa') + '</span></p>';
-    m.insertBefore(card, $('.adm-bar', m));
-    var showState = function (r) { $('#secState').textContent = r.hasSecret ? 'Ключ сохранён на сервере (' + r.mask + ').' : 'Ключ ещё не задан — онлайн-оплата через ЮKassa не будет работать.'; };
+  }
+  function paymentSettings(m) {
+    var s = clone(DATA.settings), p = s.payment || {}, yk = p.yookassa || {}, ready = A().D.payReady;
+    var opt = function (list, cur) { return list.map(function (o) { return '<option value="' + o[0] + '"' + (String(cur) === String(o[0]) ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join(''); };
+    m.innerHTML = head('Оплата и доставка', '', 'Как покупатель платит и как получает заказ. Всё, что меняете здесь, сразу видно при оформлении заказа.') +
+      '<div class="pm">' +
+
+      // ---- Способы оплаты
+      '<section class="pm-sec"><div class="pm-sec-h"><h2>Способы оплаты</h2><p>Включите хотя бы один. Название — то, что покупатель увидит при оформлении.</p></div>' +
+      '<div class="pm-grid">' +
+        '<div class="pm-card' + (p.online ? ' on' : '') + '" id="pmOnline"><div class="pm-top"><span class="pm-ic">' + PAY_IC.card + '</span><div><b>Онлайн</b><span>Картой, СБП, SberPay, T-Pay через ЮKassa</span></div>' + switchHtml('f-online', p.online, 'Онлайн-оплата') + '</div>' +
+          '<label class="pm-f"><span>Название на сайте</span><input class="input" id="f-onlineLabel" value="' + esc(p.onlineLabel || '') + '" placeholder="Картой или СБП онлайн"></label>' +
+          '<div class="pm-state ' + (ready ? 'ok' : 'warn') + '"><i aria-hidden="true"></i>' + (ready ? 'ЮKassa подключена — оплата работает' : 'Не работает, пока не подключена ЮKassa (ниже)') + '</div></div>' +
+        '<div class="pm-card' + (p.cod ? ' on' : '') + '" id="pmCod"><div class="pm-top"><span class="pm-ic">' + PAY_IC.cash + '</span><div><b>При получении</b><span>Курьеру или в пункте выдачи</span></div>' + switchHtml('f-cod', p.cod, 'Оплата при получении') + '</div>' +
+          '<label class="pm-f"><span>Название на сайте</span><input class="input" id="f-codLabel" value="' + esc(p.codLabel || '') + '" placeholder="При получении"></label>' +
+          '<div class="pm-state"><i aria-hidden="true"></i>Заказ приходит неоплаченным, оплату отмечаете в заказе</div></div>' +
+      '</div></section>' +
+
+      // ---- ЮKassa
+      '<section class="pm-sec"><div class="pm-sec-h"><h2>ЮKassa</h2><p>Приём онлайн-платежей. Данные — в личном кабинете ЮKassa: «Интеграция» → «Ключи API».</p></div>' +
+      '<div class="pm-card pm-wide">' +
+        '<div class="pm-seg" role="radiogroup" aria-label="Режим оплаты">' +
+          '<label><input type="radio" name="f-provider" value="yookassa"' + (p.provider === 'yookassa' ? ' checked' : '') + '><span><b>ЮKassa</b><small>Настоящие платежи</small></span></label>' +
+          '<label><input type="radio" name="f-provider" value="demo"' + (p.provider !== 'yookassa' ? ' checked' : '') + '><span><b>Выключено</b><small>Онлайн-оплата скрыта</small></span></label>' +
+        '</div>' +
+        '<div class="pm-two">' +
+          '<label class="pm-f"><span>shopId магазина</span><input class="input num" id="f-shopId" value="' + esc(yk.shopId || '') + '" placeholder="Например, 1504706" inputmode="numeric"></label>' +
+          '<div class="pm-f"><span>Секретный ключ</span><div class="pm-key"><input class="input" id="secKey" type="password" placeholder="Вставьте live_… или test_…" autocomplete="off" aria-label="Секретный ключ"><button type="button" class="btn ghost" id="secSave">Сохранить ключ</button></div><small id="secState">Проверяем…</small></div>' +
+        '</div>' +
+      '</div></section>' +
+
+      // ---- Чеки
+      '<section class="pm-sec"><div class="pm-sec-h"><h2>Чеки по 54-ФЗ</h2><p>ЮKassa отправит чек в налоговую и покупателю на почту. Нужна «Чеки от ЮKassa» или своя онлайн-касса.</p></div>' +
+      '<div class="pm-card pm-wide">' +
+        '<div class="pm-top pm-top-flat"><div><b>Передавать данные для чека</b><span>Состав заказа и доставка уходят в чек отдельными строками</span></div>' + switchHtml('f-sendReceipt', yk.sendReceipt, 'Передавать данные для чека') + '</div>' +
+        '<div class="pm-two">' +
+          '<label class="pm-f"><span>Система налогообложения</span><select class="select" id="f-taxSystem">' + opt(TAX, yk.taxSystem) + '</select></label>' +
+          '<label class="pm-f"><span>Ставка НДС в чеке</span><select class="select" id="f-vatCode">' + opt(VAT, yk.vatCode) + '</select><small>На УСН и патенте обычно «Без НДС»</small></label>' +
+        '</div>' +
+      '</div></section>' +
+
+      // ---- Доставка
+      '<section class="pm-sec"><div class="pm-sec-h"><h2>Способы доставки</h2><p>Порядок здесь = порядок при оформлении. Первый способ выбран у покупателя по умолчанию.</p></div>' +
+      '<div class="dm-list" id="dmList">' + ((s.delivery && s.delivery.methods) || []).map(deliveryCard).join('') + '</div>' +
+      '<div class="dm-add"><button type="button" class="btn ghost" data-dm-add="courier">+ Доставка с адресом</button><button type="button" class="btn ghost" data-dm-add="pickup">+ Самовывоз</button></div>' +
+      '</section>' +
+
+      '</div><div class="adm-bar"><button class="btn" id="stSave">Сохранить</button><span class="form-error" id="stErr"></span></div>';
+
+    // переключатели способов оплаты подсвечивают карточку
+    [['f-online', 'pmOnline'], ['f-cod', 'pmCod']].forEach(function (x) { $('#' + x[0]).addEventListener('change', function () { $('#' + x[1]).classList.toggle('on', this.checked); }); });
+
+    // доставка: живое превью, порядок, удаление, добавление
+    var list = $('#dmList');
+    var refresh = function (el) {
+      var d = readDelivery(el.parentNode).find(function (x) { return x.id === el.getAttribute('data-id'); });
+      $('.dm-preview', el).innerHTML = 'Покупатель увидит: <b>' + esc(d.name || 'Без названия') + '</b>' + (d.desc ? ' · ' + esc(d.desc) : '') + ' — <span>' + esc(deliverySummary(d)) + '</span>';
+      $('.dm-addr b', el).textContent = d.needsAddress ? 'Спросить город и адрес' : 'Не нужен — самовывоз';
+      $('.dm-ic', el).innerHTML = d.needsAddress ? PAY_IC.truck : PAY_IC.pin;
+    };
+    list.addEventListener('input', function (e) { var el = e.target.closest('.dm'); if (el) refresh(el); });
+    list.addEventListener('change', function (e) { var el = e.target.closest('.dm'); if (el) refresh(el); });
+    list.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-dm]'); if (!b) return;
+      var el = b.closest('.dm'), act = b.getAttribute('data-dm');
+      if (act === 'up' && el.previousElementSibling) list.insertBefore(el, el.previousElementSibling);
+      if (act === 'down' && el.nextElementSibling) list.insertBefore(el.nextElementSibling, el);
+      if (act === 'rm') { if (b.classList.contains('armed')) el.remove(); else { b.classList.add('armed'); b.textContent = 'Удалить?'; setTimeout(function () { if (document.body.contains(b)) { b.classList.remove('armed'); b.textContent = '✕'; } }, 3000); } }
+    });
+    $$('[data-dm-add]', m).forEach(function (b) { b.addEventListener('click', function () {
+      var pick = b.getAttribute('data-dm-add') === 'pickup' ? { name: 'Самовывоз', desc: '', price: 0, freeFrom: 0, needsAddress: false } : { name: '', desc: '', price: 0, freeFrom: 0, needsAddress: true };
+      pick.id = uid('d'); list.insertAdjacentHTML('beforeend', deliveryCard(pick)); $('input', list.lastElementChild).focus();
+    }); });
+
+    // секретный ключ хранится только на сервере
+    var showState = function (r) {
+      var el = $('#secState'); if (!el) return;
+      el.textContent = !r.hasSecret ? 'Ключ не задан — онлайн-оплата не работает' : /^test_/.test(r.mask) ? 'Сохранён тестовый ключ (' + r.mask + ') — деньги не списываются' : 'Сохранён боевой ключ (' + r.mask + ')';
+      el.className = !r.hasSecret || /^test_/.test(r.mask) ? 'warn' : 'ok';
+    };
     A().API.adminSecret().then(showState).catch(function () {});
     $('#secSave').addEventListener('click', async function () { try { showState(await A().API.adminSecret($('#secKey').value.trim())); $('#secKey').value = ''; toast('Ключ сохранён'); } catch (e) { toast(A().errMsg(e), true); } });
+
+    $('#stSave').addEventListener('click', async function () {
+      var err = $('#stErr'); err.textContent = '';
+      var online = $('#f-online').checked, cod = $('#f-cod').checked;
+      if (!online && !cod) { err.textContent = 'Включите хотя бы один способ оплаты'; return; }
+      var methods = readDelivery(list);
+      if (!methods.length) { err.textContent = 'Добавьте хотя бы один способ доставки'; return; }
+      if (methods.some(function (x) { return !x.name; })) { err.textContent = 'У каждого способа доставки должно быть название'; return; }
+      var prov = ($('input[name="f-provider"]:checked', m) || {}).value || 'demo';
+      s.payment = { provider: prov, online: online, cod: cod, onlineLabel: $('#f-onlineLabel').value.trim() || 'Картой или СБП онлайн', codLabel: $('#f-codLabel').value.trim() || 'При получении',
+        yookassa: { shopId: $('#f-shopId').value.trim(), sendReceipt: $('#f-sendReceipt').checked, taxSystem: Number($('#f-taxSystem').value), vatCode: Number($('#f-vatCode').value) } };
+      s.delivery = Object.assign({}, s.delivery, { methods: methods });
+      try { await A().API.adminSave('settings', s); await afterSave('Сохранено', '#/admin?s=payment'); } catch (ex) { err.textContent = A().errMsg(ex); }
+    });
   }
 
   function pages(m, q) {

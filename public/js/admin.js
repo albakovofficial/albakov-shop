@@ -363,14 +363,16 @@
       var pk = Object.assign({ weight: 1000, length: 30, width: 25, height: 10 }, (DATA.settings.cdek || {}).pkg);
       var unpaid = o.payment.method === 'online' && o.payment.status !== 'paid';
       return '<div class="adm-card cs-order"><h3 class="adm-h3">Отправка СДЭК</h3>' + to +
+        (o.payment.method === 'cod' ? '<p class="cs-cod">Оплата при получении: СДЭК возьмёт с покупателя <b>' + fmt(o.total - (o.refunded || 0)) + '</b></p>' : '') +
         (!sp ? '<p class="rf-note">Сначала укажите пункт отгрузки: «Оплата и доставка» → «Отправка заказов в СДЭК».</p>' : '') +
         '<div class="pm-f"><span>Посылка</span><div class="cs-pkg"><label><input class="input num" id="coW" type="number" min="50" step="50" value="' + pk.weight + '"><i>г</i></label><label><input class="input num" id="coL" type="number" min="1" value="' + pk.length + '"><i>см</i></label><span>×</span><label><input class="input num" id="coWd" type="number" min="1" value="' + pk.width + '"><i>см</i></label><span>×</span><label><input class="input num" id="coH" type="number" min="1" value="' + pk.height + '"><i>см</i></label></div></div>' +
         '<p class="form-error" id="csErr"></p><button class="btn" type="button" id="csCreate"' + (unpaid || !sp || ['canceled', 'returned'].includes(o.status) ? ' disabled' : '') + '>' + (unpaid ? 'Заказ ещё не оплачен' : 'Создать отправление в СДЭК') + '</button>' +
         '<p class="muted" style="font-size:13px;margin:0">СДЭК присвоит номер. Когда сдадите посылку в пункт, покупатель автоматически получит письмо с трек-номером, а заказ станет «Передан в доставку».</p></div>';
     }
     var waiting = !c.status || c.status === 'ACCEPTED' || c.status === 'CREATED';
+    var codSum = o.payment.method === 'cod' && o.payment.status === 'pending' ? '<p class="cs-cod">Покупатель платит при получении: <b>' + fmt(o.total - (o.refunded || 0)) + '</b> — СДЭК переведёт деньги вам по договору</p>' : o.payment.collectedBy === 'cdek' ? '<p class="cs-cod ok">Покупатель оплатил при получении — деньги переведёт СДЭК</p>' : '';
     return '<div class="adm-card cs-order"><h3 class="adm-h3">Отправка СДЭК</h3>' +
-      '<div class="cs-num"><div><small>Номер СДЭК</small><b class="num copyable">' + esc(c.number || 'присваивается…') + '</b></div><span class="cs-st' + (c.status === 'DELIVERED' ? ' ok' : c.status === 'NOT_DELIVERED' ? ' bad' : '') + '">' + esc(CDEK_STEP[c.status] || c.statusName || 'Обновляется') + '</span></div>' + to +
+      '<div class="cs-num"><div><small>Номер СДЭК</small><b class="num copyable">' + esc(c.number || 'присваивается…') + '</b></div><span class="cs-st' + (c.status === 'DELIVERED' ? ' ok' : c.status === 'NOT_DELIVERED' ? ' bad' : '') + '">' + esc(CDEK_STEP[c.status] || c.statusName || 'Обновляется') + '</span></div>' + to + codSum +
       (c.statusAt ? '<small class="muted" style="font-size:12px">Обновлено ' + esc(dt(c.statusAt)) + '</small>' : '') +
       '<div class="cs-acts"><button class="btn" type="button" data-cs-print="barcode"' + (c.number ? '' : ' disabled') + '>Наклейка на посылку</button><button class="btn ghost" type="button" data-cs-print="waybill"' + (c.number ? '' : ' disabled') + '>Накладная</button></div>' +
       '<div class="cs-acts small"><button class="link" type="button" id="csSync">Обновить статус</button>' + (waiting ? '<button class="link" type="button" id="csCancel">Отменить отправление</button>' : '') + (c.number ? '<a class="link" href="' + esc((o.tracking && o.tracking.url) || ('https://www.cdek.ru/ru/tracking/?order_id=' + encodeURIComponent(c.number))) + '" target="_blank" rel="noopener">Открыть на сайте СДЭК</a>' : '') + '</div>' +
@@ -992,7 +994,7 @@
   /* ================= Оплата, касса, доставка =================
      Карточки вместо голой формы: у способа оплаты — переключатель и превью «как увидит покупатель»,
      у ЮKassa — статус подключения, у доставки — карточка на каждый способ с понятными полями. */
-  function payIc(n) { return '<img src="img/benefits/' + n + '.webp?v=13.19.0" alt="" width="52" height="52" decoding="async">'; }
+  function payIc(n) { return '<img src="img/benefits/' + n + '.webp?v=13.20.0" alt="" width="52" height="52" decoding="async">'; }
   var PAY_IC = { card: payIc('payment'), cash: payIc('cash'), truck: payIc('delivery'), pin: payIc('pin') };
   function switchHtml(id, on, label) {
     return '<label class="pm-switch"><input type="checkbox" id="' + id + '"' + (on ? ' checked' : '') + '><span class="pm-track" aria-hidden="true"></span><span class="sr">' + esc(label) + '</span></label>';
@@ -1090,9 +1092,9 @@
         '<div class="pm-card' + (p.online ? ' on' : '') + '" id="pmOnline"><div class="pm-top"><span class="pm-ic">' + PAY_IC.card + '</span><div><b>Онлайн</b><span>Картой, СБП, SberPay, T-Pay через ЮKassa</span></div>' + switchHtml('f-online', p.online, 'Онлайн-оплата') + '</div>' +
           '<label class="pm-f"><span>Название на сайте</span><input class="input" id="f-onlineLabel" value="' + esc(p.onlineLabel || '') + '" placeholder="Картой или СБП онлайн"></label>' +
           '<div class="pm-state ' + (ready ? 'ok' : 'warn') + '"><i aria-hidden="true"></i>' + (ready ? 'ЮKassa подключена — оплата работает' : 'Не работает, пока не подключена ЮKassa (ниже)') + '</div></div>' +
-        '<div class="pm-card' + (p.cod ? ' on' : '') + '" id="pmCod"><div class="pm-top"><span class="pm-ic">' + PAY_IC.cash + '</span><div><b>При получении</b><span>Курьеру или в пункте выдачи</span></div>' + switchHtml('f-cod', p.cod, 'Оплата при получении') + '</div>' +
+        '<div class="pm-card' + (p.cod ? ' on' : '') + '" id="pmCod"><div class="pm-top"><span class="pm-ic">' + PAY_IC.cash + '</span><div><b>При получении</b><span>Наличными или картой в пункте выдачи СДЭК</span></div>' + switchHtml('f-cod', p.cod, 'Оплата при получении') + '</div>' +
           '<label class="pm-f"><span>Название на сайте</span><input class="input" id="f-codLabel" value="' + esc(p.codLabel || '') + '" placeholder="При получении"></label>' +
-          '<div class="pm-state"><i aria-hidden="true"></i>Заказ приходит неоплаченным, оплату отмечаете в заказе</div></div>' +
+          '<div class="pm-state"><i aria-hidden="true"></i>' + (A().D.cdekReady ? 'Покупатель видит только пункты СДЭК, где принимают оплату. СДЭК возьмёт сумму заказа и доставки и переведёт вам за вычетом комиссии; после вручения заказ отметится оплаченным' : 'Заказ приходит неоплаченным, оплату отмечаете в заказе') + '</div></div>' +
       '</div></section>' +
 
       // ---- ЮKassa

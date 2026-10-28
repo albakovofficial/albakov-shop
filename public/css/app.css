@@ -1877,3 +1877,7 @@ input:focus-visible + .pm-track { outline: 2px solid var(--accent); outline-offs
 .cs-acts { display: flex; gap: 8px; flex-wrap: wrap; }
 .cs-acts .btn { flex: 1 1 auto; }
 .cs-acts.small { gap: 18px; font-size: 13px; }
+.pvz-warn { margin: 0; padding: 10px 14px; font-size: 13px; color: var(--refund); background: var(--refund-bg); }
+.cs-cod { margin: 0; padding: 10px 14px; font-size: 13.5px; background: #fdf6e3; }
+.cs-cod.ok { background: #e8f1ea; color: var(--ok); }
+.cs-cod b { font-weight: 600; }

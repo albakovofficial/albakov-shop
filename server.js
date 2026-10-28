@@ -116,10 +116,20 @@ function cdekOrderBody(o, pkg) {
   const c = cdekCfg(), pv = o.delivery && o.delivery.pvz;
   if (!pv || !pv.code) fail(400, 'Покупатель не выбрал пункт выдачи СДЭК из списка — создайте отправление в личном кабинете СДЭК вручную');
   if (!c.shipmentPoint || !c.shipmentPoint.code) fail(400, 'Укажите в «Оплата и доставка» пункт СДЭК, куда вы сдаёте посылки');
-  const items = o.items.map((i) => ({ i, qty: i.qty - (i.refundedQty || 0) })).filter((x) => x.qty > 0);
+  const paid = o.payment.status === 'paid' || o.payment.method === 'bonus';
+  if (!paid && o.payment.method === 'cod' && pv.cod === false) fail(400, 'Покупатель выбрал пункт без оплаты при получении — свяжитесь с ним или примите оплату онлайн');
+  // Оплата при получении: СДЭК возьмёт с покупателя ровно сумму заказа — цену каждой вещи со скидками и бонусами плюс доставку
+  const net = netLines(o);
+  const items = [];
+  o.items.forEach((it, idx) => {
+    const qty = it.qty - (it.refundedQty || 0); if (qty <= 0) return;
+    const lineK = Math.round(net.lines[idx].totalK * qty / it.qty), unit = Math.floor(lineK / qty), rest = lineK - unit * qty;
+    const add = (q, payK, suffix) => items.push({ i: it, qty: q, payK, suffix });
+    if (paid || rest === 0) add(qty, paid ? 0 : unit, '');
+    else { if (qty > 1) add(qty - 1, unit, '-a'); add(1, unit + rest, '-b'); }
+  });
   if (!items.length) fail(400, 'В заказе не осталось товаров для отправки');
   const count = items.reduce((s, x) => s + x.qty, 0), unitW = Math.max(1, Math.floor(pkg.weight / count));
-  const paid = o.payment.status === 'paid' || o.payment.method === 'bonus';
   const services = [];
   if (c.services && c.services.partDeliv) services.push({ code: 'PART_DELIV' });
   if (c.services && c.services.tryOn) services.push({ code: 'TRYING_ON' });
@@ -129,7 +139,8 @@ function cdekOrderBody(o, pkg) {
     shipment_point: c.shipmentPoint.code, delivery_point: pv.code,
     recipient: { name: `${o.customer.lastName} ${o.customer.firstName}`.trim(), email: o.customer.email, phones: [{ number: '+' + o.customer.phone }] },
     packages: [{ number: '1', weight: pkg.weight, length: pkg.length, width: pkg.width, height: pkg.height, comment: 'Одежда',
-      items: items.map((x) => ({ name: `${x.i.name}${x.i.color ? ', ' + x.i.color : ''}, ${x.i.size}`.slice(0, 255), ware_key: `${x.i.productId}-${x.i.size}`.slice(0, 50), payment: { value: paid ? 0 : x.i.price }, cost: x.i.price, weight: unitW, amount: x.qty })) }],
+      items: items.map((x) => ({ name: `${x.i.name}${x.i.color ? ', ' + x.i.color : ''}, ${x.i.size}`.slice(0, 255), ware_key: `${x.i.productId}-${x.i.size}${x.suffix}`.slice(0, 50), payment: { value: x.payK / 100 }, cost: x.i.price, weight: unitW, amount: x.qty })) }],
+    delivery_recipient_cost: !paid && net.delivK > 0 && !o.deliveryRefunded ? { value: net.delivK / 100 } : undefined,
     services: services.length ? services : undefined,
     comment: o.comment ? o.comment.slice(0, 255) : undefined
   };
@@ -146,6 +157,8 @@ async function applyCdek(o, info) {
     mail = true;
   }
   if (o.cdek.status === 'DELIVERED' && o.status !== 'done' && o.status !== 'returned') o.status = 'done';
+  // при получении покупатель заплатил СДЭК — отмечаем оплату (деньги придут от СДЭК по договору)
+  if (o.cdek.status === 'DELIVERED' && o.payment.method === 'cod' && o.payment.status === 'pending') { o.payment.status = 'paid'; o.payment.collectedBy = 'cdek'; }
   syncBonus(o); save();
   if (mail && mailReady()) { try { await sendTrackingMail(o); o.tracking.mailedAt = new Date().toISOString(); save(); } catch (e) { console.error('Письмо с трек-номером не отправлено:', e.message); } }
 }
@@ -462,6 +475,7 @@ async function placeOrder(req, b) {
     try { list = await cdek.points(b.cityCode); } catch (e) { fail(502, 'СДЭК сейчас не отвечает. Попробуйте оформить заказ через минуту.'); }
     pvz = list.find((x) => x.code === String(b.pvz));
     if (!pvz) fail(400, 'Этот пункт выдачи больше не работает — выберите другой');
+    if (method === 'cod' && !pvz.cod) fail(400, 'В этом пункте нельзя оплатить при получении — выберите другой пункт или оплату онлайн');
   } else if (m && m.needsAddress !== false && (!String(b.city || '').trim() || !String(b.address || '').trim())) fail(400, 'Укажите город и адрес доставки');
 
   q.lines.forEach((l) => { sizeEntry(l.productId, l.colorId, l.size).stock -= l.qty; });
@@ -473,7 +487,7 @@ async function placeOrder(req, b) {
     items: q.lines.map((l) => ({ productId: l.productId, slug: l.slug, name: l.name, colorId: l.colorId, color: l.color, size: l.size, qty: l.qty, price: l.price, oldPrice: l.oldPrice, image: l.image, art: l.art })),
     subtotal: q.subtotal, saleDiscount: q.saleDiscount, promoCode: q.promo && q.promo.ok ? q.promo.code : '', promoDiscount: q.promoDiscount,
     delivery: Object.assign({}, q.delivery, pvz
-      ? { city: pvz.city + (pvz.region ? ' (' + pvz.region + ')' : ''), address: (pvz.type === 'postamat' ? 'Постамат СДЭК ' : 'ПВЗ СДЭК ') + pvz.code + ': ' + pvz.address, pvz: { code: pvz.code, type: pvz.type, cityCode: pvz.cityCode, city: pvz.city, region: pvz.region, address: pvz.address, full: pvz.full, hours: pvz.hours } }
+      ? { city: pvz.city + (pvz.region ? ' (' + pvz.region + ')' : ''), address: (pvz.type === 'postamat' ? 'Постамат СДЭК ' : 'ПВЗ СДЭК ') + pvz.code + ': ' + pvz.address, pvz: { code: pvz.code, type: pvz.type, cityCode: pvz.cityCode, city: pvz.city, region: pvz.region, address: pvz.address, full: pvz.full, hours: pvz.hours, cod: !!pvz.cod } }
       : { city: String(b.city || '').slice(0, 100), address: String(b.address || '').slice(0, 300) }), comment: String(b.comment || '').slice(0, 1000),
     total: q.total, payment: { method, status: 'pending', provider: method === 'online' ? pay.provider : null }, status: 'new',
     test: method === 'online' && pay.provider !== 'yookassa' ? true : undefined,

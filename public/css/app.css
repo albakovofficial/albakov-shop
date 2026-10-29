@@ -2163,3 +2163,33 @@ input:focus-visible + .pm-track { outline: 2px solid var(--accent); outline-offs
   .ip-step-n { width: 44px; height: 44px; font-size: 17px; }
   .ip-step:not(:last-child)::after { display: none; }
 }
+
+/* Слово основателя с фотографией: фото слева, слова справа на графитовом фоне */
+.ab-founder.has-photo { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); padding: 0; text-align: left; justify-items: stretch; align-items: stretch; gap: 0; }
+.ab-founder-ph { margin: 0; position: relative; min-height: 100%; overflow: hidden; }
+.ab-founder-ph img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 18%; transition: transform 1.6s var(--ease); }
+.ab-founder.has-photo:hover .ab-founder-ph img { transform: scale(1.03); }
+.ab-founder-ph::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent 60%, rgba(18, 20, 23, .55)); pointer-events: none; }
+.ab-founder-copy { display: grid; gap: 22px; align-content: center; justify-items: start; padding: clamp(40px, 6vw, 96px) clamp(28px, 5vw, 80px); }
+.ab-founder.has-photo .ab-founder-q { max-width: 14ch; }
+@media (max-width: 760px) {
+  .ab-founder.has-photo { grid-template-columns: minmax(0, 1fr); }
+  .ab-founder-ph { aspect-ratio: 4 / 5; min-height: 0; }
+  .ab-founder-ph::after { background: linear-gradient(180deg, transparent 65%, #121417); }
+  .ab-founder-copy { padding: 8px 24px 36px; }
+}
+
+/* Портрет основателя в шапке «О бренде» */
+.ab-portrait { position: relative; margin: 0; width: min(100%, 480px); aspect-ratio: 4 / 5; overflow: hidden; isolation: isolate; background: var(--surface);
+  box-shadow: 0 60px 100px -60px rgba(18, 20, 23, .45); animation: abRise 1.2s var(--ease) both .15s; }
+.ab-portrait > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 12%; transition: transform 1.6s var(--ease); }
+.ab-portrait:hover > img { transform: scale(1.03); }
+.ab-portrait::before { content: ""; position: absolute; inset: 14px; z-index: 1; border: 1px solid rgba(255, 255, 255, .55); pointer-events: none; }
+.ab-portrait figcaption { position: absolute; z-index: 2; left: 14px; right: 14px; bottom: 14px; display: flex; align-items: center; gap: 14px; padding: 14px 18px;
+  background: rgba(255, 255, 255, .78); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+.ab-portrait-mark { width: 34px; height: auto; flex: none; }
+.ab-portrait figcaption span { display: grid; gap: 2px; }
+.ab-portrait figcaption b { font-weight: 500; font-size: 15px; color: var(--text); }
+.ab-portrait figcaption small { font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--dim); }
+@media (max-width: 900px) { .ab-portrait { width: min(100%, 420px); } }
+@media (max-width: 600px) { .ab-portrait { width: 100%; aspect-ratio: 4 / 4.6; } }

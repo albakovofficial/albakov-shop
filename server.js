@@ -1422,7 +1422,6 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=86400' });
     return res.end('User-agent: *\nAllow: /\nDisallow: /api/\n');
   }
-  if (url.pathname === '/favicon.ico') { res.writeHead(301, { Location: '/img/favicon.png', 'Cache-Control': 'public, max-age=86400' }); return res.end(); }
   try { serveStatic(req, res, url.pathname); } catch (e) { console.error(e); if (!res.headersSent) res.writeHead(500); res.end(); }
 });
 // Ни одна ошибка в обработке запроса не должна останавливать магазин

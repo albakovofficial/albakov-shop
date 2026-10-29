@@ -1005,7 +1005,7 @@
       { k: 'editorialText', label: 'Текст', type: 'textarea' },
       { k: 'editorialImage', label: 'Фото', type: 'image' }
     ], {
-      benefits: { title: 'Преимущества', cols: [{ k: 'title', label: 'Заголовок' }, { k: 'text', label: 'Описание', flex: 2 }, { k: 'icon', label: 'Иконка', type: 'select', options: [['auto', 'Иконка: по тексту'], ['delivery', 'Доставка — грузовик'], ['quality', 'Качество — медаль'], ['fabric', 'Ткани — стопка тканей'], ['fitting', 'Примерка — футболка'], ['return', 'Возврат — коробка'], ['payment', 'Оплата — карты'], ['gift', 'Подарок / бонусы'], ['cash', 'Наличные'], ['pin', 'Метка на карте'], ['none', 'Без иконки']] }, { k: 'link', label: 'Ссылка (необязательно)', placeholder: '#/page/delivery' }, { k: 'linkText', label: 'Текст ссылки', placeholder: 'Подробнее' }], get: function (s) { return s.home.benefits; }, set: function (s, v) { s.home.benefits = v; } }
+      benefits: { title: 'Преимущества', cols: [{ k: 'title', label: 'Заголовок' }, { k: 'text', label: 'Описание', flex: 2 }, { k: 'icon', label: 'Иконка', type: 'select', options: [['auto', 'Иконка: по тексту'], ['delivery', 'Доставка — грузовик'], ['quality', 'Качество — медаль'], ['fabric', 'Ткани — стопка тканей'], ['fitting', 'Примерка — футболка'], ['return', 'Возврат — коробка'], ['payment', 'Оплата — карты'], ['gift', 'Подарок / бонусы'], ['cash', 'Наличные'], ['pin', 'Метка на карте'], ['style', 'Стиль — вешалка'], ['gem', 'Индивидуальность — камень'], ['spool', 'Производство — катушка'], ['none', 'Без иконки']] }, { k: 'link', label: 'Ссылка (необязательно)', placeholder: '#/page/delivery' }, { k: 'linkText', label: 'Текст ссылки', placeholder: 'Подробнее' }], get: function (s) { return s.home.benefits; }, set: function (s, v) { s.home.benefits = v; } }
     }, function (s) { var o = s.home; o.announcement = s.announcement; return o; }, function (s, o) { s.announcement = o.announcement; delete o.announcement; s.home = Object.assign(s.home, o); });
   }
 
@@ -1066,7 +1066,7 @@
   /* ================= Оплата, касса, доставка =================
      Карточки вместо голой формы: у способа оплаты — переключатель и превью «как увидит покупатель»,
      у ЮKassa — статус подключения, у доставки — карточка на каждый способ с понятными полями. */
-  function payIc(n) { return '<img src="img/benefits/' + n + '.webp?v=13.25.0" alt="" width="52" height="52" decoding="async">'; }
+  function payIc(n) { return '<img src="img/benefits/' + n + '.webp?v=13.26.0" alt="" width="52" height="52" decoding="async">'; }
   var PAY_IC = { card: payIc('payment'), cash: payIc('cash'), truck: payIc('delivery'), pin: payIc('pin') };
   function switchHtml(id, on, label) {
     return '<label class="pm-switch"><input type="checkbox" id="' + id + '"' + (on ? ' checked' : '') + '><span class="pm-track" aria-hidden="true"></span><span class="sr">' + esc(label) + '</span></label>';

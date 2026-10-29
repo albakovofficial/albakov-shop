@@ -442,8 +442,21 @@
       '</div><div class="hero-media"><img src="' + esc(heroImg) + '" alt=""></div></section>';
     html += installBannerHtml();
     if (h.showCategories !== false && D.categories.length) {
-      html += '<section class="section"><div class="wrap"><div class="section-head"><h2>Категории</h2><a class="link" href="#/catalog">Весь каталог</a></div><div class="cats">' +
-        sortedCats().filter(function (c) { return gProducts().some(function (p) { return p.categoryId === c.id; }); }).map(function (c) { return '<a class="cat" href="#/catalog?cat=' + esc(c.slug) + '"><span class="cat-ph"><img src="' + esc(c.image || Art.make(c.art)) + '" alt="" loading="lazy"></span><span class="cat-cap"><span class="cat-name">' + esc(c.name) + '</span><svg class="cat-go" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15M14 7l5 5-5 5"/></svg></span></a>'; }).join('') + '</div></div></section>';
+      // Категории в стиле «О бренде»: вступление слева, карточки со свечением, номером и числом моделей
+      var GLOWS = ['#e8b84a', '#7b61ff', '#16b5a5', '#ff8b74', '#3e6bf0', '#1ab248'];
+      var cl = sortedCats().map(function (c) { return { c: c, n: gProducts().filter(function (p) { return p.categoryId === c.id; }).length }; }).filter(function (x) { return x.n; });
+      var cols = cl.length <= 5 ? cl.length : cl.length % 3 === 0 ? 3 : 4;
+      html += '<section class="section cx-sec"><div class="wrap"><div class="cx' + (cl.length > 3 ? ' many' : '') + (cl.length === 1 ? ' one' : '') + '" style="--cols:' + cols + '">' +
+        '<div class="cx-intro ab-rv"><span class="ab-num">Коллекция</span><h2>Категории</h2><p>Сдержанные вещи из натуральных тканей. Выберите раздел — всё сочетается между собой.</p>' +
+        '<a class="cx-all" href="#/catalog"><span>Весь каталог</span><span class="ac-go" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></a></div>' +
+        '<div class="cx-cards">' + cl.map(function (x, i) {
+          var c = x.c;
+          return '<a class="cx-card ab-rv" style="--i:' + i + ';--glow:' + GLOWS[i % GLOWS.length] + '" href="#/catalog?cat=' + esc(c.slug) + '">' +
+            '<span class="cx-ph"><img src="' + esc(c.image || Art.make(c.art)) + '" alt="" loading="lazy"></span>' +
+            '<span class="cx-n">' + (i + 1) + '</span>' +
+            '<span class="cx-cap"><span><b>' + esc(c.name) + '</b><small>' + x.n + ' ' + plural(x.n, 'модель', 'модели', 'моделей') + '</small></span>' +
+            '<span class="ac-go" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></span></a>';
+        }).join('') + '</div></div></div></section>';
     }
     if (h.showNew !== false) {
       var news = gProducts().filter(function (p) { return (p.tags || []).indexOf('new') !== -1; });
@@ -600,6 +613,7 @@
   /* Оживление блоков главной: появление фото и шва при прокрутке, отсчёт акции, блик на бонусной карте */
   var dealTick = null;
   function initHomeBlocks(v) {
+    pageBind(v);
     // следим за секцией целиком: обрезанный (ещё невидимый) элемент наблюдатель не замечает
     var secs = $$('[data-reveal]', v).map(function (el) { return el.closest('section'); }).filter(function (s, i, a) { return s && a.indexOf(s) === i; });
     if ('IntersectionObserver' in window && secs.length) {

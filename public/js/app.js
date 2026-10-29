@@ -532,7 +532,7 @@
     var cards = h.benefits.map(function (b, i) {
       var ic = benefitIcon(b);
       return '<div class="benefit' + (ic ? '' : ' no-ico') + (b.link ? ' has-link' : '') + '" style="--i:' + i + (i === nb - 1 && nb >= 5 ? lastSpan : '') + (ic ? ';--glow:' + BENEFIT_ICONS[ic] : '') + '">' +
-        (ic ? '<div class="benefit-ico"><img src="img/benefits/' + ic + '.webp?v=13.32.0" alt="" width="160" height="160" loading="lazy" decoding="async"></div>' : '') +
+        (ic ? '<div class="benefit-ico"><img src="img/benefits/' + ic + '.webp?v=13.32.1" alt="" width="160" height="160" loading="lazy" decoding="async"></div>' : '') +
         '<div class="benefit-body"><h3>' + glue(b.title) + '</h3>' + (b.text ? '<p>' + glue(b.text) + '</p>' : '') +
         (b.link ? '<a class="benefit-more" href="' + esc(b.link) + '">' + esc(b.linkText || 'Подробнее') + '<span aria-hidden="true">→</span></a>' : '') + '</div></div>';
     }).join('');
@@ -1037,7 +1037,7 @@
       '<p class="pvz-hint">Выберите свой населённый пункт из списка — область подставится сама. Например, Мурино и Кудрово — это Ленинградская область, а не Санкт-Петербург.</p></div>' +
       '<div class="pvz-pick" id="pvzPick" hidden></div></div>';
   }
-  function optIc(n) { return '<span class="opt-ic"><img src="img/benefits/' + n + '.webp?v=13.32.0" alt="" width="48" height="48" decoding="async"></span>'; }
+  function optIc(n) { return '<span class="opt-ic"><img src="img/benefits/' + n + '.webp?v=13.32.1" alt="" width="48" height="48" decoding="async"></span>'; }
   function coStep(n, id, title, hint, body) {
     return '<section class="cstep" id="cs-' + id + '"><header class="cstep-head"><span class="cstep-n" aria-hidden="true"><i>' + n + '</i><svg viewBox="0 0 24 24"><path d="m6 12.5 4 4 8-9"/></svg></span>' +
       '<div><h3>' + title + '</h3><p>' + hint + '</p></div></header><div class="cstep-body">' + body + '</div></section>';
@@ -1860,7 +1860,7 @@
   function aboutPage(v, p) {
     var d = aboutParse(fillDoc(p.body)), s = D.settings || {}, b = s.brand || {};
     var mark = b.mark && b.mark.src ? b.mark.src : 'img/logo-mark.png';
-    var ic = function (n, size) { return '<img src="img/benefits/' + n + '.webp?v=13.32.0" alt="" width="' + size + '" height="' + size + '" loading="lazy" decoding="async">'; };
+    var ic = function (n, size) { return '<img src="img/benefits/' + n + '.webp?v=13.32.1" alt="" width="' + size + '" height="' + size + '" loading="lazy" decoding="async">'; };
     var title = d.title || s.storeName || p.title;
     var motto = d.motto.length ? d.motto : String(s.tagline || '').split(/\.\s*/).filter(Boolean);
     // главы истории и опоры: подряд идущие разделы с «своей» иконкой собираются в одну сетку карточек
@@ -1993,7 +1993,7 @@
     // нет вступления — первый абзац первого раздела поднимаем в шапку страницы
     var f = d.sections[0];
     if (!d.lead.length && f && f.blocks[0] && f.blocks[0].kind === 'p') d.lead.push(f.blocks.shift().items[0]);
-    var ic = function (n, size) { return n ? '<img src="img/benefits/' + n + '.webp?v=13.32.0" alt="" width="' + size + '" height="' + size + '" loading="lazy" decoding="async">' : ''; };
+    var ic = function (n, size) { return n ? '<img src="img/benefits/' + n + '.webp?v=13.32.1" alt="" width="' + size + '" height="' + size + '" loading="lazy" decoding="async">' : ''; };
     var heroIc = infoIcon(p.title) || infoIcon(p.slug === 'returns' ? 'возврат' : p.slug === 'delivery' ? 'доставка' : '') || 'quality';
     var secs = d.sections.map(function (sec, si) {
       var sIc = infoIcon(sec.title);
@@ -2032,7 +2032,7 @@
   function aboutContacts() {
     var c = (D.settings && D.settings.contacts) || {};
     var tel = String(c.phone || '').replace(/[^\d+]/g, '');
-    var ic = function (n) { return '<span class="ac-ico"><img src="img/benefits/' + n + '.webp?v=13.32.0" alt="" width="120" height="120" loading="lazy" decoding="async"></span>'; };
+    var ic = function (n) { return '<span class="ac-ico"><img src="img/benefits/' + n + '.webp?v=13.32.1" alt="" width="120" height="120" loading="lazy" decoding="async"></span>'; };
     var arrow = '<span class="ac-go" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>';
     var copy = function (v, what) { return '<button class="ac-copy" type="button" data-copy="' + esc(v) + '" data-what="' + esc(what) + '" aria-label="Скопировать"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg><i>Скопировать</i></button>'; };
     var card = function (cls, glow, href, icon, label, value, extra, i) {

@@ -471,7 +471,7 @@
 
   /* Блок «Преимущества» на главной: карточки с объёмными иконками.
      Иконку можно выбрать в панели; если не выбрана — подбирается по заголовку, затем по описанию */
-  var BENEFIT_ICONS = { delivery: '#1ab248', quality: '#e8b84a', fabric: '#c9925e', fitting: '#ff8b74', 'return': '#7b61ff', payment: '#16b5a5', gift: '#f0587c', cash: '#22b45a', pin: '#ff8b74' };
+  var BENEFIT_ICONS = { delivery: '#1ab248', quality: '#e8b84a', fabric: '#c9925e', fitting: '#ff8b74', 'return': '#7b61ff', payment: '#16b5a5', gift: '#f0587c', cash: '#22b45a', pin: '#ff8b74', style: '#c9925e', gem: '#7b61ff', spool: '#ff8b74' };
   var BENEFIT_WORDS = [[/доставк|курьер|сдэк|отправ/, 'delivery'], [/качеств|гаранти|провер/, 'quality'], [/ткан|шерст|кашемир|хлоп|шёлк|шелк|лён|лен\b/, 'fabric'], [/примерк|подош|примерить/, 'fitting'], [/возврат|обмен|вернуть/, 'return'], [/оплат|карт|рассроч|сплит|долям/, 'payment'], [/подар|упаков/, 'gift']];
   function benefitIcon(b) {
     if (b.icon === 'none') return '';
@@ -494,7 +494,7 @@
     var cards = h.benefits.map(function (b, i) {
       var ic = benefitIcon(b);
       return '<div class="benefit' + (ic ? '' : ' no-ico') + (b.link ? ' has-link' : '') + '" style="--i:' + i + (i === nb - 1 && nb >= 5 ? lastSpan : '') + (ic ? ';--glow:' + BENEFIT_ICONS[ic] : '') + '">' +
-        (ic ? '<div class="benefit-ico"><img src="img/benefits/' + ic + '.webp?v=13.25.0" alt="" width="160" height="160" loading="lazy" decoding="async"></div>' : '') +
+        (ic ? '<div class="benefit-ico"><img src="img/benefits/' + ic + '.webp?v=13.26.1" alt="" width="160" height="160" loading="lazy" decoding="async"></div>' : '') +
         '<div class="benefit-body"><h3>' + glue(b.title) + '</h3>' + (b.text ? '<p>' + glue(b.text) + '</p>' : '') +
         (b.link ? '<a class="benefit-more" href="' + esc(b.link) + '">' + esc(b.linkText || 'Подробнее') + '<span aria-hidden="true">→</span></a>' : '') + '</div></div>';
     }).join('');
@@ -999,7 +999,7 @@
       '<p class="pvz-hint">Выберите свой населённый пункт из списка — область подставится сама. Например, Мурино и Кудрово — это Ленинградская область, а не Санкт-Петербург.</p></div>' +
       '<div class="pvz-pick" id="pvzPick" hidden></div></div>';
   }
-  function optIc(n) { return '<span class="opt-ic"><img src="img/benefits/' + n + '.webp?v=13.25.0" alt="" width="48" height="48" decoding="async"></span>'; }
+  function optIc(n) { return '<span class="opt-ic"><img src="img/benefits/' + n + '.webp?v=13.26.1" alt="" width="48" height="48" decoding="async"></span>'; }
   function coStep(n, id, title, hint, body) {
     return '<section class="cstep" id="cs-' + id + '"><header class="cstep-head"><span class="cstep-n" aria-hidden="true"><i>' + n + '</i><svg viewBox="0 0 24 24"><path d="m6 12.5 4 4 8-9"/></svg></span>' +
       '<div><h3>' + title + '</h3><p>' + hint + '</p></div></header><div class="cstep-body">' + body + '</div></section>';
@@ -1775,9 +1775,138 @@
   function textPage(v, parts) {
     var p = D.pages.find(function (x) { return x.slug === parts[1]; });
     if (!p) return notFound(v);
+    if (p.slug === 'about') return aboutPage(v, p);
     v.innerHTML = '<div class="wrap"><div class="page-head"><div class="crumbs"><a href="#/">Главная</a><span>/</span><span>' + esc(p.title) + '</span></div><h1>' + esc(p.title) + '</h1></div><article class="prose">' + md(fillDoc(p.body)) +
       (p.slug === 'about' || p.slug === 'contacts' ? contactsBlock() : '') + '</article></div>';
   }
+  /* «О бренде»: текст страницы из админки раскладывается по дизайну.
+     Первая строка **Название. Слоган.** — заголовок; список под вступлением — плашки с иконками;
+     разделы «## Стиль», «## Качество», «## Индивидуальность» — карточки-опоры с объёмными иконками;
+     остальные «## …» — главы истории; последняя строка *Имя, роль* — подпись основателя. */
+  var ABOUT_WORDS = [[/стил|образ|гардероб/, 'style'], [/индивидуал|уникал|характер|личност/, 'gem'], [/петербург|москв|город|родил/, 'pin'], [/фабрик|россии|шьём|шьем|пошив|производ|отшив/, 'spool']];
+  function aboutIcon(text) {
+    var s = String(text || '').toLowerCase();
+    for (var i = 0; i < ABOUT_WORDS.length; i++) if (ABOUT_WORDS[i][0].test(s)) return ABOUT_WORDS[i][1];
+    return benefitIcon({ title: text });
+  }
+  function aboutParse(body) {
+    var lines = String(body || '').split(/\n/), doc = { title: '', motto: [], lead: [], facts: [], sections: [], sign: '', closing: '' }, cur = null;
+    lines.forEach(function (raw) {
+      var t = raw.trim(); if (!t) return;
+      var h = /^##\s+(.+)$/.exec(t);
+      if (h) { cur = { title: h[1].replace(/^#+\s*/, ''), paras: [], list: [] }; doc.sections.push(cur); return; }
+      var sg = /^\*([^*].*[^*])\*$/.exec(t);
+      if (sg) { doc.sign = sg[1]; return; }
+      if (!cur) {
+        var b = /^\*\*(.+)\*\*$/.exec(t);
+        if (b && !doc.title) {
+          var parts = b[1].split(/\.\s+|\.$/).map(function (x) { return x.trim(); }).filter(Boolean);
+          doc.title = parts[0] || b[1]; doc.motto = parts.slice(1); return;
+        }
+        if (/^- /.test(t)) doc.facts.push(t.slice(2)); else doc.lead.push(t);
+        return;
+      }
+      if (/^- /.test(t)) cur.list.push(t.slice(2)); else cur.paras.push(t);
+    });
+    // короткая фраза прямо перед подписью — заключительные слова основателя
+    var last = doc.sections[doc.sections.length - 1];
+    if (doc.sign && last && last.paras.length > 1 && last.paras[last.paras.length - 1].length < 90) doc.closing = last.paras.pop();
+    return doc;
+  }
+  function aboutInline(s) { return md(s).replace(/^<p>|<\/p>$/g, ''); }
+  function aboutPage(v, p) {
+    var d = aboutParse(fillDoc(p.body)), s = D.settings || {}, b = s.brand || {};
+    var mark = b.mark && b.mark.src ? b.mark.src : 'img/logo-mark.png';
+    var ic = function (n, size) { return '<img src="img/benefits/' + n + '.webp?v=13.26.1" alt="" width="' + size + '" height="' + size + '" loading="lazy" decoding="async">'; };
+    var title = d.title || s.storeName || p.title;
+    var motto = d.motto.length ? d.motto : String(s.tagline || '').split(/\.\s*/).filter(Boolean);
+    // главы истории и опоры: подряд идущие разделы с «своей» иконкой собираются в одну сетку карточек
+    var blocks = [], n = 0;
+    d.sections.forEach(function (sec) {
+      var pillar = /^(стиль|качество|индивидуальность|материал\S*|ткан\S*|крой|детали)$/i.test(sec.title.trim());
+      if (pillar) {
+        var lastB = blocks[blocks.length - 1];
+        if (lastB && lastB.kind === 'pillars') lastB.items.push(sec); else blocks.push({ kind: 'pillars', items: [sec] });
+      } else blocks.push({ kind: 'story', sec: sec, n: ++n });
+    });
+    var paras = function (sec) {
+      return sec.paras.map(function (x) { return '<p>' + aboutInline(x) + '</p>'; }).join('') +
+        (sec.list.length ? '<ul class="ab-list">' + sec.list.map(function (x) { return '<li>' + aboutInline(x) + '</li>'; }).join('') + '</ul>' : '');
+    };
+    var body = blocks.map(function (bl) {
+      if (bl.kind === 'pillars') {
+        return '<section class="ab-pillars-sec"><div class="wrap"><div class="ab-pillars n' + bl.items.length + '">' + bl.items.map(function (sec, i) {
+          var icn = aboutIcon(sec.title) || aboutIcon(sec.paras.join(' ')), glow = ABOUT_GLOW[icn] || BENEFIT_ICONS[icn] || '#c2c7cd';
+          return '<article class="ab-pillar ab-rv" style="--i:' + i + ';--glow:' + glow + '">' +
+            '<span class="ab-pillar-n">' + (i + 1) + '</span>' +
+            (icn ? '<div class="ab-pillar-ico">' + ic(icn, 220) + '</div>' : '') +
+            '<h2>' + glue(sec.title) + '</h2>' + paras(sec) + '</article>';
+        }).join('') + '</div></div></section>';
+      }
+      var sec = bl.sec, first = sec.paras[0];
+      return '<section class="ab-story"><div class="wrap ab-story-in ab-rv">' +
+        '<div class="ab-story-head"><span class="ab-num">' + bl.n + '</span><h2>' + glue(sec.title) + '</h2></div>' +
+        '<div class="ab-story-body">' + (first ? '<p class="ab-lede">' + aboutInline(first) + '</p>' : '') +
+        paras({ paras: sec.paras.slice(1), list: sec.list }) + '</div></div></section>';
+    }).join('');
+
+    // сервис: преимущества магазина с иконками доставки, примерки, возврата и оплаты
+    var serv = ((s.home && s.home.benefits) || []).map(function (x) { return { b: x, ic: benefitIcon(x) }; })
+      .filter(function (x) { return /^(delivery|fitting|return|payment|cash|gift)$/.test(x.ic); }).slice(0, 4);
+    var service = serv.length ? '<section class="ab-service"><div class="wrap"><div class="ab-service-row">' + serv.map(function (x, i) {
+      return '<div class="ab-serv ab-rv" style="--i:' + i + ';--glow:' + BENEFIT_ICONS[x.ic] + '"><span class="ab-serv-ico">' + ic(x.ic, 96) + '</span><span><b>' + glue(x.b.title) + '</b>' + (x.b.text ? '<small>' + glue(x.b.text) + '</small>' : '') + '</span></div>';
+    }).join('') + '</div></div></section>' : '';
+
+    var sign = d.sign ? d.sign.split(/,\s*/) : [];
+    var founder = d.sign || d.closing ? '<section class="ab-founder-sec"><div class="wrap"><div class="ab-founder ab-rv">' +
+      '<img class="ab-founder-mark" src="' + esc(mark) + '" alt="" aria-hidden="true">' +
+      (d.closing ? '<p class="ab-founder-q">' + glue(d.closing) + '</p>' : '') +
+      (sign.length ? '<p class="ab-founder-sign"><b>' + esc(sign[0]) + '</b>' + (sign.length > 1 ? '<span>' + esc(sign.slice(1).join(', ')) + '</span>' : '') + '</p>' : '') +
+      '<a class="btn" href="#/catalog">Смотреть коллекцию</a>' +
+      '</div></div></section>' : '';
+
+    v.innerHTML = '<div class="about">' +
+      '<section class="ab-hero"><div class="wrap">' +
+        '<div class="crumbs"><a href="#/">Главная</a><span>/</span><span>' + esc(p.title) + '</span></div>' +
+        '<div class="ab-hero-grid">' +
+          '<div class="ab-hero-copy">' +
+            '<span class="eyebrow">' + esc(p.title) + '</span>' +
+            '<h1>' + esc(title) + '</h1>' +
+            (motto.length ? '<p class="ab-motto">' + motto.map(function (w, i) { return '<span style="--i:' + i + '">' + esc(w) + '</span>'; }).join('') + '</p>' : '') +
+            d.lead.map(function (x) { return '<p class="ab-lead">' + aboutInline(x) + '</p>'; }).join('') +
+          '</div>' +
+          '<div class="ab-hero-art" aria-hidden="true"><div class="ab-plate"><img src="' + esc(mark) + '" alt=""><span class="ab-plate-ring"></span></div></div>' +
+        '</div>' +
+        (d.facts.length ? '<div class="ab-facts">' + d.facts.map(function (f, i) {
+          var icn = aboutIcon(f);
+          return '<div class="ab-fact ab-rv" style="--i:' + i + (icn ? ';--glow:' + (ABOUT_GLOW[icn] || BENEFIT_ICONS[icn]) : '') + '">' + (icn ? '<span class="ab-fact-ico">' + ic(icn, 88) + '</span>' : '') + '<span>' + aboutInline(f) + '</span></div>';
+        }).join('') + '</div>' : '') +
+      '</div></section>' +
+      body + service + founder +
+      aboutContacts() +
+    '</div>';
+
+    var els = $$('.ab-rv', v);
+    if ('IntersectionObserver' in window) {
+      var io = new IntersectionObserver(function (es) { es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }); }, { threshold: .15 });
+      els.forEach(function (el) { el.classList.add('pre'); io.observe(el); });
+    }
+  }
+  function aboutContacts() {
+    var c = (D.settings && D.settings.contacts) || {};
+    var tel = String(c.phone || '').replace(/[^\d+]/g, '');
+    var items = [
+      c.phone && ['Телефон', '<a class="copyable" href="tel:' + esc(tel) + '">' + esc(c.phone) + '</a>'],
+      c.email && ['Почта', '<a class="copyable" href="mailto:' + esc(c.email) + '">' + esc(c.email) + '</a>'],
+      c.address && ['Адрес', esc(c.address)],
+      c.hours && ['Время работы', esc(c.hours)]
+    ].filter(Boolean);
+    if (!items.length) return '';
+    return '<section class="ab-contacts"><div class="wrap"><div class="ab-contacts-head"><span class="ab-num">Связь</span><h2>Контакты</h2></div>' +
+      '<div class="ab-contacts-grid">' + items.map(function (x, i) { return '<div class="ab-ct ab-rv" style="--i:' + i + '"><span>' + x[0] + '</span><b>' + x[1] + '</b></div>'; }).join('') + '</div></div></section>';
+  }
+  var ABOUT_GLOW = { style: '#c9925e', gem: '#7b61ff', spool: '#ff8b74', pin: '#ff8b74' };
+
   function contactsBlock() {
     var c = D.settings.contacts || {};
     return '<h2>Контакты</h2><p>' + [c.phone && '<span class="copyable">' + esc(c.phone) + '</span>', c.email && '<span class="copyable">' + esc(c.email) + '</span>', esc(c.address || ''), esc(c.hours || '')].filter(Boolean).join('<br>') + '</p>';

@@ -32,11 +32,16 @@ vec3 matColor(float m, vec3 p) {
   if (m < 14.5) return srgb(vec3(0.102, 0.698, 0.282));     // 14 delivery green
   if (m < 15.5) return srgb(vec3(0.788, 0.573, 0.369));     // 15 camel wool
   if (m < 16.5) return srgb(vec3(0.227, 0.259, 0.322));     // 16 navy wool
+  if (m < 17.5) {                                           // 17 gem violet -> blue
+    float t = clamp(p.y * 0.9 - 0.25, 0.0, 1.0);
+    return mix(srgb(vec3(0.290, 0.360, 0.980)), srgb(vec3(0.640, 0.430, 1.000)), t);
+  }
   return srgb(vec3(0.5));
 }
 float matGloss(float m) {
   if (m > 14.5 && m < 16.5) return 0.08;  // wool — matte
   if (m > 0.5 && m < 1.5) return 1.0;   // glass
+  if (m > 16.5 && m < 17.5) return 1.0; // gem
   if (m > 2.5 && m < 3.5) return 0.9;   // silver
   if (m > 11.5 && m < 12.5) return 0.85; // gold
   if (m > 7.5 && m < 9.5) return 0.15;  // kraft, tape — matte
@@ -225,7 +230,78 @@ vec2 pin(vec3 p) {
   return r;
 }
 
-float yawFor() { return uIcon == 0 ? 0.0 : uIcon == 1 ? 0.62 : uIcon == 2 ? 0.40 : uIcon == 3 ? 0.55 : uIcon == 4 ? 0.30 : uIcon == 5 ? 0.62 : uIcon == 7 ? 0.42 : uIcon == 8 ? 0.30 : 0.35; }
+
+vec2 style(vec3 p) {
+  vec2 r = vec2(1e5, 0.0);
+  // hook
+  r = U(r, vec2(sdCapsule(p, vec3(0.0, 1.50, 0.0), vec3(0.0, 1.78, 0.0), 0.045), 3.0));
+  vec3 hp = p - vec3(0.0, 1.94, 0.0); hp.xy = rot(-0.9) * hp.xy;
+  r = U(r, vec2(sdCappedTorus(hp, vec2(sin(2.1), cos(2.1)), 0.16, 0.045), 3.0));
+  // wooden hanger
+  vec3 q = p; q.x = abs(q.x);
+  float arm = sdCapsule(q, vec3(0.0, 1.50, 0.0), vec3(0.86, 0.98, 0.0), 0.085);
+  r = U(r, vec2(arm, 8.0));
+  r = U(r, vec2(sdCapsule(p, vec3(-0.86, 0.98, 0.0), vec3(0.86, 0.98, 0.0), 0.05), 3.0));   // silver bar
+  // scarf draped over the bar
+  r = U(r, vec2(sdRoundBox(p - vec3(-0.02, 0.98, 0.0), vec3(0.30, 0.075, 0.115), 0.07), 15.0));
+  r = U(r, vec2(sdRoundBox(p - vec3(-0.02, 0.50, 0.075), vec3(0.30, 0.46, 0.035), 0.03), 15.0)); // front, camel
+  r = U(r, vec2(sdRoundBox(p - vec3(-0.02, 0.58, -0.075), vec3(0.30, 0.40, 0.035), 0.03), 16.0)); // back, navy
+  for (int i = 0; i < 2; i++) {                                                                   // stripes
+    float y = 0.18 + 0.08 * float(i);
+    r = U(r, vec2(sdRoundBox(p - vec3(-0.02, y, 0.11), vec3(0.305, 0.018, 0.006), 0.006), 16.0));
+  }
+  r = U(r, vec2(sdRoundBox(p - vec3(0.17, 0.66, 0.115), vec3(0.08, 0.05, 0.01), 0.015), 12.0));   // gold tag
+  return r;
+}
+float sdStar4(vec2 p, float r, float w) { p = abs(p); return min(sdBox2(p, vec2(w, r), w), sdBox2(p, vec2(r, w), w)); }
+vec2 gem(vec3 p) {
+  vec2 r = vec2(1e5, 0.0);
+  vec3 q = p - vec3(0.0, 0.92, 0.0);
+  q.yz = rot(0.10) * q.yz; q.xy = rot(-0.08) * q.xy;
+  const float R = 0.66;
+  float d = length(q.xz) - R;
+  d = max(d, q.y - 0.30);                                    // table
+  for (int i = 0; i < 8; i++) {
+    float a = float(i) * PI / 4.0;
+    vec3 n1 = normalize(vec3(cos(a), 1.25, sin(a)));
+    d = max(d, dot(q, n1) - dot(vec3(R * cos(a), 0.04, R * sin(a)), n1));
+    float b = a + PI / 8.0;
+    vec3 n2 = normalize(vec3(cos(b), -0.78, sin(b)));
+    d = max(d, dot(q, n2) - dot(vec3(R * cos(b), -0.04, R * sin(b)), n2));
+  }
+  r = U(r, vec2(d * 0.9, 17.0));
+  // sparkles
+  vec3 s1 = p - vec3(0.80, 1.52, 0.25);
+  r = U(r, vec2(extrude(sdStar4(s1.xy, 0.17, 0.02), s1.z, 0.02) - 0.012, 12.0));
+  vec3 s2 = p - vec3(-0.78, 1.30, 0.20);
+  r = U(r, vec2(extrude(sdStar4(s2.xy, 0.11, 0.015), s2.z, 0.015) - 0.01, 12.0));
+  r = U(r, vec2(length(p - vec3(-0.60, 1.62, 0.10)) - 0.045, 12.0));
+  return r;
+}
+vec2 spool(vec3 p) {
+  vec2 r = vec2(1e5, 0.0);
+  vec3 c = p - vec3(-0.10, 0.0, 0.0);
+  r = U(r, vec2(sdRoundCylZ((c - vec3(0.0, 0.07, 0.0)).xzy, 0.50, 0.06, 0.035), 8.0));   // bottom flange
+  r = U(r, vec2(sdRoundCylZ((c - vec3(0.0, 1.03, 0.0)).xzy, 0.50, 0.06, 0.035), 8.0));   // top flange
+  float th = sdRoundCylZ((c - vec3(0.0, 0.55, 0.0)).xzy, 0.40, 0.43, 0.03);
+  float ang = atan(c.z, c.x);
+  th += 0.006 * sin(c.y * 110.0);                                                         // thread windings
+  r = U(r, vec2(th * 0.8, 6.0));
+  r = U(r, vec2(sdRoundCylZ((c - vec3(0.0, 1.10, 0.0)).xzy, 0.12, 0.03, 0.02), 2.0));    // hole
+  // needle leaning on the spool
+  vec3 a = vec3(0.74, 0.04, 0.46), b = vec3(0.14, 1.40, 0.58);
+  float nd = sdCapsule(p, a, b, 0.032);
+  vec3 ax = normalize(b - a); float tt = clamp(dot(p - a, ax), 0.0, length(b - a));
+  nd = sdCapsule(p, a, b, mix(0.006, 0.034, clamp(tt / 0.35, 0.0, 1.0)));
+  vec3 e = p - (b - ax * 0.12);
+  nd = max(nd, -(length(e - ax * dot(e, ax)) - 0.012 + (abs(dot(e, ax)) - 0.05) * 0.0) );
+  r = U(r, vec2(nd, 3.0));
+  // loose thread end
+  r = U(r, vec2(sdCapsule(p, vec3(0.29, 0.40, 0.18), vec3(0.58, 0.16, 0.42), 0.018), 6.0));
+  return r;
+}
+
+float yawFor() { return uIcon == 0 ? 0.0 : uIcon == 1 ? 0.62 : uIcon == 2 ? 0.40 : uIcon == 3 ? 0.55 : uIcon == 4 ? 0.30 : uIcon == 5 ? 0.62 : uIcon == 7 ? 0.42 : uIcon == 8 ? 0.30 : uIcon == 9 ? 0.25 : uIcon == 10 ? 0.30 : uIcon == 11 ? 0.40 : 0.35; }
 vec2 map(vec3 p) {
   p.xz = rot(-yawFor()) * p.xz;
   if (uIcon == 0) return truck(p);
@@ -236,6 +312,9 @@ vec2 map(vec3 p) {
   if (uIcon == 5) return quality(p);
   if (uIcon == 7) return cash(p);
   if (uIcon == 8) return pin(p);
+  if (uIcon == 9) return style(p);
+  if (uIcon == 10) return gem(p);
+  if (uIcon == 11) return spool(p);
   return fabric(p);
 }
 vec3 calcNormal(vec3 p) {
@@ -255,7 +334,7 @@ float calcAO(vec3 p, vec3 n) {
 
 void main() {
   vec2 uv = (2.0 * gl_FragCoord.xy - uRes) / uRes.y;
-  vec3 ta = vec3(0.0, uIcon == 1 ? 1.05 : 0.62, 0.0);
+  vec3 ta = vec3(0.0, uIcon == 1 ? 1.05 : uIcon == 9 ? 1.0 : uIcon == 10 ? 0.9 : 0.62, 0.0);
   vec3 ro = ta + normalize(vec3(1.0, 0.62, 1.25)) * 9.0;
   vec3 ww = normalize(ta - ro), uu = normalize(cross(ww, vec3(0, 1, 0))), vv = cross(uu, ww);
   vec3 rd = normalize(uv.x * uu + uv.y * vv + 3.8 * ww);

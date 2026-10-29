@@ -3,6 +3,6 @@
    Подключён в <head>, до отрисовки страницы, чтобы заставка даже не мелькнула. */
 (function () {
   try {
-    if (sessionStorage.getItem('albakov:intro') === '1' || /^#\/admin/.test(location.hash)) document.documentElement.className += ' sp-skip';
+    if (sessionStorage.getItem('albakov:intro') === '1' || (/^#\/admin/.test(location.hash) || /^\/admin/.test(location.pathname))) document.documentElement.className += ' sp-skip';
   } catch (e) { /* приватный режим без хранилища — показываем заставку как при первом входе */ }
 })();

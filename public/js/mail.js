@@ -140,7 +140,7 @@
   }
   // Полоса сервиса внизу карточки
   function services(ctx) {
-    var site = siteOf(ctx), S = [['Доставка СДЭК', 'В пункт или курьером', '/#/page/delivery'], ['Возврат 14 дней', 'Через любой пункт СДЭК', '/#/page/returns'], ['Бонусы', 'С каждой покупки', '/#/account?tab=bonus']];
+    var site = siteOf(ctx), S = [['Доставка СДЭК', 'В пункт или курьером', '/page/delivery'], ['Возврат 14 дней', 'Через любой пункт СДЭК', '/page/returns'], ['Бонусы', 'С каждой покупки', '/account?tab=bonus']];
     return '<tr><td style="padding:0;">' + tbl('background:' + K.soft + ';') + '<tr>' + S.map(function (x, i) {
       var inner = '<div style="font-family:' + F + ';font-size:12px;font-weight:600;letter-spacing:.5px;color:' + K.ink + ';">' + x[0] + '</div><div style="margin-top:4px;font-family:' + F + ';font-size:12px;line-height:1.4;color:' + K.dim + ';">' + x[1] + '</div>';
       return '<td class="svc" width="33%" align="center" valign="top" style="padding:22px 10px;' + (i ? 'border-left:1px solid ' + K.line + ';' : '') + '">' + (site ? '<a href="' + esc(site + x[2]) + '" style="text-decoration:none;">' + inner + '</a>' : inner) + '</td>';

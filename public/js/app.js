@@ -1845,7 +1845,7 @@
       }
       var sec = bl.sec, first = sec.paras[0];
       return '<section class="ab-story"><div class="wrap ab-story-in ab-rv">' +
-        '<div class="ab-story-head"><span class="ab-num">' + (bl.n < 10 ? '0' : '') + bl.n + '</span><h2>' + glue(sec.title) + '</h2></div>' +
+        '<div class="ab-story-head"><span class="ab-num">' + bl.n + '</span><h2>' + glue(sec.title) + '</h2></div>' +
         '<div class="ab-story-body">' + (first ? '<p class="ab-lede">' + aboutInline(first) + '</p>' : '') +
         paras({ paras: sec.paras.slice(1), list: sec.list }) + '</div></div></section>';
     }).join('');

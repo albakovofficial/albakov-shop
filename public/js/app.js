@@ -494,7 +494,7 @@
     var cards = h.benefits.map(function (b, i) {
       var ic = benefitIcon(b);
       return '<div class="benefit' + (ic ? '' : ' no-ico') + (b.link ? ' has-link' : '') + '" style="--i:' + i + (i === nb - 1 && nb >= 5 ? lastSpan : '') + (ic ? ';--glow:' + BENEFIT_ICONS[ic] : '') + '">' +
-        (ic ? '<div class="benefit-ico"><img src="img/benefits/' + ic + '.webp?v=13.27.0" alt="" width="160" height="160" loading="lazy" decoding="async"></div>' : '') +
+        (ic ? '<div class="benefit-ico"><img src="img/benefits/' + ic + '.webp?v=13.28.0" alt="" width="160" height="160" loading="lazy" decoding="async"></div>' : '') +
         '<div class="benefit-body"><h3>' + glue(b.title) + '</h3>' + (b.text ? '<p>' + glue(b.text) + '</p>' : '') +
         (b.link ? '<a class="benefit-more" href="' + esc(b.link) + '">' + esc(b.linkText || 'Подробнее') + '<span aria-hidden="true">→</span></a>' : '') + '</div></div>';
     }).join('');
@@ -999,7 +999,7 @@
       '<p class="pvz-hint">Выберите свой населённый пункт из списка — область подставится сама. Например, Мурино и Кудрово — это Ленинградская область, а не Санкт-Петербург.</p></div>' +
       '<div class="pvz-pick" id="pvzPick" hidden></div></div>';
   }
-  function optIc(n) { return '<span class="opt-ic"><img src="img/benefits/' + n + '.webp?v=13.27.0" alt="" width="48" height="48" decoding="async"></span>'; }
+  function optIc(n) { return '<span class="opt-ic"><img src="img/benefits/' + n + '.webp?v=13.28.0" alt="" width="48" height="48" decoding="async"></span>'; }
   function coStep(n, id, title, hint, body) {
     return '<section class="cstep" id="cs-' + id + '"><header class="cstep-head"><span class="cstep-n" aria-hidden="true"><i>' + n + '</i><svg viewBox="0 0 24 24"><path d="m6 12.5 4 4 8-9"/></svg></span>' +
       '<div><h3>' + title + '</h3><p>' + hint + '</p></div></header><div class="cstep-body">' + body + '</div></section>';
@@ -1776,6 +1776,7 @@
     var p = D.pages.find(function (x) { return x.slug === parts[1]; });
     if (!p) return notFound(v);
     if (p.slug === 'about') return aboutPage(v, p);
+    if ((p.group || 'help') !== 'legal' && p.slug !== 'contacts') return infoPage(v, p);
     v.innerHTML = '<div class="wrap"><div class="page-head"><div class="crumbs"><a href="#/">Главная</a><span>/</span><span>' + esc(p.title) + '</span></div><h1>' + esc(p.title) + '</h1></div><article class="prose">' + md(fillDoc(p.body)) +
       (p.slug === 'about' || p.slug === 'contacts' ? contactsBlock() : '') + '</article></div>';
   }
@@ -1817,7 +1818,7 @@
   function aboutPage(v, p) {
     var d = aboutParse(fillDoc(p.body)), s = D.settings || {}, b = s.brand || {};
     var mark = b.mark && b.mark.src ? b.mark.src : 'img/logo-mark.png';
-    var ic = function (n, size) { return '<img src="img/benefits/' + n + '.webp?v=13.27.0" alt="" width="' + size + '" height="' + size + '" loading="lazy" decoding="async">'; };
+    var ic = function (n, size) { return '<img src="img/benefits/' + n + '.webp?v=13.28.0" alt="" width="' + size + '" height="' + size + '" loading="lazy" decoding="async">'; };
     var title = d.title || s.storeName || p.title;
     var motto = d.motto.length ? d.motto : String(s.tagline || '').split(/\.\s*/).filter(Boolean);
     // главы истории и опоры: подряд идущие разделы с «своей» иконкой собираются в одну сетку карточек
@@ -1871,7 +1872,9 @@
         '<div class="ab-hero-grid">' +
           '<div class="ab-hero-copy">' +
             '<span class="eyebrow">' + esc(p.title) + '</span>' +
-            '<h1>' + esc(title) + '</h1>' +
+            (b.word && b.word.src && String(title).toLowerCase() === String(s.storeName || '').toLowerCase()
+              ? '<h1 class="ab-word"><img src="' + esc(b.word.src) + '" alt="' + esc(title) + '" width="' + (b.word.w || 960) + '" height="' + (b.word.h || 91) + '"></h1>'
+              : '<h1>' + esc(title) + '</h1>') +
             (motto.length ? '<p class="ab-motto">' + motto.map(function (w, i) { return '<span style="--i:' + i + '">' + esc(w) + '</span>'; }).join('') + '</p>' : '') +
             d.lead.map(function (x) { return '<p class="ab-lead">' + aboutInline(x) + '</p>'; }).join('') +
           '</div>' +
@@ -1886,6 +1889,10 @@
       aboutContacts() +
     '</div>';
 
+    pageBind(v);
+  }
+  // Копирование контактов и плавное появление блоков на оформленных страницах
+  function pageBind(v) {
     $$('.ac-copy', v).forEach(function (btn) {
       btn.addEventListener('click', function () {
         var t = btn.getAttribute('data-copy'), done = function () { btn.classList.add('copied'); $('i', btn).textContent = 'Скопировано'; setTimeout(function () { btn.classList.remove('copied'); $('i', btn).textContent = 'Скопировать'; }, 2200); };
@@ -1898,10 +1905,86 @@
       els.forEach(function (el) { el.classList.add('pre'); io.observe(el); });
     }
   }
+
+  /* Страницы для покупателей («Доставка и оплата», «Обмен и возврат», «Уход за вещами»…):
+     вступление — крупно рядом с объёмной иконкой; «## Раздел» — заголовок с иконкой;
+     список «- **Заголовок.** текст» — карточки с иконками; «1. …» — шаги; обычные абзацы — текст. */
+  var INFO_WORDS = [[/отслеж|трек/, 'mail'], [/бесплатн|бонус|подар/, 'gift'], [/пункт|адрес|метро|город/, 'pin'], [/курьер|доставк|сдэк|отправ|отслеж|трек/, 'delivery'], [/примерк/, 'fitting'],
+    [/при получении|наличн|деньги|стоимост|бесплатн|реквизит/, 'cash'], [/онлайн|карт|оплат|сбп|юkassa/, 'payment'], [/бонус|подар/, 'gift'],
+    [/возврат|вернуть|обмен/, 'return'], [/уход|стирк|ткан|шерст|кашемир|трикотаж/, 'fabric'], [/почт|письм|напишите/, 'mail'], [/поддержк|чат|вопрос/, 'chat']];
+  function infoIcon(t) {
+    var x = String(t || '').toLowerCase();
+    for (var i = 0; i < INFO_WORDS.length; i++) if (INFO_WORDS[i][0].test(x)) return INFO_WORDS[i][1];
+    return '';
+  }
+  function infoGlow(n) { return BENEFIT_ICONS[n] || '#c2c7cd'; }
+  function infoParse(body) {
+    var doc = { lead: [], sections: [] }, cur = null, blk = null;
+    String(body || '').split(/\n/).forEach(function (raw) {
+      var t = raw.trim();
+      if (!t) { blk = null; return; }
+      var h = /^##\s+(.+)$/.exec(t);
+      if (h) { cur = { title: h[1].replace(/^#+\s*/, ''), blocks: [] }; doc.sections.push(cur); blk = null; return; }
+      var kind = /^- /.test(t) ? 'ul' : /^\d+[.)]\s+/.test(t) ? 'ol' : 'p';
+      var text = kind === 'ul' ? t.slice(2) : kind === 'ol' ? t.replace(/^\d+[.)]\s+/, '') : t;
+      if (!cur) { if (kind === 'p') { doc.lead.push(text); return; } cur = { title: '', blocks: [] }; doc.sections.push(cur); }
+      if (kind === 'p') { cur.blocks.push({ kind: 'p', items: [text] }); blk = null; return; }
+      if (!blk || blk.kind !== kind) { blk = { kind: kind, items: [] }; cur.blocks.push(blk); }
+      blk.items.push(text);
+    });
+    return doc;
+  }
+  // «**Выбор пункта.** При оформлении…» → заголовок и текст карточки
+  function infoItem(t) {
+    var m = /^\*\*(.+?)\*\*\s*[—–:-]?\s*(.*)$/.exec(t);
+    if (!m) return { title: '', text: t };
+    return { title: m[1].replace(/[.:]\s*$/, ''), text: m[2].replace(/^(.)/, function (c) { return c.toUpperCase(); }) };
+  }
+  function infoPage(v, p) {
+    var d = infoParse(fillDoc(p.body));
+    // нет вступления — первый абзац первого раздела поднимаем в шапку страницы
+    var f = d.sections[0];
+    if (!d.lead.length && f && f.blocks[0] && f.blocks[0].kind === 'p') d.lead.push(f.blocks.shift().items[0]);
+    var ic = function (n, size) { return n ? '<img src="img/benefits/' + n + '.webp?v=13.28.0" alt="" width="' + size + '" height="' + size + '" loading="lazy" decoding="async">' : ''; };
+    var heroIc = infoIcon(p.title) || infoIcon(p.slug === 'returns' ? 'возврат' : p.slug === 'delivery' ? 'доставка' : '') || 'quality';
+    var secs = d.sections.map(function (sec, si) {
+      var sIc = infoIcon(sec.title);
+      var blocks = sec.blocks.map(function (bl) {
+        if (bl.kind === 'p') return '<p class="ip-p ab-rv">' + aboutInline(bl.items[0]) + '</p>';
+        if (bl.kind === 'ol') return '<ol class="ip-steps">' + bl.items.map(function (x, i) {
+          return '<li class="ip-step ab-rv" style="--i:' + i + '"><span class="ip-step-n">' + (i + 1) + '</span><p>' + aboutInline(x) + '</p></li>';
+        }).join('') + '</ol>';
+        // у всех карточек одна и та же иконка — убираем: повтор выглядит шаблонно
+        var its = bl.items.map(infoItem), icons = its.map(function (it) { return infoIcon(it.title) || infoIcon(it.text) || sIc; });
+        var uniq = icons.filter(function (x, i, a) { return x && a.indexOf(x) === i; });
+        if (its.length > 1 && uniq.length <= 1) icons = icons.map(function () { return ''; });
+        return '<div class="ip-cards' + (bl.items.length === 1 ? ' one' : '') + '">' + its.map(function (it, i) {
+          var n = icons[i];
+          return '<div class="ip-card ab-rv' + (n ? '' : ' no-ico') + '" style="--i:' + (i % 4) + ';--glow:' + infoGlow(n) + '">' +
+            (n ? '<span class="ip-card-ico">' + ic(n, 120) + '</span>' : '') +
+            '<div>' + (it.title ? '<h3>' + glue(it.title) + '</h3>' : '') + (it.text ? '<p>' + aboutInline(it.text) + '</p>' : '') + '</div></div>';
+        }).join('') + '</div>';
+      }).join('');
+      return '<section class="ip-sec"><div class="wrap">' +
+        (sec.title ? '<div class="ip-sec-head ab-rv">' + (sIc ? '<span class="ip-sec-ico" style="--glow:' + infoGlow(sIc) + '">' + ic(sIc, 120) + '</span>' : '') +
+          '<div><span class="ab-num">' + (si + 1) + '</span><h2>' + glue(sec.title) + '</h2></div></div>' : '') +
+        '<div class="ip-sec-body">' + blocks + '</div></div></section>';
+    }).join('');
+    v.innerHTML = '<div class="about info">' +
+      '<section class="ab-hero ip-hero"><div class="wrap">' +
+        '<div class="crumbs"><a href="#/">Главная</a><span>/</span><span>' + esc(p.title) + '</span></div>' +
+        '<div class="ab-hero-grid">' +
+          '<div class="ab-hero-copy"><span class="eyebrow">Покупателям</span><h1 class="ip-title">' + glue(p.title) + '</h1>' +
+            d.lead.map(function (x) { return '<p class="ab-lead">' + aboutInline(x) + '</p>'; }).join('') + '</div>' +
+          '<div class="ab-hero-art" aria-hidden="true"><div class="ab-plate ip-plate" style="--glow:' + infoGlow(heroIc) + '">' + ic(heroIc, 320) + '<span class="ab-plate-ring"></span></div></div>' +
+        '</div></div></section>' +
+      secs + aboutContacts() + '</div>';
+    pageBind(v);
+  }
   function aboutContacts() {
     var c = (D.settings && D.settings.contacts) || {};
     var tel = String(c.phone || '').replace(/[^\d+]/g, '');
-    var ic = function (n) { return '<span class="ac-ico"><img src="img/benefits/' + n + '.webp?v=13.27.0" alt="" width="120" height="120" loading="lazy" decoding="async"></span>'; };
+    var ic = function (n) { return '<span class="ac-ico"><img src="img/benefits/' + n + '.webp?v=13.28.0" alt="" width="120" height="120" loading="lazy" decoding="async"></span>'; };
     var arrow = '<span class="ac-go" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>';
     var copy = function (v, what) { return '<button class="ac-copy" type="button" data-copy="' + esc(v) + '" data-what="' + esc(what) + '" aria-label="Скопировать"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg><i>Скопировать</i></button>'; };
     var card = function (cls, glow, href, icon, label, value, extra, i) {

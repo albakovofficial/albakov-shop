@@ -109,6 +109,21 @@ const cdek = CdekLib.create(() => {
   return { id: process.env.CDEK_CLIENT_ID || c.clientId || '', secret: process.env.CDEK_CLIENT_SECRET || db.secrets.cdekSecret || '', test: !!c.test };
 });
 const cdekCfg = () => (db.settings && db.settings.cdek) || {};
+// Страницы для поисковиков: заголовок, описание, разметка и текст каждой страницы (lib/seo.js)
+const Seo = require('./lib/seo.js').create({
+  getDb: () => db, Pricing, siteUrl: () => PUBLIC_URL,
+  features: () => ({ tryOn: !!((cdekCfg().services || {}).tryOn), cod: !!((db.settings.payment || {}).cod) })
+});
+let indexHtml = { mtime: 0, text: '' };
+function sendIndex(req, res, url) {
+  const file = path.join(PUBLIC_DIR, 'index.html'), mt = fs.statSync(file).mtimeMs;
+  if (mt !== indexHtml.mtime) indexHtml = { mtime: mt, text: fs.readFileSync(file, 'utf8') };
+  let r;
+  try { r = Seo.render(url.pathname, Object.fromEntries(url.searchParams)); } catch (e) { console.error('SEO:', e.message); r = null; }
+  const html = r ? Seo.inject(indexHtml.text, r) : indexHtml.text;
+  res.writeHead(r ? r.status : 200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
+  res.end(req.method === 'HEAD' ? undefined : html);
+}
 const CDEK_PKG = { weight: 1000, length: 30, width: 25, height: 10 };
 const cdekPkg = (x) => { const d = Object.assign({}, CDEK_PKG, cdekCfg().pkg, x); const n = (v, lo, hi) => Math.min(hi, Math.max(lo, Math.round(Number(v) || 0))); return { weight: n(d.weight, 50, 30000), length: n(d.length, 1, 150), width: n(d.width, 1, 150), height: n(d.height, 1, 150) }; };
 // Заявка на отправление: товары с объявленной стоимостью, оплата уже получена онлайн (к оплате при получении — 0)
@@ -450,7 +465,7 @@ async function createPayment(order) {
   const body = {
     amount: { value: rub(order.total * 100), currency: 'RUB' },
     capture: true,
-    confirmation: { type: 'redirect', return_url: `${PUBLIC_URL}/#/order/${order.id}` },
+    confirmation: { type: 'redirect', return_url: `${PUBLIC_URL}/order/${order.id}` },
     description: `Заказ № ${order.number}`,
     metadata: { orderId: order.id }
   };
@@ -669,11 +684,11 @@ function sendOrderMails(order) {
     contacts: [cs.phone, cs.email].filter(Boolean).join(' · ')
   };
   const jobs = [];
-  const mc = Mail.renderOrder(Object.assign({ kind: 'customer', url: `${PUBLIC_URL}/#/order/${order.id}` }, base));
+  const mc = Mail.renderOrder(Object.assign({ kind: 'customer', url: `${PUBLIC_URL}/order/${order.id}` }, base));
   jobs.push(sendMail({ to: order.customer.email, subject: mc.subject, html: mc.html, text: mc.text }).then(() => { order.mailedAt = new Date().toISOString(); save(); }));
   const shopTo = cs.email || mailCfg().fromEmail;
   if (shopTo) {
-    const ms = Mail.renderOrder(Object.assign({ kind: 'shop', url: `${PUBLIC_URL}/#/admin?s=orders&id=${order.id}` }, base));
+    const ms = Mail.renderOrder(Object.assign({ kind: 'shop', url: `${PUBLIC_URL}/admin?s=orders&id=${order.id}` }, base));
     jobs.push(sendMail({ to: shopTo, subject: ms.subject, html: ms.html, text: ms.text }));
   }
   Promise.allSettled(jobs).then((r) => r.forEach((x) => { if (x.status === 'rejected') console.error('Письмо о заказе не отправлено:', x.reason && x.reason.message); }));
@@ -684,19 +699,19 @@ const CDEK_TRACK = 'https://www.cdek.ru/ru/tracking/?order_id=';
 function sendReturnShipMail(o, r) {
   const cs = db.settings.contacts || {}, sp = cdekCfg().shipmentPoint || {};
   const m = Mail.renderReturnShip({ store: db.settings.storeName, logo: brandLogo(), name: o.customer.firstName, number: o.number, track: r.number, items: r.items,
-    to: [sp.address, sp.city].filter(Boolean).join(', '), cost: r.cost, url: `${PUBLIC_URL}/#/order/${o.id}`, contacts: [cs.phone, cs.email].filter(Boolean).join(' · ') });
+    to: [sp.address, sp.city].filter(Boolean).join(', '), cost: r.cost, url: `${PUBLIC_URL}/order/${o.id}`, contacts: [cs.phone, cs.email].filter(Boolean).join(' · ') });
   return sendMail({ to: o.customer.email, subject: m.subject, html: m.html, text: m.text });
 }
 function sendRefundMail(o, r) {
   const cs = db.settings.contacts || {};
   const m = Mail.renderRefund({ store: db.settings.storeName, logo: brandLogo(), name: o.customer.firstName, number: o.number, amount: r.amount, items: r.items, delivery: r.delivery,
-    full: o.payment.status === 'refunded', url: `${PUBLIC_URL}/#/order/${o.id}`, contacts: [cs.phone, cs.email].filter(Boolean).join(' · ') });
+    full: o.payment.status === 'refunded', url: `${PUBLIC_URL}/order/${o.id}`, contacts: [cs.phone, cs.email].filter(Boolean).join(' · ') });
   return sendMail({ to: o.customer.email, subject: m.subject, html: m.html, text: m.text });
 }
 function sendTrackingMail(o) {
   const cs = db.settings.contacts || {};
   const m = Mail.renderTracking({ store: db.settings.storeName, logo: brandLogo(), name: o.customer.firstName, number: o.number, carrier: o.tracking.carrier, track: o.tracking.number,
-    trackUrl: o.tracking.url, url: `${PUBLIC_URL}/#/order/${o.id}`, contacts: [cs.phone, cs.email].filter(Boolean).join(' · ') });
+    trackUrl: o.tracking.url, url: `${PUBLIC_URL}/order/${o.id}`, contacts: [cs.phone, cs.email].filter(Boolean).join(' · ') });
   return sendMail({ to: o.customer.email, subject: m.subject, html: m.html, text: m.text });
 }
 
@@ -713,7 +728,7 @@ function supportMail(t, kind) {
   const cs = db.settings.contacts || {}, last = t.messages[t.messages.length - 1];
   const to = kind === 'customer' ? t.email : (cs.email || mailCfg().fromEmail);
   if (!to) return;
-  const url = kind === 'customer' ? `${PUBLIC_URL}/#/account?tab=support&id=${t.id}` : `${PUBLIC_URL}/#/admin?s=support&id=${t.id}`;
+  const url = kind === 'customer' ? `${PUBLIC_URL}/account?tab=support&id=${t.id}` : `${PUBLIC_URL}/admin?s=support&id=${t.id}`;
   const m = Mail.renderSupport({ kind, store: db.settings.storeName, logo: brandLogo(), name: t.name, number: t.number, topic: t.topic, orderNumber: t.orderNumber, text: last.text, url, contacts: [cs.phone, cs.email].filter(Boolean).join(' · ') });
   sendMail({ to, subject: m.subject, html: m.html, text: m.text }).catch((e) => console.error('Письмо поддержки не отправлено:', e.message));
 }
@@ -783,7 +798,7 @@ function notifyContext(w, p, c) {
   return {
     tpl: Mail.tplOf(db.settings), store: db.settings.storeName, product: p.name, color: c.name, colorHex: c.hex, size: w.size,
     price: Pricing.format(pr.price), oldPrice: pr.oldPrice ? Pricing.format(pr.oldPrice) : '',
-    url: `${PUBLIC_URL}/#/product/${p.slug}?color=${encodeURIComponent(c.id)}`, image: absUrl((c.images || [])[0]),
+    url: `${PUBLIC_URL}/product/${p.slug}?color=${encodeURIComponent(c.id)}`, image: absUrl((c.images || [])[0]),
     unsubscribe: w.id ? `${PUBLIC_URL}/api/notify/cancel?id=${encodeURIComponent(w.id)}&t=${w.token}` : '',
     contacts: [cs.phone, cs.email].filter(Boolean).join(' · '),
     logo: brandLogo()
@@ -1129,18 +1144,18 @@ async function api(req, res, url, body) {
       const item = { name: pr.name, color: 'Графит', size: 'M', qty: 1, price: pr.price, image: absUrl(((Pricing.colorsOf(pr)[0] || {}).images || [])[0] || '') };
       const order = { id: 'demo', number: '25', customer: { firstName: 'Анна', lastName: 'Смирнова', phone: '79161112233', email: 'anna@example.ru' }, items: [item], subtotal: pr.price, promoDiscount: 0, saleDiscount: 0, bonusUsed: 0,
         delivery: { name: 'СДЭК, пункт выдачи', price: 380, city: 'Мурино (Ленинградская область)', address: 'ПВЗ СДЭК SPD25: б-р Петровский, 7' }, total: pr.price + 380, payment: { method: 'online', status: 'paid' }, comment: '' };
-      const ord = (kind) => Mail.renderOrder(Object.assign({ kind, url: PUBLIC_URL + '/#/order/demo', order, money: Pricing.format, payLabel: 'оплачено онлайн' }, base));
+      const ord = (kind) => Mail.renderOrder(Object.assign({ kind, url: PUBLIC_URL + '/order/demo', order, money: Pricing.format, payLabel: 'оплачено онлайн' }, base));
       const c = (db.waitlist || [])[0], np = pr, ncol = Pricing.colorsOf(np)[0] || { name: 'Графит', images: [] };
       const list = [
         { key: 'code', title: 'Код подтверждения почты', when: 'При регистрации — покупатель вводит код на сайте', to: 'Покупателю', m: Mail.renderCode(Object.assign({ code: '483920', minutes: VERIFY_MIN, name: 'Анна' }, base)) },
         { key: 'welcome', title: 'Добро пожаловать', when: 'Сразу после регистрации: бонусы и промокод на первый заказ', to: 'Покупателю', m: Mail.renderWelcome(Object.assign({ name: 'Анна', url: PUBLIC_URL + '/', bonusPercent: String(Pricing.bonusConf(db.settings).percent || 5), promo: welcomePromo() }, base)) },
         { key: 'order', title: 'Заказ принят / оплачен', when: 'Оплата онлайн — после оплаты; при получении — сразу после оформления', to: 'Покупателю', m: ord('customer') },
         { key: 'order-shop', title: 'Новый заказ', when: 'Одновременно с письмом покупателю', to: 'Магазину — ' + (cs.email || mc.fromEmail || 'почта для связи'), m: ord('shop') },
-        { key: 'tracking', title: 'Заказ отправлен, трек-номер', when: 'Когда посылку приняли в СДЭК (или вы вписали трек-номер вручную)', to: 'Покупателю', m: Mail.renderTracking(Object.assign({ name: 'Анна', number: '25', carrier: 'СДЭК', track: '1234567890', trackUrl: CDEK_TRACK + '1234567890', url: PUBLIC_URL + '/#/order/demo' }, base)) },
-        { key: 'return-ship', title: 'Возврат оформлен: номер СДЭК', when: 'Когда вы оформили возврат через СДЭК в заказе', to: 'Покупателю', m: Mail.renderReturnShip(Object.assign({ name: 'Анна', number: '25', track: '1234567891', items: [item], to: 'б-р Петровский, 7, Мурино', cost: 310, url: PUBLIC_URL + '/#/order/demo' }, base)) },
-        { key: 'refund', title: 'Деньги возвращены', when: 'После «Вернуть деньги» в заказе', to: 'Покупателю', m: Mail.renderRefund(Object.assign({ name: 'Анна', number: '25', amount: pr.price - 310, items: [item], delivery: false, full: true, url: PUBLIC_URL + '/#/order/demo' }, base)) },
-        { key: 'support', title: 'Ответ поддержки', when: 'Когда вы отвечаете на обращение в разделе «Поддержка»', to: 'Покупателю', m: Mail.renderSupport(Object.assign({ kind: 'customer', name: 'Анна', number: '7', topic: 'Размер и посадка', orderNumber: '25', text: 'Здравствуйте! Пальто идёт в размер, при росте 170 советуем M.', url: PUBLIC_URL + '/#/account?tab=support' }, base)) },
-        { key: 'support-shop', title: 'Новое обращение', when: 'Когда покупатель пишет в поддержку на сайте', to: 'Магазину — ' + (cs.email || mc.fromEmail || 'почта для связи'), m: Mail.renderSupport(Object.assign({ kind: 'shop', name: 'Анна', number: '7', topic: 'Размер и посадка', orderNumber: '25', text: 'Подскажите, пальто идёт в размер?', url: PUBLIC_URL + '/#/admin?s=support' }, base)) },
+        { key: 'tracking', title: 'Заказ отправлен, трек-номер', when: 'Когда посылку приняли в СДЭК (или вы вписали трек-номер вручную)', to: 'Покупателю', m: Mail.renderTracking(Object.assign({ name: 'Анна', number: '25', carrier: 'СДЭК', track: '1234567890', trackUrl: CDEK_TRACK + '1234567890', url: PUBLIC_URL + '/order/demo' }, base)) },
+        { key: 'return-ship', title: 'Возврат оформлен: номер СДЭК', when: 'Когда вы оформили возврат через СДЭК в заказе', to: 'Покупателю', m: Mail.renderReturnShip(Object.assign({ name: 'Анна', number: '25', track: '1234567891', items: [item], to: 'б-р Петровский, 7, Мурино', cost: 310, url: PUBLIC_URL + '/order/demo' }, base)) },
+        { key: 'refund', title: 'Деньги возвращены', when: 'После «Вернуть деньги» в заказе', to: 'Покупателю', m: Mail.renderRefund(Object.assign({ name: 'Анна', number: '25', amount: pr.price - 310, items: [item], delivery: false, full: true, url: PUBLIC_URL + '/order/demo' }, base)) },
+        { key: 'support', title: 'Ответ поддержки', when: 'Когда вы отвечаете на обращение в разделе «Поддержка»', to: 'Покупателю', m: Mail.renderSupport(Object.assign({ kind: 'customer', name: 'Анна', number: '7', topic: 'Размер и посадка', orderNumber: '25', text: 'Здравствуйте! Пальто идёт в размер, при росте 170 советуем M.', url: PUBLIC_URL + '/account?tab=support' }, base)) },
+        { key: 'support-shop', title: 'Новое обращение', when: 'Когда покупатель пишет в поддержку на сайте', to: 'Магазину — ' + (cs.email || mc.fromEmail || 'почта для связи'), m: Mail.renderSupport(Object.assign({ kind: 'shop', name: 'Анна', number: '7', topic: 'Размер и посадка', orderNumber: '25', text: 'Подскажите, пальто идёт в размер?', url: PUBLIC_URL + '/admin?s=support' }, base)) },
         { key: 'notify', title: 'Снова в наличии', when: 'Когда появился размер, о котором просили сообщить. Текст меняется в «Сообщить о поступлении»', to: 'Покупателю', m: Mail.render(notifyContext({ size: 'M' }, np, ncol)) }
       ];
       // «Отправить пример» — письмо с тестовыми данными на указанный адрес
@@ -1363,7 +1378,7 @@ function serveStatic(req, res, pathname) {
   if (rel.split('/').some((seg) => seg.startsWith('.'))) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Не найдено'); }
   const exists = pathname !== '/' && fs.existsSync(file) && fs.statSync(file).isFile();
   if (!exists && path.extname(rel) && path.extname(rel) !== '.html') { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Не найдено'); }
-  if (!exists) file = path.join(PUBLIC_DIR, 'index.html');
+  if (!exists || rel === '/index.html') return sendIndex(req, res, new URL(req.url, 'http://x'));
   const ext = path.extname(file).toLowerCase();
   // Фото товаров не меняются (новое фото — новый файл) — кэшируем надолго. Остальное браузер перепроверяет
   // при каждом заходе (ответ 304 без загрузки), поэтому новая версия сайта видна сразу после обновления
@@ -1419,8 +1434,13 @@ const server = http.createServer(async (req, res) => {
   }
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); return res.end(); }
   if (url.pathname === '/robots.txt') {
-    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=86400' });
-    return res.end('User-agent: *\nAllow: /\nDisallow: /api/\n');
+    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=3600' });
+    return res.end('User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /cart\nDisallow: /checkout\nDisallow: /account\nDisallow: /order/\nDisallow: /*?*q=\nDisallow: /*?*sort=\n' +
+      'Clean-param: utm_source&utm_medium&utm_campaign&utm_content&utm_term&yclid&source\n\nSitemap: ' + PUBLIC_URL + '/sitemap.xml\n');
+  }
+  if (url.pathname === '/sitemap.xml' || url.pathname === '/yml.xml') {
+    res.writeHead(200, { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=900' });
+    return res.end(url.pathname === '/sitemap.xml' ? Seo.sitemap() : Seo.yml());
   }
   try { serveStatic(req, res, url.pathname); } catch (e) { console.error(e); if (!res.headersSent) res.writeHead(500); res.end(); }
 });

@@ -168,7 +168,7 @@
   async function reload() { DATA = await A().API.adminData(); }
   async function afterSave(msg, hash) {
     await reload();
-    if (hash) location.hash = hash;
+    if (hash) window.ALB_NAV.go(hash);
     await A().refresh();
     toast(msg || 'Сохранено'); // после перерисовки, иначе уведомление исчезает вместе со старой страницей
   }
@@ -195,7 +195,7 @@
     v.innerHTML = '<div class="adm"><aside class="adm-side"><div class="adm-brand"><span class="eyebrow">Управление</span><b class="serif">' + esc(A().D.settings.storeName) + '</b></div><nav>' +
       SECTIONS.map(function (x) { return '<a href="#/admin?s=' + x[0] + '"' + (x[0] === s ? ' class="on"' : '') + '>' + x[1] + (x[0] === 'orders' ? newOrdersBadge() : '') + (x[0] === 'support' && DATA.supportNew ? ' <span class="adm-badge">' + DATA.supportNew + '</span>' : '') + (x[0] === 'notify' ? waitBadge() : '') + '</a>'; }).join('') +
       '</nav><div class="adm-side-foot"><a href="#/" class="muted">← В магазин</a><button class="muted" id="admOut">Выйти</button></div></aside><section class="adm-main" id="admMain"></section></div>';
-    $('#admOut').addEventListener('click', async function () { await API.adminLogout(); DATA = null; location.hash = '#/'; await A().refresh(); });
+    $('#admOut').addEventListener('click', async function () { await API.adminLogout(); DATA = null; window.ALB_NAV.go('#/'); await A().refresh(); });
     var main = $('#admMain');
     var fn = { overview: overview, orders: orders, support: supportSection, products: products, categories: categories, sizeCharts: sizeCharts, promotions: promotions, promocodes: promocodes, bonus: bonusSection, customers: customers, notify: notifySection, mail: mailSection, sections: sectionsSettings, brand: brandSection, slider: sliderSection, home: homeSettings, pages: pages, menu: menuSettings, payment: paymentSettings, settings: generalSettings }[s] || overview;
     fn(main, q);
@@ -240,7 +240,7 @@
       '<form class="form" id="admLogin" novalidate><label class="field"><span>Пароль администратора</span><input class="input" type="password" id="adm-pass" autocomplete="current-password"></label><p class="form-error" id="admErr"></p><button class="btn block">Войти</button></form>' + '</div></div>';
     $('#admLogin').addEventListener('submit', async function (e) {
       e.preventDefault();
-      try { await A().API.adminLogin($('#adm-pass').value); DATA = null; location.hash = '#/admin?s=overview'; await A().refresh(); }
+      try { await A().API.adminLogin($('#adm-pass').value); DATA = null; window.ALB_NAV.go('#/admin?s=overview'); await A().refresh(); }
       catch (ex) { $('#admErr').textContent = A().errMsg(ex); }
     });
   }
@@ -309,7 +309,7 @@
     if ($('#delTest')) bindConfirm($('#delTest'), async function () {
       try { var r = await A().API.adminOrderDelete('test'); await afterSave('Удалено тестовых заказов: ' + r.deleted, '#/admin?s=orders'); } catch (e) { toast(A().errMsg(e), true); }
     });
-    var si = $('#oSearch'); si.addEventListener('change', function () { location.hash = '#/admin?s=orders&f=' + f + '&q=' + encodeURIComponent(si.value); });
+    var si = $('#oSearch'); si.addEventListener('change', function () { window.ALB_NAV.go('#/admin?s=orders&f=' + f + '&q=' + encodeURIComponent(si.value)); });
   }
   /* ---------- Оплата и возврат ---------- */
   // Всё про деньги заказа в одном месте: кто и сколько заплатил, номер платежа ЮKassa, что уже вернули, и форма возврата
@@ -553,7 +553,7 @@
         list.map(function (x) { return '<tr data-href="#/admin?s=' + cfg.key + '&id=' + esc(x.id) + '">' + (cfg.bulk ? '<td class="adm-pick-cell"><label class="check adm-pick"><input type="checkbox" data-pick="' + esc(x.id) + '" aria-label="Выбрать"></label></td>' : '') + cfg.row(x).map(function (c) { return '<td>' + c + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>' +
         (cfg.bulk ? '<div class="adm-bar adm-bulk-bar" id="bulkBar" hidden><span class="adm-bulk-n" id="bulkN"></span><button class="btn ghost sm" id="bulkAll"></button><button class="btn ghost sm" id="bulkNone">Снять выбор</button><button class="btn sm" id="bulkDel"></button></div>' : '')
         : '<div class="empty"><h3>Пока пусто</h3><a class="btn ghost" href="#/admin?s=' + cfg.key + '&id=new">' + esc(cfg.addLabel) + '</a></div>');
-    var cs = $('#cSearch'); if (cs) cs.addEventListener('change', function () { location.hash = '#/admin?s=' + cfg.key + '&q=' + encodeURIComponent(cs.value); });
+    var cs = $('#cSearch'); if (cs) cs.addEventListener('change', function () { window.ALB_NAV.go('#/admin?s=' + cfg.key + '&q=' + encodeURIComponent(cs.value)); });
     if (cfg.bulk && list.length) bindBulk(m, cfg, list, q);
   }
   /* Выбор нескольких строк галочками и удаление выбранных (сейчас — в «Товарах») */
@@ -902,7 +902,7 @@
       (list.length ? '<div class="table-wrap adm-table"><table class="sizes"><thead><tr><th>Имя</th><th>Телефон</th><th>Почта</th><th>Заказов</th><th>Сумма</th><th>Бонусы</th></tr></thead><tbody>' +
         list.map(function (x) { return '<tr data-href="#/admin?s=customers&id=' + esc(x.u.id) + '"><td>' + esc(x.u.firstName + ' ' + x.u.lastName) + '</td><td>' + esc(A().fmtPhone(x.u.phone)) + '</td><td>' + esc(x.u.email) + '</td><td class="num">' + x.n + '</td><td class="num">' + fmt(x.sum) + '</td><td class="num">' + (x.u.bonus || 0) + '</td></tr>'; }).join('') + '</tbody></table></div>'
         : '<div class="empty"><h3>Покупателей пока нет</h3><p>Они появятся после регистрации на сайте.</p></div>');
-    $('#uSearch').addEventListener('change', function (e) { location.hash = '#/admin?s=customers&q=' + encodeURIComponent(e.target.value); });
+    $('#uSearch').addEventListener('change', function (e) { window.ALB_NAV.go('#/admin?s=customers&q=' + encodeURIComponent(e.target.value)); });
   }
 
   /* Ночные резервные копии: когда была последняя, размер, ушла ли копия в Selectel S3 */
@@ -1066,7 +1066,7 @@
   /* ================= Оплата, касса, доставка =================
      Карточки вместо голой формы: у способа оплаты — переключатель и превью «как увидит покупатель»,
      у ЮKassa — статус подключения, у доставки — карточка на каждый способ с понятными полями. */
-  function payIc(n) { return '<img src="img/benefits/' + n + '.webp?v=13.31.0" alt="" width="52" height="52" decoding="async">'; }
+  function payIc(n) { return '<img src="img/benefits/' + n + '.webp?v=13.32.0" alt="" width="52" height="52" decoding="async">'; }
   var PAY_IC = { card: payIc('payment'), cash: payIc('cash'), truck: payIc('delivery'), pin: payIc('pin') };
   function switchHtml(id, on, label) {
     return '<label class="pm-switch"><input type="checkbox" id="' + id + '"' + (on ? ' checked' : '') + '><span class="pm-track" aria-hidden="true"></span><span class="sr">' + esc(label) + '</span></label>';
@@ -1390,7 +1390,7 @@
       var s = clone(DATA.settings); s.adminPathHash = A().hashPath(slug);
       try {
         await A().API.adminSave('settings', s);
-        var link = location.href.split('#')[0] + '#/' + slug;
+        var link = location.origin + '/' + slug;
         await afterSave('Адрес входа сохранён', '#/admin?s=settings');
         var out = $('#admPathOut'); if (out) out.innerHTML = '<p style="margin-top:12px;font-size:14px">Ваш адрес входа: <b class="copyable">' + esc(link) + '</b><br><span class="muted" style="font-size:14px">Сохраните его в закладки — он нигде больше не показывается. Восстановить его по данным сайта нельзя, только задать новый.</span></p>';
       } catch (e) { toast(A().errMsg(e), true); }
@@ -1895,12 +1895,12 @@
       var m = readForm(box, defs, {});
       if (!m.host || !m.user) { $('#mlErr').textContent = 'Укажите сервер и логин'; return; }
       if (!m.fromEmail) m.fromEmail = m.user;
-      try { await A().API.adminMailSave(m); toast('Настройки почты сохранены. Проверьте их: «Текст письма» → «Отправить пример».'); location.hash = '#/admin?s=notify&tab=mail&t=' + Date.now(); } catch (e) { $('#mlErr').textContent = A().errMsg(e); }
+      try { await A().API.adminMailSave(m); toast('Настройки почты сохранены. Проверьте их: «Текст письма» → «Отправить пример».'); window.ALB_NAV.go('#/admin?s=notify&tab=mail&t=' + Date.now()); } catch (e) { $('#mlErr').textContent = A().errMsg(e); }
     });
   }
 
   /* Клик по строке таблицы */
-  document.addEventListener('click', function (e) { if (e.target.closest('.adm-pick')) return; var tr = e.target.closest('tr[data-href]'); if (tr) location.hash = tr.getAttribute('data-href'); });
+  document.addEventListener('click', function (e) { if (e.target.closest('.adm-pick')) return; var tr = e.target.closest('tr[data-href]'); if (tr) window.ALB_NAV.go(tr.getAttribute('data-href')); });
 
   window.Admin = { render: render };
 })();

@@ -99,7 +99,6 @@
   /* ---------- Каркас ---------- */
   function renderShell() {
     var s = D.settings;
-    document.title = s.storeName + (s.tagline ? ' — ' + s.tagline : '');
     root.innerHTML =
       (s.announcement ? '<div class="topbar"><div class="wrap">' + esc(s.announcement) + '</div></div>' : '') +
       '<header class="header"><div class="wrap">' +
@@ -265,23 +264,62 @@
   function priceHtml(pr) { return '<span class="price">' + (pr.oldPrice ? '<span class="now sale">' + fmt(pr.price) + '</span><s>' + fmt(pr.oldPrice) + '</s>' : '<span class="now">' + fmt(pr.price) + '</span>') + '</span>'; }
 
   /* ---------- Маршрутизация ---------- */
+  /* Адреса страниц — обычные: /catalog, /product/palto, /page/delivery (так их видит и индексирует Яндекс).
+     Внутри кода маршрут по-прежнему записывается как '#/catalog': ссылки href="#/…" перехватываются
+     и открываются без перезагрузки, а старые адреса вида /#/order/… (из писем и закладок) сами
+     превращаются в новые. */
+  function curRoute() { return '#' + location.pathname + location.search; }
+  function toPath(h) { h = String(h || ''); return h.indexOf('#/') === 0 ? h.slice(1) : h; }
+  function navTo(h, replace) {
+    var u = toPath(h) || '/';
+    if (!replace && u === location.pathname + location.search) { route(); return; }
+    try { history[replace ? 'replaceState' : 'pushState'](null, '', u); } catch (e) { location.href = u; return; }
+    route();
+  }
+  function fromOldHash() {
+    if (!/^#\//.test(location.hash)) return false;
+    try { history.replaceState(null, '', location.hash.slice(1)); return true; } catch (e) { return false; }
+  }
+  fromOldHash();
+  window.ALB_NAV = { go: navTo, cur: curRoute, path: toPath };
   function parseHash() {
-    var h = location.hash.replace(/^#\/?/, '');
+    var h = curRoute().replace(/^#\/?/, '');
     var qi = h.indexOf('?'), path = qi === -1 ? h : h.slice(0, qi), q = {};
     var dec = function (x) { try { return decodeURIComponent(x); } catch (e) { return x; } };
     if (qi !== -1) h.slice(qi + 1).split('&').forEach(function (kv) { var p = kv.split('='); if (p[0]) q[dec(p[0])] = dec((p[1] || '').replace(/\+/g, ' ')); });
     return { parts: path.split('/').filter(Boolean), q: q };
   }
+  /* Заголовок вкладки и адрес страницы для поисковиков — те же, что отдаёт сервер (lib/seo.js) */
+  function pageMeta(name, p, q) {
+    var s = D.settings, store = s.storeName || 'ALBAKOV', t = store + ' — интернет-магазин одежды из Санкт-Петербурга', canon = location.pathname;
+    if (name === 'catalog') {
+      var c = q.cat && D.categories.find(function (x) { return x.slug === q.cat; });
+      t = c ? c.name + ' — купить в интернет-магазине ' + store : 'Каталог одежды — интернет-магазин ' + store;
+      canon = c ? '/catalog?cat=' + encodeURIComponent(c.slug) : '/catalog';
+    } else if (name === 'product') {
+      var pr = productBySlug(p[1]);
+      if (pr) t = pr.name + ' — купить за ' + fmt(priceOf(pr).price) + ' в интернет-магазине ' + store;
+    } else if (name === 'page') {
+      var pg = D.pages.find(function (x) { return x.slug === p[1]; });
+      if (pg) t = pg.slug === 'about' ? 'О бренде ' + store + ' — одежда из Санкт-Петербурга' : pg.title + ' — ' + store;
+    } else if (name === 'sale') t = 'Акции и скидки — ' + store;
+    else if (name === 'sizes') t = 'Таблица размеров — ' + store;
+    else if (name) t = store + (s.tagline ? ' — ' + s.tagline : '');
+    document.title = t;
+    var l = document.querySelector('link[rel="canonical"]');
+    if (l && ['', 'catalog', 'product', 'page', 'sale', 'sizes'].indexOf(name) !== -1) l.href = location.origin + canon;
+  }
   function route() {
     closePanels();
-    if (/^#\/(checkout|admin)/.test(location.hash)) hideBonusNotice();
+    if (/^#\/(checkout|admin)/.test(curRoute())) hideBonusNotice();
     var r = parseHash(), v = $('#view'), p = r.parts;
-    $$('.nav a').forEach(function (a) { a.classList.toggle('active', a.getAttribute('href') === location.hash); });
+    $$('.nav a').forEach(function (a) { a.classList.toggle('active', a.getAttribute('href') === curRoute()); });
     var name = p[0] || '';
     var map = { '': home, catalog: catalog, product: product, sale: sale, sizes: sizes, cart: cartPage, checkout: checkout, account: account, order: orderPage, page: textPage };
     var fn = map.hasOwnProperty(name) ? map[name] : isAdminRoute(name) ? adminPage : notFound;
     if ((name === '' || name === 'catalog' || name === 'sale') && gClosed(curGender())) fn = soonPage;
     fn(v, p, r.q);
+    pageMeta(name, p, r.q);
     document.body.classList.toggle('hero-under', !!$('#view > .slider:first-child'));
     var fab = $('#fab'); if (fab) { fab.hidden = fn === adminPage || (name === 'account' && r.q.tab === 'support'); fabSet(false); }
     syncHeaderH();
@@ -334,7 +372,7 @@
     var h = D.settings.adminPathHash;
     return h ? hashPath(name) === h : name === 'admin';
   }
-  function go(h) { if (location.hash === h) route(); else location.hash = h; }
+  function go(h) { navTo(h); }
 
 
   /* ---------- Слайдер на первом экране ---------- */
@@ -494,7 +532,7 @@
     var cards = h.benefits.map(function (b, i) {
       var ic = benefitIcon(b);
       return '<div class="benefit' + (ic ? '' : ' no-ico') + (b.link ? ' has-link' : '') + '" style="--i:' + i + (i === nb - 1 && nb >= 5 ? lastSpan : '') + (ic ? ';--glow:' + BENEFIT_ICONS[ic] : '') + '">' +
-        (ic ? '<div class="benefit-ico"><img src="img/benefits/' + ic + '.webp?v=13.31.0" alt="" width="160" height="160" loading="lazy" decoding="async"></div>' : '') +
+        (ic ? '<div class="benefit-ico"><img src="img/benefits/' + ic + '.webp?v=13.32.0" alt="" width="160" height="160" loading="lazy" decoding="async"></div>' : '') +
         '<div class="benefit-body"><h3>' + glue(b.title) + '</h3>' + (b.text ? '<p>' + glue(b.text) + '</p>' : '') +
         (b.link ? '<a class="benefit-more" href="' + esc(b.link) + '">' + esc(b.linkText || 'Подробнее') + '<span aria-hidden="true">→</span></a>' : '') + '</div></div>';
     }).join('');
@@ -711,7 +749,7 @@
       if (st.q) qs.push('q=' + encodeURIComponent(st.q));
       var h = '#/catalog' + (qs.length ? '?' + qs.join('&') : '');
       if (full) { go(h); return; }
-      try { history.replaceState(null, '', h); } catch (e) {}
+      try { history.replaceState(null, '', toPath(h)); } catch (e) {}
       draw();
     }
     function draw() {
@@ -863,7 +901,7 @@
       var b = e.target.closest('[data-color]'); if (!b) return;
       var next = colors.find(function (c) { return c.id === b.getAttribute('data-color'); }); if (!next || next === col) return;
       col = next; qty = 1; $('#qty').textContent = 1; drawGallery(); drawOptions();
-      try { history.replaceState(null, '', '#/product/' + p.slug + '?color=' + encodeURIComponent(col.id)); } catch (ex) {}
+      try { history.replaceState(null, '', '/product/' + p.slug + '?color=' + encodeURIComponent(col.id)); } catch (ex) {}
     });
     $('#sizeChips').addEventListener('click', function (e) { var b = e.target.closest('[data-size]'); if (!b || b.disabled) return; sel = b.getAttribute('data-size'); $$('#sizeChips .chip').forEach(function (c) { c.classList.toggle('on', c === b); }); note(); });
     $$('[data-q]').forEach(function (b) { b.addEventListener('click', function () { var s = sizeOf(); var max = s ? s.stock : 99; qty = Math.max(1, Math.min(max, qty + Number(b.getAttribute('data-q')))); $('#qty').textContent = qty; }); });
@@ -999,7 +1037,7 @@
       '<p class="pvz-hint">Выберите свой населённый пункт из списка — область подставится сама. Например, Мурино и Кудрово — это Ленинградская область, а не Санкт-Петербург.</p></div>' +
       '<div class="pvz-pick" id="pvzPick" hidden></div></div>';
   }
-  function optIc(n) { return '<span class="opt-ic"><img src="img/benefits/' + n + '.webp?v=13.31.0" alt="" width="48" height="48" decoding="async"></span>'; }
+  function optIc(n) { return '<span class="opt-ic"><img src="img/benefits/' + n + '.webp?v=13.32.0" alt="" width="48" height="48" decoding="async"></span>'; }
   function coStep(n, id, title, hint, body) {
     return '<section class="cstep" id="cs-' + id + '"><header class="cstep-head"><span class="cstep-n" aria-hidden="true"><i>' + n + '</i><svg viewBox="0 0 24 24"><path d="m6 12.5 4 4 8-9"/></svg></span>' +
       '<div><h3>' + title + '</h3><p>' + hint + '</p></div></header><div class="cstep-body">' + body + '</div></section>';
@@ -1822,7 +1860,7 @@
   function aboutPage(v, p) {
     var d = aboutParse(fillDoc(p.body)), s = D.settings || {}, b = s.brand || {};
     var mark = b.mark && b.mark.src ? b.mark.src : 'img/logo-mark.png';
-    var ic = function (n, size) { return '<img src="img/benefits/' + n + '.webp?v=13.31.0" alt="" width="' + size + '" height="' + size + '" loading="lazy" decoding="async">'; };
+    var ic = function (n, size) { return '<img src="img/benefits/' + n + '.webp?v=13.32.0" alt="" width="' + size + '" height="' + size + '" loading="lazy" decoding="async">'; };
     var title = d.title || s.storeName || p.title;
     var motto = d.motto.length ? d.motto : String(s.tagline || '').split(/\.\s*/).filter(Boolean);
     // главы истории и опоры: подряд идущие разделы с «своей» иконкой собираются в одну сетку карточек
@@ -1955,7 +1993,7 @@
     // нет вступления — первый абзац первого раздела поднимаем в шапку страницы
     var f = d.sections[0];
     if (!d.lead.length && f && f.blocks[0] && f.blocks[0].kind === 'p') d.lead.push(f.blocks.shift().items[0]);
-    var ic = function (n, size) { return n ? '<img src="img/benefits/' + n + '.webp?v=13.31.0" alt="" width="' + size + '" height="' + size + '" loading="lazy" decoding="async">' : ''; };
+    var ic = function (n, size) { return n ? '<img src="img/benefits/' + n + '.webp?v=13.32.0" alt="" width="' + size + '" height="' + size + '" loading="lazy" decoding="async">' : ''; };
     var heroIc = infoIcon(p.title) || infoIcon(p.slug === 'returns' ? 'возврат' : p.slug === 'delivery' ? 'доставка' : '') || 'quality';
     var secs = d.sections.map(function (sec, si) {
       var sIc = infoIcon(sec.title);
@@ -1994,7 +2032,7 @@
   function aboutContacts() {
     var c = (D.settings && D.settings.contacts) || {};
     var tel = String(c.phone || '').replace(/[^\d+]/g, '');
-    var ic = function (n) { return '<span class="ac-ico"><img src="img/benefits/' + n + '.webp?v=13.31.0" alt="" width="120" height="120" loading="lazy" decoding="async"></span>'; };
+    var ic = function (n) { return '<span class="ac-ico"><img src="img/benefits/' + n + '.webp?v=13.32.0" alt="" width="120" height="120" loading="lazy" decoding="async"></span>'; };
     var arrow = '<span class="ac-go" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>';
     var copy = function (v, what) { return '<button class="ac-copy" type="button" data-copy="' + esc(v) + '" data-what="' + esc(what) + '" aria-label="Скопировать"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg><i>Скопировать</i></button>'; };
     var card = function (cls, glow, href, icon, label, value, extra, i) {
@@ -2122,7 +2160,12 @@
       if (gb) { var g = gb.getAttribute('data-gender'); setGender(curGender() === g ? 'all' : g); if (gb.closest('.drawer')) closePanels(); return; }
       var pm = e.target.closest('[data-page-modal]');
       if (pm) { var pg = D.pages.find(function (x) { return x.slug === pm.getAttribute('data-page-modal'); }); if (pg) { e.preventDefault(); openModal('<h3 class="serif" style="font-size:34px;margin-bottom:18px">' + esc(pg.title) + '</h3><div class="prose" style="padding:0;font-size:15px">' + md(fillDoc(pg.body)) + '</div>'); return; } }
-      var link = e.target.closest('a[href^="#/"]'); if (link && link.getAttribute('href') === location.hash) { e.preventDefault(); route(); }
+      // Ссылки внутри магазина открываем без перезагрузки страницы (Ctrl/⌘ + клик — как обычно, в новой вкладке)
+      var link = e.target.closest('a[href]');
+      if (link && !e.defaultPrevented && e.button === 0 && !(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) && !link.target && !link.hasAttribute('download')) {
+        var href = link.getAttribute('href');
+        if (/^#\//.test(href) || (/^\/(?!\/)/.test(href) && !/^\/(api|uploads|img|css|js|fonts)\//.test(href) && !/\.[a-z0-9]{2,5}($|\?)/i.test(href))) { e.preventDefault(); navTo(href); }
+      }
     });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closePanels(); });
     document.addEventListener('cart:change', function () { updateCartCount(); if ($('#cartDrawer.open')) renderCartDrawer(); if (cartPageDraw && parseHash().parts[0] === 'cart') cartPageDraw(); });
@@ -2143,7 +2186,9 @@
       try { navigator.clipboard.writeText(t).then(done, function () { toast('Трек-номер: ' + t); }); } catch (ex) { toast('Трек-номер: ' + t); }
     });
     initTilt();
-    window.addEventListener('hashchange', route);
+    window.addEventListener('popstate', route);
+    // кто-то сменил адрес через #/… (старый код, ссылка без перехвата) — переводим в обычный адрес
+    window.addEventListener('hashchange', function () { if (fromOldHash()) route(); });
     route();
     setTimeout(showBonusNews, 2300); // после заставки
     // Первый заход на главную: предложить выбрать раздел
@@ -2154,7 +2199,7 @@
   /* Сообщение о cookie: один раз на устройстве. Сайт использует только необходимые cookie, без аналитики и рекламы */
   function cookieNote() {
     var k = 'albakov:cookies'; try { if (localStorage.getItem(k)) return; } catch (e) { return; }
-    if (/^#\/admin/.test(location.hash)) return;
+    if (/^#\/admin/.test(curRoute())) return;
     var el = document.createElement('div'); el.className = 'cookie-note'; el.setAttribute('role', 'status');
     el.innerHTML = '<p>Используем только необходимые cookie — для входа и корзины. <a href="#/page/privacy" data-page-modal="privacy">Подробнее</a></p><button class="btn sm" type="button">Понятно</button>';
     document.body.appendChild(el);

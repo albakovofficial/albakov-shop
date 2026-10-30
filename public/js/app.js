@@ -137,6 +137,7 @@
     if (mode === 'both' || mode === 'mark') out += '<img class="brand-mark" src="' + esc(b.mark.src) + '" alt="" width="' + (b.mark.w || 1) + '" height="' + (b.mark.h || 1) + '">';
     if (mode === 'both' || mode === 'word') out += '<img class="brand-word" src="' + esc(b.word.src) + '" alt="" width="' + (b.word.w || 1) + '" height="' + (b.word.h || 1) + '" style="--r:' + ((b.word.w || 1) / (b.word.h || 1)).toFixed(3) + '">';
     if (mode === 'text') out += '<span class="brand-text">' + esc(s.storeName) + '</span>';
+    if (b.trademark !== false && mode !== 'mark') out += '<sup class="brand-tm" title="Зарегистрированный товарный знак">®</sup>';
     return '<span class="brand ' + (cls || '') + ' show-' + mode + '" style="--bs:' + ((b.scale || 100) / 100) + '">' + out + '</span>';
   }
   /* Знак бренда — водяным знаком в подвале */
@@ -184,7 +185,7 @@
         (c.email ? '<li><a href="mailto:' + esc(c.email) + '" class="copyable">' + esc(c.email) + '</a></li>' : '') +
         (c.address ? '<li class="muted">' + esc(c.address) + '</li>' : '') +
         (c.hours ? '<li class="muted">' + esc(c.hours) + '</li>' : '') + '</ul>' + legalHtml(s.legal) + '</div>' +
-      '</div><div class="wrap footer-bottom"><span>© ' + new Date().getFullYear() + ' ' + esc(s.storeName) + '. Все права защищены</span>' +
+      '</div><div class="wrap footer-bottom"><span>© ' + new Date().getFullYear() + ' ' + esc(s.storeName) + ((s.brand || {}).trademark !== false ? '®. Все права защищены. ' + esc(s.storeName) + ' — зарегистрированный товарный знак' : '. Все права защищены') + '</span>' +
       '<span style="display:flex;gap:18px;flex-wrap:wrap">' + D.pages.filter(function (p) { return p.inFooter && p.group === 'legal'; }).map(function (p) { return '<a href="#/page/' + esc(p.slug) + '">' + esc(p.title) + '</a>'; }).join('') + (API.isAdmin ? '<a href="#/admin">Управление</a>' : '') + '</span></div></footer>';
   }
 

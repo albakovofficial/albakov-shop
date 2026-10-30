@@ -109,6 +109,7 @@ p { margin: 0; }
 .brand-word { width: calc(var(--mh) * .42 * var(--r)); height: auto; max-width: 100%; min-width: 0; flex: 0 1 auto; }
 .brand.show-word { --mh: calc(30px * var(--bs, 1)); }
 .brand.show-word .brand-word { width: calc(var(--mh) * .56 * var(--r)); }
+.brand-tm { align-self: flex-start; margin-left: calc(var(--mh) * -.28); font: 400 calc(var(--mh) * .34)/1 var(--sans, -apple-system, 'Segoe UI', sans-serif); letter-spacing: 0; opacity: .85; position: relative; top: -.15em; }
 .brand-text { font-family: var(--serif); font-size: calc(var(--mh) * .85); letter-spacing: .32em; padding-left: .32em; font-weight: 500; white-space: nowrap; }
 .brand-mob { display: none; --mh: calc(28px * var(--bs, 1)); }
 .brand-mob.show-word { --mh: calc(24px * var(--bs, 1)); }

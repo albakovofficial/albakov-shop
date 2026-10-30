@@ -1613,6 +1613,7 @@
           fieldHtml({ k: 'desktop', label: 'На компьютере показывать', type: 'select', options: MODES }, b) +
           fieldHtml({ k: 'mobile', label: 'На телефоне показывать', type: 'select', options: MODES }, b) +
         '</div>' +
+        '<label class="check"><input type="checkbox" id="lgTrademark"' + (b.trademark !== false ? ' checked' : '') + '> <span>Знак ® рядом с логотипом и пометка «зарегистрированный товарный знак» в подвале</span></label>' +
         '<label class="check"><input type="checkbox" id="lgFooterMark"' + (b.footerMark !== false ? ' checked' : '') + '> <span>Водяной знак в подвале сайта — крупно и едва заметно, справа. Работает, если загружен знак.</span></label>' +
         '</div>' +
         '<div class="adm-logo-preview"><span class="eyebrow">Так выглядит шапка</span>' +
@@ -1628,6 +1629,7 @@
       s.storeName = $('#f-storeName', m).value.trim() || s.storeName;
       b.desktop = $('#f-desktop', m).value; b.mobile = $('#f-mobile', m).value; b.scale = Number($('#lgScale', m).value);
       b.footerMark = $('#lgFooterMark', m).checked;
+      b.trademark = $('#lgTrademark', m).checked;
     }
     function draw() {
       readState();
@@ -1647,7 +1649,7 @@
     draw();
     m.addEventListener('input', function (e) { if (e.target.id === 'lgScale' || e.target.id === 'f-storeName') draw(); });
     m.addEventListener('change', async function (e) {
-      if (e.target.matches('#f-desktop,#f-mobile')) { draw(); return; }
+      if (e.target.matches('#f-desktop,#f-mobile,#lgTrademark')) { draw(); return; }
       var k = e.target.getAttribute('data-up'); if (!k || !e.target.files[0]) return;
       var slotEl = $('[data-slot="' + k + '"]', m); slotEl.classList.add('busy');
       try {

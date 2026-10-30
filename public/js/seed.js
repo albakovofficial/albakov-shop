@@ -10,7 +10,8 @@
         desktop: 'word',
         mobile: 'word',
         scale: 100,
-        footerMark: true
+        footerMark: true,
+        trademark: true
       },
       tagline: 'Одежда спокойной роскоши',
       announcement: 'Бесплатная доставка по России от 15 000 ₽ · Примерка перед оплатой',

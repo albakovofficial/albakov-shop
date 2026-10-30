@@ -79,6 +79,9 @@
     }
     if (!st.badges && seed && seed.settings.badges) st.badges = JSON.parse(JSON.stringify(seed.settings.badges));
     if (!st.bonus && seed && seed.settings.bonus) st.bonus = JSON.parse(JSON.stringify(seed.settings.bonus));
+    // Бонус за онлайн-оплату и обмен размера (появились в 13.34): по умолчанию включены
+    if (st.bonus && st.bonus.onlineExtra === undefined) st.bonus.onlineExtra = 5;
+    if (!st.exchange) st.exchange = { enabled: true, days: 14, free: true };
     // Блок о бонусах на главной (появился в ALBAKOV9)
     if (st.home && st.home.showBonus === undefined && seed && seed.settings.home) ['showBonus', 'bonusEyebrow', 'bonusTitle', 'bonusText'].forEach(function (k) { st.home[k] = seed.settings.home[k]; });
     // Кнопка связи на всех страницах (13.11): включена по умолчанию
@@ -262,15 +265,20 @@
     var goods = Math.max(0, out.subtotal - out.promoDiscount);
     out.bonusUsed = bc.enabled && opts.useBonus ? Math.min(bal, out.total) : 0;
     out.total -= out.bonusUsed;
-    out.bonusEarn = bonusFor(goods - Math.min(out.bonusUsed, goods), data.settings);
-    out.bonus = { enabled: bc.enabled, percent: bc.earn ? bc.percent : 0, balance: bal };
+    var paidGoods = goods - Math.min(out.bonusUsed, goods);
+    out.bonusEarn = bonusFor(paidGoods, data.settings);
+    // За онлайн-оплату — дополнительный процент бонусами (покупатель забирает заказ почти всегда)
+    out.bonusOnline = bc.enabled && bc.onlineExtra > 0 && opts.payment === 'online' ? Math.floor(paidGoods * bc.onlineExtra / 100) : 0;
+    out.bonusEarn += out.bonusOnline;
+    out.bonus = { enabled: bc.enabled, percent: bc.earn ? bc.percent : 0, onlineExtra: bc.enabled ? bc.onlineExtra : 0, balance: bal };
     return out;
   }
 
   /* ---------- Бонусная программа ---------- */
   function bonusConf(settings) {
     var b = (settings && settings.bonus) || {}, pct = Math.max(0, Math.min(100, Number(b.percent) || 0));
-    return { enabled: !!b.enabled, earn: !!b.enabled && pct > 0, percent: pct, creditOn: b.creditOn === 'done' ? 'done' : 'paid' };
+    var extra = Math.max(0, Math.min(50, Number(b.onlineExtra) || 0));
+    return { enabled: !!b.enabled, earn: !!b.enabled && pct > 0, percent: pct, onlineExtra: extra, creditOn: b.creditOn === 'done' ? 'done' : 'paid' };
   }
   // Сколько бонусов дадут за покупку на эту сумму
   function bonusFor(amount, settings) {

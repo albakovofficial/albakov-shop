@@ -160,7 +160,7 @@ function cdekOrderBody(o, pkg) {
     to_location: dr ? { code: Number(dr.cityCode), address: dr.address } : undefined,
     recipient: { name: `${o.customer.lastName} ${o.customer.firstName}`.trim(), email: o.customer.email, phones: [{ number: '+' + o.customer.phone }] },
     packages: [{ number: '1', weight: pkg.weight, length: pkg.length, width: pkg.width, height: pkg.height, comment: 'Одежда',
-      items: items.map((x) => ({ name: `${x.i.name}${x.i.color ? ', ' + x.i.color : ''}, ${x.i.size}`.slice(0, 255), ware_key: `${x.i.productId}-${x.i.size}${x.suffix}`.slice(0, 50), payment: { value: x.payK / 100 }, cost: x.i.price, weight: unitWOf(x), amount: x.qty })) }],
+      items: items.map((x) => ({ name: `${x.i.name}${x.i.color ? ', ' + x.i.color : ''}, ${x.i.size}`.slice(0, 255), ware_key: `${x.i.productId}-${x.i.size}${x.suffix}`.slice(0, 50), payment: { value: x.payK / 100 }, cost: x.i.exchangePrice || x.i.price, weight: unitWOf(x), amount: x.qty })) }],
     delivery_recipient_cost: !paid && net.delivK > 0 && !o.deliveryRefunded ? { value: net.delivK / 100 } : undefined,
     services: services.length ? services : undefined,
     comment: o.comment ? o.comment.slice(0, 255) : undefined
@@ -177,7 +177,7 @@ async function applyCdek(o, info) {
     if (['new', 'processing'].includes(o.status)) o.status = 'shipped';
     mail = true;
   }
-  if (o.cdek.status === 'DELIVERED' && o.status !== 'done' && o.status !== 'returned') o.status = 'done';
+  if (o.cdek.status === 'DELIVERED' && o.status !== 'done' && o.status !== 'returned') { o.status = 'done'; o.doneAt = o.doneAt || info.statusAt || new Date().toISOString(); }
   // при получении покупатель заплатил СДЭК — отмечаем оплату (деньги придут от СДЭК по договору)
   if (o.cdek.status === 'DELIVERED' && o.payment.method === 'cod' && o.payment.status === 'pending') { o.payment.status = 'paid'; o.payment.collectedBy = 'cdek'; }
   syncBonus(o); save();
@@ -247,7 +247,7 @@ function hitIds() {
   if (home.hitsAuto === false) return [];
   const since = Date.now() - HITS_DAYS * 864e5, sold = new Map();
   for (const o of db.orders) {
-    if (o.test || o.status === 'canceled' || o.status === 'returned' || Date.parse(o.createdAt) < since) continue;
+    if (o.test || o.status === 'canceled' || o.status === 'returned' || (o.payment && o.payment.method === 'exchange') || Date.parse(o.createdAt) < since) continue;
     if (o.payment && o.payment.method === 'online' && o.payment.status !== 'paid') continue;
     for (const i of o.items || []) sold.set(i.productId, (sold.get(i.productId) || 0) + (Number(i.qty) || 0));
   }
@@ -444,6 +444,8 @@ async function refundOrder(o, b) {
     if (b.restock) { const st = sizeEntry(it.productId, it.colorId, it.size); if (st) st.stock += x.qty; }
   });
   if (plan.delivery) o.deliveryRefunded = true;
+  // заявка покупателя на возврат денег закрывается вместе с возвратом
+  (o.requests || []).forEach((q) => { if (q.kind === 'refund' && (q.status === 'new' || q.status === 'received')) { q.status = 'done'; q.refundId = r.id; } });
   o.refunded = refundedK(o) / 100;
   // Полный возврат: заказ становится «Возврат», чтобы его нельзя было спутать с действующим
   if (refundedK(o) >= Math.round(o.total * 100)) { o.payment.status = 'refunded'; if (o.status !== 'returned') { o.statusBefore = o.status; o.status = 'returned'; } }
@@ -568,7 +570,7 @@ function quote(req, b, extra) {
     code: b.code ? String(b.code).slice(0, 40) : '', deliveryId: b.deliveryId, registered: !!user,
     hasOrders: !!user && db.orders.some((o) => o.userId === user.id && o.status !== 'canceled'),
     usedByCustomer: b.code ? usedByCustomer(b.code, user, email, phone) : false,
-    bonusBalance: user ? user.bonus || 0 : 0, useBonus: !!(user && b.useBonus),
+    bonusBalance: user ? user.bonus || 0 : 0, useBonus: !!(user && b.useBonus), payment: b.payment === 'online' ? 'online' : 'cod',
     cdekAuto: !!(extra && extra.cdekAuto), deliveryPrice: extra ? extra.deliveryPrice : undefined, deliveryDays: extra ? extra.deliveryDays : undefined
   });
 }
@@ -584,7 +586,7 @@ async function placeOrder(req, b) {
   if ((method === 'online' && !pay.online) || (method === 'cod' && !pay.cod)) fail(400, 'Этот способ оплаты недоступен');
   // Без подключённой ЮKassa заказ «с онлайн-оплатой» повис бы неоплаченным — не принимаем такой
   if (method === 'online' && !payReady()) fail(400, 'Онлайн-оплата пока не подключена. Выберите оплату при получении.');
-  const q = await quoteFull(req, { lines: b.lines, code: b.code, deliveryId: b.deliveryId, contact: customer, useBonus: b.useBonus, cityCode: b.cityCode, pvzType: b.pvzType }, true);
+  const q = await quoteFull(req, { lines: b.lines, code: b.code, deliveryId: b.deliveryId, contact: customer, useBonus: b.useBonus, cityCode: b.cityCode, pvzType: b.pvzType, payment: method }, true);
   if (!q.lines.length) fail(400, 'Корзина пуста');
   if (!q.delivery) fail(400, 'Выберите способ доставки');
   const bad = q.lines.find((l) => l.problem); if (bad) fail(409, `${bad.name}: ${bad.problem.toLowerCase()}`);
@@ -680,7 +682,7 @@ function sendOrderMails(order) {
   const m = order.payment.method;
   const base = {
     store: db.settings.storeName, logo: brandLogo(), order: Object.assign({}, order, { items: order.items.map((i) => Object.assign({}, i, { image: absUrl(i.image) })) }),
-    money: Pricing.format, payLabel: m === 'bonus' ? 'оплачено бонусами' : m === 'online' ? (order.payment.status === 'paid' ? 'оплачено онлайн' : 'онлайн') : (pay.codLabel || 'при получении'),
+    money: Pricing.format, payLabel: m === 'exchange' ? 'обмен — бесплатно' : m === 'bonus' ? 'оплачено бонусами' : m === 'online' ? (order.payment.status === 'paid' ? 'оплачено онлайн' : 'онлайн') : (pay.codLabel || 'при получении'),
     contacts: [cs.phone, cs.email].filter(Boolean).join(' · ')
   };
   const jobs = [];
@@ -777,6 +779,131 @@ function supportAdminApi(p, M, body) {
     save(); return { ticket: t };
   }
   fail(404, 'Неизвестный запрос');
+}
+
+/* ---------------- Обмен и возврат по заявке покупателя ----------------
+   Покупатель в карточке заказа выбирает вещь и причину. Если размер не подошёл — предлагаем обмен:
+   новый размер резервируем сразу, а отправляем, когда вещь вернётся к нам и мы её проверим. */
+const REQ_REASONS = { small: 'Маловата', big: 'Великовата', color: 'Не тот цвет', defect: 'Брак', other: 'Передумал' };
+function exchangeCfg() { const e = db.settings.exchange || {}; return { enabled: e.enabled !== false, days: Math.max(1, Math.min(60, Math.round(Number(e.days) || 14))), free: e.free !== false }; }
+const doneAtOf = (o) => o.doneAt || (o.cdek && o.cdek.status === 'DELIVERED' && o.cdek.statusAt) || '';
+const activeRequest = (o) => (o.requests || []).find((r) => r.status === 'new' || r.status === 'received');
+function requestState(o) {
+  const c = exchangeCfg();
+  if (!c.enabled) return { ok: false, why: 'Заявки на обмен и возврат через сайт сейчас не принимаются — напишите нам в поддержку' };
+  if (o.payment && o.payment.method === 'exchange') return { ok: false, why: 'Это заказ-обмен. Если размер снова не подошёл — напишите в поддержку' };
+  if (o.status !== 'done') return { ok: false, why: 'Обменять или вернуть вещь можно после получения заказа' };
+  if (activeRequest(o)) return { ok: false, why: 'По заказу уже есть заявка — мы её обрабатываем' };
+  const until = (Date.parse(doneAtOf(o)) || Date.parse(o.createdAt)) + c.days * 864e5;
+  if (Date.now() > until) return { ok: false, why: 'Срок обмена и возврата — ' + c.days + ' дней после получения — прошёл. Напишите в поддержку, разберёмся' };
+  const can = o.items.map((_, i) => requestableQty(o, i));
+  if (!can.some((n) => n > 0)) return { ok: false, why: 'Все вещи из заказа уже возвращены или обменены' };
+  return { ok: true, until: new Date(until).toISOString(), days: c.days, free: c.free, can };
+}
+// Сколько штук позиции ещё можно вернуть: минус возвращённые деньгами, отправленные возвратом СДЭК и заявки без возврата СДЭК
+function requestableQty(o, idx) {
+  const it = o.items[idx]; if (!it) return 0;
+  const pending = (o.requests || []).filter((r) => r.status !== 'declined' && !r.returnUuid).reduce((s, r) => s + r.lines.filter((l) => l.idx === idx).reduce((a, l) => a + l.qty, 0), 0);
+  return Math.max(0, it.qty - (it.refundedQty || 0) - returnedQty(o, idx) - pending);
+}
+function requestText(o, r) {
+  const what = r.lines.map((l) => `${l.name}${l.color ? ', ' + l.color : ''}, ${l.size}${r.kind === 'exchange' ? ' → ' + l.toSize : ''} (${l.qty} шт.)`).join('; ');
+  return (r.kind === 'exchange' ? 'Заявка на обмен' : 'Заявка на возврат') + ` по заказу № ${o.number}: ${what}. Причина: ${r.reasonLabel}.` +
+    (r.comment ? ` Комментарий: ${r.comment}` : '') + (r.returnNumber ? ` Номер возврата СДЭК: ${r.returnNumber}.` : '');
+}
+function requestTicket(o, r) {
+  const u = o.userId && db.users.find((x) => x.id === o.userId);
+  if (!u) { // заказ без личного кабинета: просто пишем магазину
+    const cs = db.settings.contacts || {}, to = cs.email || mailCfg().fromEmail;
+    if (mailReady() && to) sendMail({ to, subject: `Заявка по заказу № ${o.number}`, text: requestText(o, r) + `\n\n${PUBLIC_URL}/admin?s=orders&id=${o.id}`, html: '<p>' + requestText(o, r).replace(/[<>&]/g, '') + `</p><p><a href="${PUBLIC_URL}/admin?s=orders&id=${o.id}">Открыть заказ</a></p>` }).catch((e) => console.error('Письмо о заявке не отправлено:', e.message));
+    return;
+  }
+  const now = new Date().toISOString();
+  db.ticketSeq = (db.ticketSeq || 1000) + 1;
+  const t = { id: uid('t'), number: String(db.ticketSeq), userId: u.id, name: [u.firstName, u.lastName].filter(Boolean).join(' '), email: u.email, phone: u.phone,
+    topic: 'Возврат и обмен', orderId: o.id, orderNumber: o.number, status: 'open', createdAt: now, updatedAt: now, unreadUser: false, unreadShop: true,
+    messages: [{ id: uid('m'), from: 'user', text: requestText(o, r), at: now }] };
+  db.tickets.push(t); r.ticketId = t.id; supportMail(t, 'shop');
+}
+// Ответ магазина в переписке по заявке (и письмо покупателю)
+function requestReply(r, text) {
+  const t = r.ticketId && db.tickets.find((x) => x.id === r.ticketId); if (!t) return;
+  const now = new Date().toISOString();
+  t.messages.push({ id: uid('m'), from: 'shop', text, at: now }); t.status = 'answered'; t.unreadUser = true; t.unreadShop = false; t.updatedAt = now;
+  supportMail(t, 'customer');
+}
+async function createRequest(o, b) {
+  const st = requestState(o); if (!st.ok) fail(400, st.why);
+  const kind = b.kind === 'refund' ? 'refund' : 'exchange';
+  if (!REQ_REASONS[b.reason]) fail(400, 'Выберите, что не так');
+  const lines = [], need = new Map();
+  for (const x of Array.isArray(b.lines) ? b.lines.slice(0, 50) : []) {
+    const idx = Number(x.idx), it = o.items[idx], q = Math.floor(Number(x.qty) || 0);
+    if (!it || q <= 0) continue;
+    const can = requestableQty(o, idx);
+    if (q > can) fail(400, can ? `«${it.name}»: можно оформить не больше ${can} шт.` : `«${it.name}» уже возвращается`);
+    const line = { idx, qty: q, name: it.name, color: it.color || '', size: it.size };
+    if (kind === 'exchange') {
+      const to = String(x.toSize || '');
+      if (!to || to === it.size) fail(400, 'Выберите размер, на который поменять');
+      const se = sizeEntry(it.productId, it.colorId, to); if (!se) fail(400, `Размера ${to} у этой вещи нет`);
+      const k = it.productId + '|' + it.colorId + '|' + to; need.set(k, (need.get(k) || 0) + q);
+      if (se.stock < need.get(k)) fail(409, `Размера ${to} сейчас нет в наличии — выберите другой или оформите возврат денег`);
+      line.toSize = to;
+    }
+    lines.push(line);
+  }
+  if (!lines.length) fail(400, 'Отметьте вещь, которую хотите ' + (kind === 'exchange' ? 'обменять' : 'вернуть'));
+  if (kind === 'exchange') lines.forEach((l) => { sizeEntry(o.items[l.idx].productId, o.items[l.idx].colorId, l.toSize).stock -= l.qty; }); // резерв нового размера
+  const r = { id: uid('rq'), kind, reason: b.reason, reasonLabel: REQ_REASONS[b.reason], comment: String(b.comment || '').trim().slice(0, 500), lines, status: 'new', createdAt: new Date().toISOString(), free: kind === 'exchange' && exchangeCfg().free };
+  o.requests = o.requests || []; o.requests.push(r); save();
+  // сразу оформляем возврат через СДЭК — покупатель получает номер, который назвать в пункте
+  const pv = o.delivery && (o.delivery.pvz || o.delivery.door);
+  if (cdek.ready() && pv) {
+    try { const ret = await createReturnShip(o, { lines: lines.map((l) => ({ idx: l.idx, qty: l.qty })) }); r.returnUuid = ret.uuid; r.returnNumber = ret.number || ''; if (r.free) ret.free = true; }
+    catch (e) { r.returnError = String(e.message || e).slice(0, 300); console.error('Возврат СДЭК по заявке не создан:', r.returnError); }
+  }
+  requestTicket(o, r); save();
+  return r;
+}
+// Заказ-обмен: новый размер бесплатно, тот же адрес; резерв сделан при заявке
+function createExchangeOrder(o, r) {
+  db.orderSeq = Number(db.orderSeq) || 0;
+  do { db.orderSeq++; } while (db.orders.some((x) => x.number === String(db.orderSeq)));
+  const now = new Date().toISOString();
+  const order = {
+    id: uid('o'), number: String(db.orderSeq), token: crypto.randomBytes(16).toString('hex'), createdAt: now, userId: o.userId || null, customer: Object.assign({}, o.customer), consentAt: o.consentAt || now,
+    items: r.lines.map((l) => { const it = o.items[l.idx]; return Object.assign({}, it, { size: l.toSize, qty: l.qty, price: 0, oldPrice: 0, exchangeFrom: it.size, exchangePrice: it.price }); }),
+    subtotal: 0, saleDiscount: 0, promoCode: '', promoDiscount: 0, delivery: Object.assign({}, o.delivery, { price: 0, free: true }), comment: 'Обмен по заказу № ' + o.number,
+    total: 0, payment: { method: 'exchange', status: 'paid', provider: null }, status: 'new', bonusUsed: 0, bonusEarn: 0, exchangeOf: { id: o.id, number: o.number }
+  };
+  delete order.delivery.tariff;
+  db.orders.push(order);
+  return order;
+}
+function requestAdmin(o, body) {
+  const r = (o.requests || []).find((x) => x.id === body.id); if (!r) fail(404, 'Заявка не найдена');
+  const act = body.action;
+  const unreserve = () => { if (r.kind === 'exchange' && !r.exchangeOrderId && !r.unreserved) { r.lines.forEach((l) => { const s = sizeEntry(o.items[l.idx].productId, o.items[l.idx].colorId, l.toSize); if (s) s.stock += l.qty; }); r.unreserved = true; } };
+  if (act === 'exchange') {
+    if (r.kind !== 'exchange' || r.exchangeOrderId) fail(400, 'Обмен уже отправлен');
+    if (r.status === 'declined') fail(400, 'Заявка отклонена');
+    const n = createExchangeOrder(o, r);
+    // вернувшаяся вещь проверена — снова в продаже
+    r.lines.forEach((l) => { const it = o.items[l.idx], se = sizeEntry(it.productId, it.colorId, it.size); if (se) se.stock += l.qty; });
+    Object.assign(r, { status: 'done', exchangeOrderId: n.id, exchangeNumber: n.number, checkedAt: new Date().toISOString() });
+    requestReply(r, `Вещь пришла, мы её проверили. Отправляем размер ${r.lines.map((l) => l.toSize).join(', ')} — это заказ № ${n.number}, доставка бесплатно. Трек-номер придёт на почту.`);
+    save(); sendOrderMails(n);
+    return { order: orderView(o), exchange: orderView(n) };
+  }
+  if (act === 'received') { if (r.status !== 'new') fail(400, 'Заявка уже обработана'); r.status = 'received'; r.checkedAt = new Date().toISOString(); requestReply(r, 'Вещь пришла и проверена. ' + (r.kind === 'refund' ? 'Возвращаем деньги — обычно они приходят за 1–3 рабочих дня.' : '')); }
+  else if (act === 'done') { r.status = 'done'; }
+  else if (act === 'decline') {
+    if (r.exchangeOrderId) fail(400, 'Обмен уже отправлен — отмените заказ-обмен');
+    unreserve(); r.status = 'declined'; r.declineNote = String(body.note || '').slice(0, 500);
+    requestReply(r, 'Заявку не можем принять' + (r.declineNote ? ': ' + r.declineNote : '.') + ' Если есть вопросы — ответьте здесь.');
+  } else fail(400, 'Неизвестное действие');
+  save(); return { order: orderView(o) };
 }
 
 /* ---------------- Уведомления о поступлении ---------------- */
@@ -889,7 +1016,7 @@ function createUser(res, f, hash, extra) {
 }
 function welcomeInfo() { const b = Pricing.bonusConf(db.settings); return { bonusPercent: b.earn ? b.percent : 0, promo: welcomePromo() }; }
 
-function orderView(o) { const c = Object.assign({}, o); delete c.token; return c; }
+function orderView(o) { const c = Object.assign({}, o); delete c.token; c.requestState = requestState(o); c.doneAt = doneAtOf(o) || undefined; return c; }
 
 /* ---------------- Маршруты API ---------------- */
 async function api(req, res, url, body) {
@@ -987,6 +1114,14 @@ async function api(req, res, url, body) {
   if (p[0] === 'orders') {
     if (!p[1] && M === 'GET') { const u = user(); if (!u) fail(401, 'Войдите в личный кабинет'); return { orders: db.orders.filter((o) => o.userId === u.id).reverse().map(orderView) }; }
     if (!p[1] && M === 'POST') { throttle(req, 'order', 20); return await placeOrder(req, body); }
+    if (p[1] && p[2] === 'request' && M === 'POST') {
+      throttle(req, 'request', 20);
+      const o = db.orders.find((x) => x.id === p[1]); const u = user();
+      const allowed = o && ((u && o.userId === u.id) || safeEqual(String(body.t || ''), o.token));
+      if (!allowed) fail(404, 'Заказ не найден');
+      const r = await createRequest(o, body);
+      return { order: orderView(o), request: r };
+    }
     if (p[1] && M === 'GET') {
       const o = db.orders.find((x) => x.id === p[1]); const u = user();
       const t = url.searchParams.get('t') || '';
@@ -1224,6 +1359,10 @@ async function api(req, res, url, body) {
       }
     }
     // Возврат денег через ЮKassa: dry — только посчитать сумму
+    if (p[1] === 'orders' && p[2] && p[3] === 'request' && M === 'POST') {
+      const o = db.orders.find((x) => x.id === p[2]); if (!o) fail(404, 'Заказ не найден');
+      return requestAdmin(o, body);
+    }
     if (p[1] === 'orders' && p[2] && p[3] === 'refund' && M === 'POST') {
       const o = db.orders.find((x) => x.id === p[2]); if (!o) fail(404, 'Заказ не найден');
       const r = await refundOrder(o, body);
@@ -1237,6 +1376,7 @@ async function api(req, res, url, body) {
         if (body.status === 'canceled' && o.status !== 'canceled') { restock(o); if (pc) pc.used = Math.max(0, (pc.used || 0) - 1); }
         if (body.status !== 'canceled' && o.status === 'canceled' && pc) pc.used = (pc.used || 0) + 1;
         if (o.status === 'canceled' && body.status !== 'canceled') o.items.forEach((i) => { const s = sizeEntry(i.productId, i.colorId, i.size); if (s) s.stock = Math.max(0, s.stock - i.qty); });
+        if (body.status === 'done' && o.status !== 'done') o.doneAt = new Date().toISOString();
         o.status = body.status;
       }
       if (body.paymentStatus && pays.includes(body.paymentStatus)) o.payment.status = body.paymentStatus;

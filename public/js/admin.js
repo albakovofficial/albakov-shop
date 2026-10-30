@@ -10,7 +10,7 @@
 
   var SECTIONS = [
     ['overview', 'Обзор'], ['orders', 'Заказы'], ['support', 'Поддержка'], ['products', 'Товары'], ['categories', 'Категории'], ['sizeCharts', 'Размерные сетки'],
-    ['promotions', 'Акции'], ['promocodes', 'Промокоды'], ['bonus', 'Бонусы'], ['customers', 'Покупатели'], ['notify', 'Сообщить о поступлении'], ['mail', 'Письма'], ['sections', 'Разделы: женщинам / мужчинам'], ['brand', 'Логотип и название'], ['slider', 'Слайдер на главной'], ['home', 'Главная страница'], ['pages', 'Страницы'],
+    ['promotions', 'Акции'], ['promocodes', 'Промокоды'], ['bonus', 'Бонусы'], ['exchange', 'Обмен и возвраты'], ['customers', 'Покупатели'], ['notify', 'Сообщить о поступлении'], ['mail', 'Письма'], ['sections', 'Разделы: женщинам / мужчинам'], ['brand', 'Логотип и название'], ['slider', 'Слайдер на главной'], ['home', 'Главная страница'], ['pages', 'Страницы'],
     ['menu', 'Меню, контакты, соцсети'], ['payment', 'Оплата и доставка'], ['settings', 'Настройки']
   ];
   var TAX = [[1, 'ОСН — общая система'], [2, 'УСН «Доходы»'], [3, 'УСН «Доходы минус расходы»'], [5, 'ЕСХН'], [6, 'Патентная система']];
@@ -193,11 +193,11 @@
     if (ticket !== renderTicket || !document.body.contains(v)) return; // пока грузились данные, открылась другая страница
     var s = q.s || 'overview';
     v.innerHTML = '<div class="adm"><aside class="adm-side"><div class="adm-brand"><span class="eyebrow">Управление</span><b class="serif">' + esc(A().D.settings.storeName) + '</b></div><nav>' +
-      SECTIONS.map(function (x) { return '<a href="#/admin?s=' + x[0] + '"' + (x[0] === s ? ' class="on"' : '') + '>' + x[1] + (x[0] === 'orders' ? newOrdersBadge() : '') + (x[0] === 'support' && DATA.supportNew ? ' <span class="adm-badge">' + DATA.supportNew + '</span>' : '') + (x[0] === 'notify' ? waitBadge() : '') + '</a>'; }).join('') +
+      SECTIONS.map(function (x) { return '<a href="#/admin?s=' + x[0] + '"' + (x[0] === s ? ' class="on"' : '') + '>' + x[1] + (x[0] === 'orders' ? newOrdersBadge() : '') + (x[0] === 'support' && DATA.supportNew ? ' <span class="adm-badge">' + DATA.supportNew + '</span>' : '') + (x[0] === 'notify' ? waitBadge() : '') + (x[0] === 'exchange' ? reqBadge() : '') + '</a>'; }).join('') +
       '</nav><div class="adm-side-foot"><a href="#/" class="muted">← В магазин</a><button class="muted" id="admOut">Выйти</button></div></aside><section class="adm-main" id="admMain"></section></div>';
     $('#admOut').addEventListener('click', async function () { await API.adminLogout(); DATA = null; window.ALB_NAV.go('#/'); await A().refresh(); });
     var main = $('#admMain');
-    var fn = { overview: overview, orders: orders, support: supportSection, products: products, categories: categories, sizeCharts: sizeCharts, promotions: promotions, promocodes: promocodes, bonus: bonusSection, customers: customers, notify: notifySection, mail: mailSection, sections: sectionsSettings, brand: brandSection, slider: sliderSection, home: homeSettings, pages: pages, menu: menuSettings, payment: paymentSettings, settings: generalSettings }[s] || overview;
+    var fn = { overview: overview, orders: orders, support: supportSection, products: products, categories: categories, sizeCharts: sizeCharts, promotions: promotions, promocodes: promocodes, bonus: bonusSection, exchange: exchangeSection, customers: customers, notify: notifySection, mail: mailSection, sections: sectionsSettings, brand: brandSection, slider: sliderSection, home: homeSettings, pages: pages, menu: menuSettings, payment: paymentSettings, settings: generalSettings }[s] || overview;
     fn(main, q);
   }
   function waitBadge() { var n = (DATA.waitlist || []).filter(function (w) { return w.status === 'waiting' || w.status === 'failed'; }).length; return n ? ' <span class="adm-badge muted-badge">' + n + '</span>' : ''; }
@@ -280,6 +280,7 @@
       }).join('') + '</tbody></table></div>';
   }
   function payText(o) {
+    if (o.payment.method === 'exchange') return 'Обмен';
     if (o.payment.method === 'bonus') return 'Бонусами';
     if (o.payment.method === 'cod' && o.payment.status === 'pending') return 'При получении';
     if (o.payment.status === 'paid' && o.refunded) return 'Частичный возврат';
@@ -471,6 +472,56 @@
     // пока посылка в пути — подтягиваем свежий статус при открытии заказа
     if (o.cdek && o.cdek.status !== 'DELIVERED' && !o._synced) { o._synced = true; A().API.adminCdekOrder(o.id, 'POST', 'cdek-sync').then(async function (n) { if (n && n.cdek && (n.cdek.status !== o.cdek.status || n.cdek.number !== o.cdek.number) && location.hash.indexOf(o.id) !== -1) { await reload(); DATA.orders.forEach(function (x) { if (x.id === o.id) x._synced = true; }); await A().refresh(); } }).catch(function () {}); }
   }
+  /* ---------- Заявки покупателей на обмен и возврат ---------- */
+  var REQ_STATE = { new: 'Ждём вещь', received: 'Вещь проверена', done: 'Закрыта', declined: 'Отклонена' };
+  function allRequests() { var out = []; DATA.orders.forEach(function (o) { (o.requests || []).forEach(function (r) { out.push({ o: o, r: r }); }); }); return out.sort(function (a, b) { return b.r.createdAt.localeCompare(a.r.createdAt); }); }
+  function reqBadge() { var n = allRequests().filter(function (x) { return x.r.status === 'new' || x.r.status === 'received'; }).length; return n ? ' <span class="adm-badge">' + n + '</span>' : ''; }
+  function reqWhat(r) { return r.lines.map(function (l) { return esc(l.name) + (l.color ? ', ' + esc(l.color) : '') + ', ' + esc(l.size) + (r.kind === 'exchange' ? ' → <b>' + esc(l.toSize) + '</b>' : '') + (l.qty > 1 ? ' × ' + l.qty : ''); }).join('; '); }
+  function requestCard(o) {
+    var list = (o.requests || []); if (!list.length) return '';
+    return '<div class="adm-card adm-req" style="display:grid;gap:12px"><h3 class="adm-h3">Заявка покупателя</h3>' + list.slice().reverse().map(function (r) {
+      var open = r.status === 'new' || r.status === 'received';
+      var ret = (o.returns || []).find(function (x) { return x.uuid === r.returnUuid; });
+      return '<div class="adm-req-item"><div class="adm-req-top"><b>' + (r.kind === 'exchange' ? 'Обмен размера' : 'Возврат денег') + ' · ' + esc(r.reasonLabel) + '</b><span class="adm-req-st s-' + r.status + '">' + REQ_STATE[r.status] + '</span></div>' +
+        '<span>' + reqWhat(r) + '</span>' + (r.comment ? '<span class="muted">«' + esc(r.comment) + '»</span>' : '') +
+        '<span class="muted" style="font-size:13px">' + esc(dt(r.createdAt)) + (ret && ret.number ? ' · возврат СДЭК ' + esc(ret.number) + (ret.statusName ? ' — ' + esc(ret.statusName) : '') : r.returnError ? ' · возврат СДЭК не создан: ' + esc(r.returnError) + ' — оформите в карточке «Возврат через СДЭК»' : '') + '</span>' +
+        (r.exchangeOrderId ? '<a class="link" href="#/admin?s=orders&id=' + esc(r.exchangeOrderId) + '">Заказ-обмен № ' + esc(r.exchangeNumber) + '</a>' : '') +
+        (r.declineNote ? '<span class="muted">Причина отказа: ' + esc(r.declineNote) + '</span>' : '') +
+        (open ? '<div class="adm-req-act">' + (r.kind === 'exchange' ? '<button class="btn sm" data-req="exchange" data-rid="' + esc(r.id) + '">Вещь пришла и проверена — отправить ' + esc(r.lines.map(function (l) { return l.toSize; }).join(', ')) + '</button>' :
+          (r.status === 'new' ? '<button class="btn sm" data-req="received" data-rid="' + esc(r.id) + '">Вещь пришла и проверена</button>' : '<span class="muted" style="font-size:13px">Верните деньги в карточке «Оплата и возврат» — заявка закроется сама</span>')) +
+          '<button class="btn ghost sm" data-req-decline="' + esc(r.id) + '">Отклонить</button></div>' : '') + '</div>';
+    }).join('') + '</div>';
+  }
+  function bindRequest(o) {
+    $$('[data-req]').forEach(function (b) { b.addEventListener('click', async function () {
+      b.disabled = true;
+      try { var r = await A().API.adminRequest(o.id, { id: b.getAttribute('data-rid'), action: b.getAttribute('data-req') }); await afterSave(r.exchange ? 'Создан заказ-обмен № ' + r.exchange.number + ' — отправьте его как обычно' : 'Готово', '#/admin?s=orders&id=' + (r.exchange ? r.exchange.id : o.id)); }
+      catch (e) { b.disabled = false; toast(A().errMsg(e), true); }
+    }); });
+    $$('[data-req-decline]').forEach(function (b) { b.addEventListener('click', async function () {
+      var note = window.prompt('Почему отклоняем? Покупатель увидит это в поддержке', ''); if (note === null) return;
+      try { await A().API.adminRequest(o.id, { id: b.getAttribute('data-req-decline'), action: 'decline', note: note }); await afterSave('Заявка отклонена, резерв размера снят', '#/admin?s=orders&id=' + o.id); }
+      catch (e) { toast(A().errMsg(e), true); }
+    }); });
+  }
+  function exchangeSection(m) {
+    settingsForm(m, 'Обмен и возвраты', 'Покупатель оформляет обмен размера или возврат сам — в карточке заказа на сайте. Если размер не подошёл, ему сначала предлагается обмен: новый размер сразу откладывается, а отправляется, когда вещь вернётся и вы её проверите. Возврат через СДЭК оформляется автоматически.', [
+      { k: 'enabled', label: 'Принимать заявки на обмен и возврат на сайте', type: 'checkbox', hint: 'В карточке товара показывается «Не подошёл размер — обменяем», а в заказе — кнопка «Обменять размер или вернуть»' },
+      { k: 'days', label: 'Сколько дней после получения', type: 'number', hint: 'По закону покупатель может вернуть вещь минимум 7 дней после получения' },
+      { k: 'free', label: 'Обмен размера бесплатный — доставку в обе стороны оплачивает магазин', type: 'checkbox' }
+    ], {}, function (s) { s.exchange = s.exchange || { enabled: true, days: 14, free: true }; return s.exchange; }, function (s, o) {
+      if (!(o.days >= 7 && o.days <= 60)) return 'Срок — от 7 до 60 дней';
+      s.exchange = o;
+    });
+    var all = allRequests(), reasons = {}, sizes = {};
+    all.forEach(function (x) { reasons[x.r.reasonLabel] = (reasons[x.r.reasonLabel] || 0) + 1; x.r.lines.forEach(function (l) { if (x.r.reason === 'small' || x.r.reason === 'big') { var k = l.name + ', ' + l.size + ' — ' + x.r.reasonLabel.toLowerCase(); sizes[k] = (sizes[k] || 0) + l.qty; } }); });
+    var top = function (o) { return Object.keys(o).sort(function (a, b) { return o[b] - o[a]; }).slice(0, 6).map(function (k) { return '<div class="adm-req-stat"><span>' + esc(k) + '</span><b class="num">' + o[k] + '</b></div>'; }).join(''); };
+    m.insertAdjacentHTML('beforeend', '<div class="adm-two" style="margin-top:28px"><div class="adm-card" style="display:grid;gap:10px"><h3 class="adm-h3">Почему возвращают</h3>' + (all.length ? top(reasons) : '<p class="muted" style="margin:0">Заявок пока не было</p>') + '</div>' +
+      '<div class="adm-card" style="display:grid;gap:10px"><h3 class="adm-h3">Какие размеры не садятся</h3>' + (Object.keys(sizes).length ? top(sizes) + '<p class="muted" style="font-size:13px;margin:0">Если один размер часто «велик» или «мал» — поправьте мерки и рост/вес в карточке товара</p>' : '<p class="muted" style="margin:0">Пока нет данных</p>') + '</div></div>' +
+      '<div class="adm-card" style="margin-top:16px"><h3 class="adm-h3">Заявки</h3>' + (all.length ? '<div class="table-wrap adm-table"><table class="sizes"><thead><tr><th>Дата</th><th>Заказ</th><th>Покупатель</th><th>Что</th><th>Причина</th><th>Статус</th></tr></thead><tbody>' +
+        all.map(function (x) { return '<tr data-href="#/admin?s=orders&id=' + esc(x.o.id) + '"><td>' + esc(dt(x.r.createdAt)) + '</td><td>№ ' + esc(x.o.number) + '</td><td>' + esc(x.o.customer.firstName + ' ' + x.o.customer.lastName) + '</td><td>' + (x.r.kind === 'exchange' ? 'Обмен: ' : 'Возврат: ') + reqWhat(x.r) + '</td><td>' + esc(x.r.reasonLabel) + '</td><td><span class="adm-req-st s-' + x.r.status + '">' + REQ_STATE[x.r.status] + '</span></td></tr>'; }).join('') + '</tbody></table></div>' : '<p class="muted" style="margin:0">Когда покупатель оформит обмен или возврат, заявка появится здесь и в карточке заказа, а в «Поддержке» — переписка с ним.</p>') + '</div>');
+    $$('tr[data-href]', m).forEach(function (tr) { tr.addEventListener('click', function () { window.ALB_NAV.go(tr.getAttribute('data-href')); }); });
+  }
   function orderDetail(m, id) {
     var o = DATA.orders.find(function (x) { return x.id === id; });
     if (!o) { m.innerHTML = head('Заказ не найден') + '<a class="link" href="#/admin?s=orders">← К заказам</a>'; return; }
@@ -488,16 +539,16 @@
         '<div class="sum-row total"><span>Итого деньгами</span><span>' + fmt(o.total) + '</span></div>' +
         (o.bonusEarn ? '<div class="sum-row"><span class="muted">Бонусы за заказ: ' + (o.bonusCredited ? 'начислены' : o.status === 'canceled' ? 'не начисляются — заказ отменён' : 'начислятся ' + (Pricing.bonusConf(DATA.settings).creditOn === 'done' ? 'когда заказ будет выполнен' : 'после оплаты')) + '</span><span class="num">+' + o.bonusEarn + '</span></div>' : '') + '</div>' +
       '<div style="display:grid;gap:16px;align-content:start"><div class="adm-card" style="display:grid;gap:8px"><h3 class="adm-h3">Покупатель</h3><b>' + esc(c.firstName + ' ' + c.lastName) + '</b><span class="copyable">' + esc(A().fmtPhone(c.phone)) + '</span><span class="copyable">' + esc(c.email) + '</span>' + (o.userId ? '<span class="muted" style="font-size:14px">Зарегистрированный покупатель</span>' : '<span class="muted" style="font-size:14px">Без регистрации</span>') + '</div>' +
-        refundCard(o) + (useCdek(o) ? returnCard(o) : '') +
+        requestCard(o) + refundCard(o) + (useCdek(o) ? returnCard(o) : '') +
         '<div class="adm-card" style="display:grid;gap:8px"><h3 class="adm-h3">Доставка</h3><span>' + esc(d.name || '—') + '</span>' + (d.city || d.address ? '<span class="copyable">' + esc([d.city, d.address].filter(Boolean).join(', ')) + '</span>' : '') + (o.comment ? '<span class="muted">Комментарий: ' + esc(o.comment) + '</span>' : '') + '</div>' +
         (useCdek(o) ? cdekCard(o) : manualTrack(o)) +
         '<div class="adm-card adm-form" style="grid-template-columns:1fr"><h3 class="adm-h3">Статус</h3>' +
           fieldHtml({ k: 'status', label: 'Статус заказа', type: 'select', options: Object.keys(A().STATUS).map(function (k) { return [k, A().STATUS[k]]; }) }, o) +
-          fieldHtml({ k: 'paymentStatus', label: 'Оплата (' + (o.payment.method === 'online' ? 'онлайн' : o.payment.method === 'bonus' ? 'бонусами' : 'при получении') + ')', type: 'select', options: Object.keys(A().PAY).filter(function (k) { return k !== 'refunded' || o.payment.method !== 'online' || o.payment.status === 'refunded'; }).map(function (k) { return [k, A().PAY[k]]; }) }, { paymentStatus: o.payment.status }) +
+          fieldHtml({ k: 'paymentStatus', label: 'Оплата (' + (o.payment.method === 'online' ? 'онлайн' : o.payment.method === 'bonus' ? 'бонусами' : o.payment.method === 'exchange' ? 'обмен по заказу № ' + (o.exchangeOf ? o.exchangeOf.number : '') : 'при получении') + ')', type: 'select', options: Object.keys(A().PAY).filter(function (k) { return k !== 'refunded' || o.payment.method !== 'online' || o.payment.status === 'refunded'; }).map(function (k) { return [k, A().PAY[k]]; }) }, { paymentStatus: o.payment.status }) +
           fieldHtml({ k: 'note', label: 'Заметка для себя', type: 'textarea', rows: 2 }, { note: o.adminNote || '' }) +
           '<button class="btn" id="oSave">Сохранить</button></div>' +
         '<div class="adm-card" style="display:grid;gap:10px"><h3 class="adm-h3">Удаление</h3><p class="muted" style="font-size:13px;margin:0">Для тестовых и ошибочных заказов. Товар вернётся на склад, промокод и бонусы — как при отмене. Удаление не отменить.</p><button class="btn ghost" id="oDel" type="button">Удалить заказ</button></div></div></div>';
-    bindRefund(o);
+    bindRefund(o); bindRequest(o);
     if (useCdek(o)) { bindCdekOrder(o); bindReturn(o); }
     bindConfirm($('#oDel'), async function () {
       try { await A().API.adminOrderDelete(o.id); await afterSave('Заказ № ' + o.number + ' удалён', '#/admin?s=orders'); } catch (e) { toast(A().errMsg(e), true); }
@@ -642,11 +693,13 @@
       },
       extra: function (p) {
         colorsState = clone(Pricing.colorsOf(p));
-        return waitingForProduct(p) + '<div class="adm-colors"><h4 class="adm-sub">Цвета, фото и остатки</h4><p class="muted" style="font-size:14px;margin-bottom:14px;max-width:70ch">Все цвета — в одной карточке товара. У каждого цвета свои фото и остатки по размерам. Покупатель сначала выбирает цвет, потом размер. Первый цвет показывается в каталоге первым.</p><div id="colorBlocks"></div><button type="button" class="btn ghost sm" id="colorAdd">+ Добавить цвет</button></div>';
+        return waitingForProduct(p) + '<div class="adm-colors"><h4 class="adm-sub">Цвета, фото и остатки</h4><p class="muted" style="font-size:14px;margin-bottom:14px;max-width:70ch">Все цвета — в одной карточке товара. У каждого цвета свои фото и остатки по размерам. Покупатель сначала выбирает цвет, потом размер. Первый цвет показывается в каталоге первым.</p><div id="colorBlocks"></div><button type="button" class="btn ghost sm" id="colorAdd">+ Добавить цвет</button></div>' + fitEditorHtml(p);
       },
-      mount: function (box) {
+      mount: function (box, item) {
+        var p0Fit = function () { return (item && item.fit) || {}; };
         var wrap = $('.adm-colors', box), blocks = $('#colorBlocks', box);
         $('.adm-form', box).insertBefore(wrap, $$('.adm-sub', box)[1]); // перед «Описанием»
+        var fitBox = $('.adm-fit', box); if (fitBox) wrap.parentNode.insertBefore(fitBox, wrap.nextSibling);
         function sync() {
           $$('.adm-color', blocks).forEach(function (el, i) {
             var c = colorsState[i]; if (!c) return;
@@ -709,9 +762,11 @@
           $('.adm-color:last-child [data-cname]', blocks).focus();
         });
         box._syncColors = function () { sync(); return colorsState; };
+        if (fitBox) bindFitEditor(fitBox, p0Fit(), box._syncColors);
       },
       read: function (box, p) {
         p.colors = clone(box._syncColors());
+        var fb = $('.adm-fit', box); if (fb) { var f = readFitEditor(fb); if (f) p.fit = f; else delete p.fit; }
         delete p.color; delete p.images; delete p.sizes; delete p.art;
         if (!p.slug) p.slug = translit(p.name);
         p.slug = translit(p.slug);
@@ -720,6 +775,8 @@
         if (!p.name) return 'Укажите название';
         if (!p.price) return 'Укажите цену';
         if (!p.colors.length) return 'Добавьте хотя бы один цвет';
+        var badFit = ((p.fit && p.fit.rows) || []).find(function (r) { return (r.hMin && r.hMax && r.hMin > r.hMax) || (r.kMin && r.kMax && r.kMin > r.kMax); });
+        if (badFit) return 'Мерки, размер ' + badFit.size + ': «от» больше, чем «до»';
         var names = {};
         for (var i = 0; i < p.colors.length; i++) {
           var c = p.colors[i];
@@ -733,6 +790,40 @@
       },
       duplicate: function (p) { p.id = uid('p'); p.name += ' (копия)'; p.slug = translit(p.name) + '-' + Math.random().toString(36).slice(2, 5); p.active = false; return p; }
     });
+  }
+  /* Мерки изделия и подбор размера: ширина, длина, рукав и на какой рост/вес рассчитан каждый размер */
+  var FIT_TYPICAL = { XS: [150, 165, 45, 58], S: [160, 172, 52, 66], M: [170, 180, 62, 76], L: [176, 186, 72, 86], XL: [182, 192, 82, 96], '2XL': [186, 198, 92, 110], XXL: [186, 198, 92, 110], '3XL': [190, 205, 105, 125] };
+  var FIT_COLS = [['w', 'Ширина'], ['l', 'Длина'], ['sl', 'Рукав'], ['hMin', 'Рост от'], ['hMax', 'Рост до'], ['kMin', 'Вес от'], ['kMax', 'Вес до']];
+  function fitEditorHtml(p) {
+    var f = p.fit || {};
+    return '<div class="adm-fit"><h4 class="adm-sub">Мерки и подбор размера</h4><p class="muted" style="font-size:14px;margin-bottom:14px;max-width:72ch">Мерки готовой вещи в сантиметрах: футболку кладут на стол, ширина — от шва до шва под рукавами, длина — от верхней точки плеча до низа. Рост и вес — на кого рассчитан размер. Когда заполнены рост и вес хотя бы двух размеров, в карточке появляется «Подобрать размер»; ширина и длина — «Сравнить со своей футболкой» и таблица мерок.</p>' +
+      '<div class="table-wrap"><table class="adm-fit-t"><thead><tr><th>Размер</th>' + FIT_COLS.map(function (c) { return '<th>' + c[1] + (c[0] === 'kMin' || c[0] === 'kMax' ? ', кг' : ', см') + '</th>'; }).join('') + '</tr></thead><tbody data-fit-body></tbody></table></div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button type="button" class="btn ghost sm" data-fit-sync>Обновить размеры из цветов</button><button type="button" class="btn ghost sm" data-fit-typical>Заполнить пустой рост и вес типовыми для оверсайза</button></div>' +
+      '<div class="adm-form" style="margin-top:16px"><label class="field"><span>На модели размер</span><input class="input" data-fit-msize value="' + esc(f.modelSize || '') + '" placeholder="например, L"></label><label class="field"><span>Рост модели, см</span><input class="input" type="number" data-fit-mh value="' + esc(f.modelHeight || '') + '" placeholder="например, 182"></label></div></div>';
+  }
+  function bindFitEditor(el, fit, getColors) {
+    var body = $('[data-fit-body]', el), rows = ((fit && fit.rows) || []).slice();
+    function sizes() { var out = []; (getColors() || []).forEach(function (c) { (c.sizes || []).forEach(function (s) { if (s.size && out.indexOf(s.size) === -1) out.push(s.size); }); }); return out; }
+    function current() { return $$('tr', body).map(function (tr) { var r = { size: tr.getAttribute('data-size') }; FIT_COLS.forEach(function (c) { var v = parseFloat(String($('[data-f="' + c[0] + '"]', tr).value).replace(',', '.')); if (v > 0) r[c[0]] = v; }); return r; }); }
+    function draw(list) {
+      body.innerHTML = list.map(function (r) { return '<tr data-size="' + esc(r.size) + '"><th>' + esc(r.size) + '</th>' + FIT_COLS.map(function (c) { return '<td><input class="input num" type="number" step="0.5" min="0" data-f="' + c[0] + '" value="' + esc(r[c[0]] || '') + '" aria-label="' + esc(r.size + ': ' + c[1]) + '"></td>'; }).join('') + '</tr>'; }).join('') ||
+        '<tr><td colspan="8" class="muted">Сначала добавьте размеры в цвета товара</td></tr>';
+    }
+    function merge(prev) { return sizes().map(function (sz) { return prev.find(function (r) { return r.size === sz; }) || { size: sz }; }); }
+    draw(merge(rows));
+    $('[data-fit-sync]', el).addEventListener('click', function () { draw(merge(current())); });
+    $('[data-fit-typical]', el).addEventListener('click', function () {
+      var list = merge(current()), n = 0;
+      list.forEach(function (r) { var t = FIT_TYPICAL[String(r.size).toUpperCase()]; if (!t) return; ['hMin', 'hMax', 'kMin', 'kMax'].forEach(function (k, i) { if (!r[k]) { r[k] = t[i]; n++; } }); });
+      draw(list); toast(n ? 'Заполнено — проверьте и поправьте под свои лекала' : 'Нечего заполнять: типовые значения есть для XS–3XL', !n);
+    });
+    el._fitRows = current;
+  }
+  function readFitEditor(el) {
+    var rows = (el._fitRows ? el._fitRows() : []).filter(function (r) { return Object.keys(r).length > 1; });
+    var ms = $('[data-fit-msize]', el).value.trim().slice(0, 10), mh = Math.round(Number($('[data-fit-mh]', el).value) || 0);
+    if (!rows.length && !ms && !mh) return null;
+    return { rows: rows, modelSize: ms, modelHeight: mh > 0 ? mh : '' };
   }
   function newColor(n, hex, kind) { return { id: uid('col'), name: '', hex: hex, images: [], sizes: [], art: { kind: kind || 'tee', tone: hex } }; }
   function sizeRow(s) { return '<div class="adm-size-row"><input class="input" data-sz placeholder="Размер" value="' + esc(s.size) + '" aria-label="Размер"><input class="input num" data-st type="number" min="0" placeholder="Остаток" value="' + esc(s.stock) + '" aria-label="Остаток, шт."><span class="muted" style="font-size:14px">шт.</span><button type="button" class="adm-x" data-szrm title="Удалить">✕</button></div>'; }
@@ -938,9 +1029,11 @@
     settingsForm(m, 'Бонусы', '1 бонус = 1 ₽. Бонусы получают зарегистрированные покупатели. Под каждым товаром на сайте видно, сколько бонусов придёт за покупку, а при оформлении бонусами можно оплатить весь заказ.', [
       { k: 'enabled', label: 'Бонусная программа включена', type: 'checkbox', hint: 'Если выключить, бонусы перестанут начисляться и списываться, но останутся на счетах покупателей' },
       { k: 'percent', label: 'Сколько процентов от покупки начислять', type: 'number', step: 0.5, hint: 'Например, 5 — за товар за 1 500 ₽ придёт 75 бонусов' },
+      { k: 'onlineExtra', label: 'Дополнительно за онлайн-оплату, %', type: 'number', step: 0.5, hint: 'Сверху к основному проценту, если покупатель платит онлайн, а не при получении. Такие заказы почти всегда выкупают. 0 — выключено' },
       { k: 'creditOn', label: 'Когда начислять', type: 'select', options: [['paid', 'После оплаты заказа'], ['done', 'Когда заказ выполнен (получен покупателем)']], hint: 'При отмене заказа или возврате денег начисленные бонусы забираются, а потраченные возвращаются' }
     ], {}, function (s) { s.bonus = s.bonus || { enabled: true, percent: 5, creditOn: 'paid' }; return s.bonus; }, function (s, o) {
       if (!(o.percent >= 0 && o.percent <= 100)) return 'Процент должен быть от 0 до 100';
+      if (!(o.onlineExtra >= 0 && o.onlineExtra <= 50)) return 'Бонус за онлайн-оплату — от 0 до 50%';
       s.bonus = o;
     });
     var users = DATA.users, held = users.reduce(function (x, u) { return x + (u.bonus || 0); }, 0);

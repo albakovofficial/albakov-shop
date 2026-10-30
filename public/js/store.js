@@ -66,6 +66,8 @@
     async adminSupportPatch(id, patch) { return (await call('PATCH', 'api/admin/support/' + encodeURIComponent(id), patch)).ticket; },
     async myOrders() { return (await call('GET', 'api/orders')).orders; },
     async getOrder(id) { var t = (lsGet('vanta:otok') || {})[id] || ''; return (await call('GET', 'api/orders/' + encodeURIComponent(id) + '?t=' + encodeURIComponent(t))).order; },
+    async orderRequest(id, b) { var t = (lsGet('vanta:otok') || {})[id] || ''; return (await call('POST', 'api/orders/' + encodeURIComponent(id) + '/request', Object.assign({ t: t }, b))).order; },
+    async adminRequest(id, b) { return await call('POST', 'api/admin/orders/' + encodeURIComponent(id) + '/request', b); },
     async quote(lines, code, deliveryId, contact, useBonus, extra) { return (await call('POST', 'api/quote', Object.assign({ lines: lines, code: code, deliveryId: deliveryId, contact: contact, useBonus: !!useBonus }, extra || {}))).quote; },
     async placeOrder(p) {
       var r = await call('POST', 'api/orders', p);

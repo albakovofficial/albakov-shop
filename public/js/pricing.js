@@ -43,6 +43,8 @@
     var l = (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
     return l > 0.62 ? '#141414' : '#ffffff';
   }
+  // Сколько ещё можно заказать по предзаказу (Infinity — без ограничения)
+  function preorderLeft(p) { if (!p || !p.preorder) return 0; var lim = Math.max(0, Math.floor(Number(p.preorderLimit) || 0)); return lim ? Math.max(0, lim - (Number(p.preorderSold) || 0)) : Infinity; }
   function badgesOf(p, price, settings) {
     var conf = (settings && settings.badges) || {}, own = p.badgeText || {}, off = p.badgeOff || [], tags = p.tags || [], out = [];
     BADGE_KEYS.forEach(function (k) {
@@ -222,7 +224,12 @@
         stock: stock, image: (col.images && col.images[0]) || '', art: col.art || null,
         total: pr.price * qty
       };
-      if (stock < qty) line.problem = stock === 0 ? 'Нет в наличии' : 'В наличии только ' + stock + ' шт.';
+      // Предзаказ: размера нет, но товар можно заказать заранее, пока есть места в партии
+      if (stock === 0 && s && p.preorder) {
+        var left = preorderLeft(p);
+        if (left === Infinity || left >= qty) { line.preorder = true; line.shipDate = p.preorderShip || ''; }
+        else line.problem = left > 0 ? 'По предзаказу осталось ' + left + ' шт.' : 'Места в партии закончились';
+      } else if (stock < qty) line.problem = stock === 0 ? 'Нет в наличии' : 'В наличии только ' + stock + ' шт.';
       if (l.colorId && col.id !== l.colorId) line.problem = 'Этот цвет больше недоступен';
       out.lines.push(line);
       out.subtotal += line.total;
@@ -362,7 +369,7 @@
     return { weight: Math.min(30000, Math.max(50, Math.round(w + (Number(pk.weight) || 0)))), length: pk.length, width: pk.width, height: pk.height, pack: pk.name, count: n };
   }
 
-  var api = { isPvzMethod: isPvzMethod, isDoorMethod: isDoorMethod, cdekMode: cdekMode, cdekPacks: cdekPacks, parcelFor: parcelFor, DEFAULT_PACKS: DEFAULT_PACKS, bonusConf: bonusConf, bonusFor: bonusFor, bonusMove: bonusMove, syncOrderBonus: syncOrderBonus, badgesOf: badgesOf, inkFor: inkFor, BADGE_KEYS: BADGE_KEYS, forGender: forGender, migrateData: migrateData, migrateProduct: migrateProduct, colorsOf: colorsOf, colorOf: colorOf, stockOf: stockOf, productPrice: productPrice, calcCart: calcCart, checkCode: checkCode, inWindow: inWindow, format: format };
+  var api = { isPvzMethod: isPvzMethod, isDoorMethod: isDoorMethod, cdekMode: cdekMode, cdekPacks: cdekPacks, parcelFor: parcelFor, DEFAULT_PACKS: DEFAULT_PACKS, bonusConf: bonusConf, bonusFor: bonusFor, bonusMove: bonusMove, syncOrderBonus: syncOrderBonus, badgesOf: badgesOf, preorderLeft: preorderLeft, inkFor: inkFor, BADGE_KEYS: BADGE_KEYS, forGender: forGender, migrateData: migrateData, migrateProduct: migrateProduct, colorsOf: colorsOf, colorOf: colorOf, stockOf: stockOf, productPrice: productPrice, calcCart: calcCart, checkCode: checkCode, inWindow: inWindow, format: format };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Pricing = api;
 })(this);

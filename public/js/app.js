@@ -121,6 +121,7 @@
       '<div class="scrim" id="scrim"></div>' +
       '<aside class="drawer left" id="menuDrawer" aria-label="Меню"><div class="drawer-head"><a class="logo" href="#/" aria-label="' + esc(s.storeName) + '">' + brandHtml(s, 'mobile', 'brand-drawer') + '</a><button class="icon-btn" data-act="close">' + ICON.close + '</button></div>' +
         '<div class="drawer-body">' + genderTabs('gtabs-drawer') + '<nav class="mnav">' + navLinks() + '<a href="#/favorites">Избранное</a><a href="#/account">Личный кабинет</a></nav>' +
+        '<div class="mnav-sub mnav-sub-sm"><a href="#/gift">Подарочные сертификаты</a><a href="#/track">Где мой заказ</a></div>' +
         '<div class="mnav-sub">' + sortedCats().map(function (c) { return '<a href="#/catalog?cat=' + esc(c.slug) + '">' + esc(c.name) + '</a>'; }).join('') + '</div>' +
         appMenuHtml() + socialsHtml() + '</div></aside>' +
       '<aside class="drawer right" id="cartDrawer" aria-label="Корзина"><div class="drawer-head"><h3>Корзина</h3><button class="icon-btn" data-act="close">' + ICON.close + '</button></div><div class="drawer-body" id="cartBody"></div><div class="drawer-foot" id="cartFoot"></div></aside>' +
@@ -205,8 +206,8 @@
         '</div>' +
       '</div>' +
       '<div class="f-grid">' +
-        col('Магазин', sortedCats().map(function (x) { return '<li><a href="#/catalog?cat=' + esc(x.slug) + '">' + esc(x.name) + '</a></li>'; }).join('') + '<li><a href="#/catalog?tag=new">Новинки</a></li><li><a href="#/sale">Акции</a></li>') +
-        col('Покупателям', pages('help') + '<li><a href="#/sizes">Таблица размеров</a></li>' + pages('brand') +
+        col('Магазин', sortedCats().map(function (x) { return '<li><a href="#/catalog?cat=' + esc(x.slug) + '">' + esc(x.name) + '</a></li>'; }).join('') + '<li><a href="#/catalog?tag=new">Новинки</a></li><li><a href="#/sale">Акции</a></li>' + (D.giftCfg && D.giftCfg.enabled !== false ? '<li><a href="#/gift">Подарочные сертификаты</a></li>' : '')) +
+        col('Покупателям', '<li><a href="#/track">Где мой заказ</a></li>' + pages('help') + '<li><a href="#/sizes">Таблица размеров</a></li>' + pages('brand') +
           '<li data-inst="installed-hide"' + (window.Install && Install.isInstalled() ? ' hidden' : '') + '><button class="foot-btn" data-act="install">Приложение на телефон</button></li>') +
         col('Личный кабинет', '<li><a href="#/account?tab=orders">Мои заказы</a></li><li><a href="#/favorites">Избранное</a></li><li><a href="#/account?tab=addresses">Адреса доставки</a></li>' + (bonusCfg().enabled ? '<li><a href="#/account?tab=bonus">Бонусы</a></li>' : '') + '<li><a href="#/account?tab=support">Поддержка</a></li>') +
         '<div class="fcol fcol-contacts"><h4>Контакты</h4><ul class="f-contacts">' +
@@ -285,7 +286,8 @@
   function card(p) {
     var pr = priceOf(p), stock = totalStock(p), cat = catById(p.categoryId), cs = Pricing.colorsOf(p), c0 = shownColor(p);
     var img0 = (c0.images && c0.images[0]) || Art.make(c0.art), img1 = c0.images && c0.images[1];
-    var tags = stock === 0 ? ['<span class="badge badge-out">Нет в наличии</span>'] : badgeHtml(p, pr);
+    var preOn = p.preorder && Pricing.preorderLeft(p) > 0;
+    var tags = stock === 0 ? [preOn ? '<span class="badge badge-pre">Предзаказ</span>' : '<span class="badge badge-out">Нет в наличии</span>'] : badgeHtml(p, pr);
     var sub = cs.length > 1 ? (cat ? esc(cat.name) : '') : esc([cat && cat.name, c0.name].filter(Boolean).join(' · '));
     var qa = (c0.sizes || []).filter(function (x) { return x.stock > 0; });
     var quick = qa.length ? '<span class="qa"><span class="qa-label">' + (qa.length === 1 && c0.sizes.length === 1 ? '' : 'Быстро добавить') + '</span><span class="qa-sizes">' + qa.map(function (x) { return '<span class="qa-size" role="button" data-qa="' + esc(p.id) + '|' + esc(c0.id) + '|' + esc(x.size) + '">' + (qa.length === 1 && c0.sizes.length === 1 ? 'В корзину' : esc(x.size)) + '</span>'; }).join('') + '</span></span>' : '';
@@ -340,6 +342,8 @@
     } else if (name === 'sale') t = 'Акции и скидки — ' + store;
     else if (name === 'sizes') t = 'Таблица размеров — ' + store;
     else if (name === 'favorites') t = 'Избранное — ' + store;
+    else if (name === 'track') t = 'Где мой заказ — ' + store;
+    else if (name === 'gift') t = 'Подарочный сертификат — ' + store;
     else if (name) t = store + (s.tagline ? ' — ' + s.tagline : '');
     document.title = t;
     var l = document.querySelector('link[rel="canonical"]');
@@ -351,10 +355,11 @@
     var r = parseHash(), v = $('#view'), p = r.parts;
     $$('.nav a').forEach(function (a) { a.classList.toggle('active', a.getAttribute('href') === curRoute()); });
     var name = p[0] || '';
-    var map = { '': home, catalog: catalog, product: product, sale: sale, sizes: sizes, cart: cartPage, checkout: checkout, account: account, order: orderPage, page: textPage, favorites: favoritesPage };
+    var map = { '': home, catalog: catalog, product: product, sale: sale, sizes: sizes, cart: cartPage, checkout: checkout, account: account, order: orderPage, page: textPage, favorites: favoritesPage, track: trackPage, gift: giftPage };
     var fn = map.hasOwnProperty(name) ? map[name] : isAdminRoute(name) ? adminPage : notFound;
     if ((name === '' || name === 'catalog' || name === 'sale') && gClosed(curGender())) fn = soonPage;
     fn(v, p, r.q);
+    if (routeN++ && window.Metrika && fn !== adminPage) setTimeout(function () { Metrika.hit(location.pathname + location.search); }, 50);
     pageMeta(name, p, r.q);
     document.body.classList.toggle('hero-under', !!$('#view > .slider:first-child'));
     var fab = $('#fab'); if (fab) { fab.hidden = fn === adminPage || (name === 'account' && r.q.tab === 'support'); fabSet(false); }
@@ -531,6 +536,7 @@
       // на телефоне — лента, которую листают пальцем; на компьютере — сетка
       if (hits.length) html += '<section class="section hits-sec"><div class="wrap"><div class="section-head"><h2>Хиты продаж' + (curGender() ? ' <em class="h-sub">' + GENDERS[curGender()].toLowerCase() + '</em>' : '') + '</h2><a class="link sh-more" href="#/catalog?tag=hit"><span>Смотреть все</span><i aria-hidden="true">' + ARROW + '</i></a></div><div class="grid hits">' + hits.map(card).join('') + '</div></div></section>';
     }
+    html += '<div id="recentHome"></div>';
     if (h.showBonus !== false) html += bonusBand(h);
     if (h.showSale !== false) {
       var ap = activePromos()[0];
@@ -541,6 +547,116 @@
     v.innerHTML = html;
     initSlider();
     initHomeBlocks(v);
+    drawRecent($('#recentHome', v), null);
+  }
+
+  /* ---------- Соберите образ: вещи, которые в панели отмечены «С этим носят» ---------- */
+  function drawLook(box, p, mainSel) {
+    var items = (p.look || []).map(function (id) { return D.products.find(function (x) { return x.id === id && x.id !== p.id && x.active !== false && totalStock(x) > 0; }); }).filter(Boolean).slice(0, 4);
+    if (!box || !items.length) return;
+    var all = [p].concat(items), st = all.map(function (x, i) { var c = shownColor(x); return { on: true, col: c, size: i === 0 ? null : ((c.sizes || []).filter(function (z) { return z.stock > 0; }).length === 1 ? c.sizes.find(function (z) { return z.stock > 0; }).size : null) }; });
+    function sizesOf(i) { return (st[i].col.sizes || []).filter(function (z) { return z.stock > 0; }); }
+    function draw() {
+      var m = mainSel(); st[0].col = m.col; st[0].size = m.size;
+      var chosen = all.filter(function (x, i) { return st[i].on; }), sum = chosen.reduce(function (t, x) { return t + priceOf(x).price; }, 0);
+      var old = chosen.reduce(function (t, x) { var pr = priceOf(x); return t + (pr.oldPrice || pr.price); }, 0);
+      box.innerHTML = '<section class="section look-sec"><div class="section-head"><h2>Соберите образ</h2></div><div class="look">' +
+        '<div class="look-items">' + all.map(function (x, i) {
+          var c = st[i].col, img = (c.images && c.images[0]) || Art.make(c.art), pr = priceOf(x), sz = i === 0 ? null : sizesOf(i);
+          return '<div class="look-item' + (st[i].on ? '' : ' off') + '">' + (i ? '<span class="look-plus" aria-hidden="true">+</span>' : '') +
+            '<a class="look-ph" href="#/product/' + esc(x.slug) + '"><img src="' + esc(img) + '" alt="" loading="lazy"><span class="look-tag">' + (i === 0 ? 'Эта вещь' : esc(c.name)) + '</span></a>' +
+            '<div class="look-meta"><a class="look-name" href="#/product/' + esc(x.slug) + '">' + esc(x.name) + '</a><span class="look-price">' + (pr.oldPrice ? '<b class="sale">' + fmt(pr.price) + '</b><s>' + fmt(pr.oldPrice) + '</s>' : '<b>' + fmt(pr.price) + '</b>') + '</span>' +
+            (i === 0 ? '<span class="look-hint">' + (st[0].size ? 'Размер ' + esc(st[0].size) : 'Размер — выше, в карточке') + '</span>'
+              : '<div class="look-sizes" role="radiogroup" aria-label="Размер">' + sz.map(function (z) { return '<button type="button" class="look-sz' + (st[i].size === z.size ? ' on' : '') + '" data-li="' + i + '" data-lsz="' + esc(z.size) + '">' + esc(z.size) + '</button>'; }).join('') + '</div>' +
+                '<button type="button" class="look-toggle" data-lt="' + i + '">' + (st[i].on ? 'Убрать из образа' : 'Вернуть в образ') + '</button>') +
+            '</div></div>';
+        }).join('') + '</div>' +
+        '<aside class="look-sum"><span class="look-k">' + (chosen.length > 1 ? 'Образ из ' + chosen.length + ' ' + plural(chosen.length, 'вещи', 'вещей', 'вещей') : 'Одна вещь') + '</span>' +
+          (old > sum ? '<s class="num">' + fmt(old) + '</s>' : '') + '<b class="num">' + fmt(sum) + '</b>' +
+          '<button type="button" class="btn look-add"><span>Добавить образ в корзину</span><span class="bn-ic" aria-hidden="true">' + ARROW + '</span></button>' +
+          '<p class="look-err" id="lookErr"></p></aside></div></section>';
+    }
+    draw();
+    box.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-lsz]'); if (b) { st[+b.getAttribute('data-li')].size = b.getAttribute('data-lsz'); draw(); return; }
+      var t = e.target.closest('[data-lt]'); if (t) { var i = +t.getAttribute('data-lt'); st[i].on = !st[i].on; draw(); return; }
+      if (e.target.closest('.look-add')) {
+        var m = mainSel(); st[0].col = m.col; st[0].size = m.size;
+        var miss = all.filter(function (x, i) { return st[i].on && !st[i].size; });
+        if (miss.length) {
+          $('#lookErr').textContent = miss[0] === p ? 'Выберите размер этой вещи — в карточке выше' : 'Выберите размер: ' + miss.map(function (x) { return x.name; }).join(', ');
+          if (miss[0] === p) { var sc = $('#sizeChips'); if (sc) { sc.scrollIntoView({ behavior: 'smooth', block: 'center' }); sc.classList.remove('shake'); void sc.offsetWidth; sc.classList.add('shake'); } }
+          return;
+        }
+        var added = 0;
+        all.forEach(function (x, i) {
+          if (!st[i].on) return;
+          var z = (st[i].col.sizes || []).find(function (q) { return q.size === st[i].size; }), inCart = (Cart.find(x.id, st[i].col.id, st[i].size) || { qty: 0 }).qty;
+          if (z && (z.stock > inCart || (x.preorder && z.stock <= 0))) { Cart.add(x.id, st[i].col.id, st[i].size, 1); added++; }
+        });
+        if (added) { toast(added > 1 ? 'Образ из ' + added + ' ' + plural(added, 'вещи', 'вещей', 'вещей') + ' — в корзине' : 'Добавили в корзину'); openCart(); }
+        else toast('Эти вещи уже в корзине в максимальном количестве', true);
+      }
+    });
+    // размер главной вещи выбирают в карточке — подхватываем
+    ['#sizeChips', '#colorChips'].forEach(function (sel) { var el = $(sel); if (el) el.addEventListener('click', function () { setTimeout(draw, 0); }); });
+  }
+
+  /* ---------- Статистика: своя (без cookie) и Яндекс Метрика, если подключена в панели ---------- */
+  var routeN = 0;
+  function stat(e, extra) {
+    try {
+      var k = 'vanta:st:' + e; if (sessionStorage.getItem(k)) return; sessionStorage.setItem(k, '1');
+      fetch('api/t', { method: 'POST', keepalive: true, credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ e: e }, extra || {})) }).catch(function () {});
+    } catch (ex) {}
+  }
+  function trafficSource() {
+    var q = new URLSearchParams(location.search), utm = (q.get('utm_source') || '').toLowerCase(), r = '';
+    try { r = document.referrer ? new URL(document.referrer).hostname : ''; } catch (e) {}
+    if (r === location.hostname) r = '';
+    var t = utm + ' ' + r;
+    if (/instagram|ig\b|l\.instagram/.test(t)) return 'instagram';
+    if (/telegram|t\.me|tg\b/.test(t)) return 'telegram';
+    if (/vk\.com|vk\b|vkontakte/.test(t)) return 'vk';
+    if (/yandex|ya\.ru|dzen/.test(t)) return 'yandex';
+    if (/google/.test(t)) return 'google';
+    return t.trim() ? 'other' : 'direct';
+  }
+  function ecItem(p, colorName, size, qty, price) {
+    var cat = catById(p.categoryId);
+    return { id: p.id, name: p.name, price: price || priceOf(p).price, brand: D.settings.storeName || 'ALBAKOV', category: cat ? cat.name : '', variant: [colorName, size].filter(Boolean).join(' / '), quantity: qty || 1 };
+  }
+  function initAnalytics() {
+    stat('v', { src: trafficSource(), m: window.matchMedia && matchMedia('(max-width: 760px)').matches ? 1 : 0 });
+    var mk = D.settings.metrika || {};
+    if (mk.id && window.Metrika) Metrika.init(mk.id, { webvisor: !!mk.webvisor });
+    // добавление и удаление из корзины — для «Электронной коммерции» в Метрике
+    var add = Cart.add, upd = Cart.update;
+    Cart.add = function (pid, cid, size, qty) {
+      add.apply(Cart, arguments); stat('c');
+      var p = D.products.find(function (x) { return x.id === pid; }); if (p && window.Metrika) { Metrika.ec('add', [ecItem(p, Pricing.colorOf(p, cid).name, size, qty)]); Metrika.goal('cart'); }
+    };
+    Cart.update = function (pid, cid, size, qty) {
+      var prev = Cart.find(pid, cid, size); upd.apply(Cart, arguments);
+      var p = D.products.find(function (x) { return x.id === pid; });
+      if (p && prev && window.Metrika) { if (qty < prev.qty) Metrika.ec('remove', [ecItem(p, Pricing.colorOf(p, cid).name, size, prev.qty - qty)]); else if (qty > prev.qty) Metrika.ec('add', [ecItem(p, Pricing.colorOf(p, cid).name, size, qty - prev.qty)]); }
+    };
+  }
+
+  /* ---------- Вы недавно смотрели: последние 12 товаров, хранятся в браузере ---------- */
+  var LS_RECENT = 'vanta:recent';
+  function recentIds() { try { var a = JSON.parse(localStorage.getItem(LS_RECENT) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
+  function recentAdd(id) { try { localStorage.setItem(LS_RECENT, JSON.stringify([id].concat(recentIds().filter(function (x) { return x !== id; })).slice(0, 12))); } catch (e) {} }
+  function drawRecent(box, exceptId) {
+    if (!box) return;
+    var list = recentIds().filter(function (id) { return id !== exceptId; }).map(function (id) { return D.products.find(function (p) { return p.id === id && p.active !== false; }); }).filter(Boolean).slice(0, 8);
+    if (list.length < (exceptId ? 1 : 2)) { box.innerHTML = ''; return; }
+    box.innerHTML = '<section class="section rv-sec"><div class="wrap"><div class="section-head"><h2>Вы недавно смотрели</h2><button type="button" class="link sh-more rv-clear"><span>Очистить</span><i aria-hidden="true">' + ICON.close + '</i></button></div>' +
+      '<div class="rv-row">' + list.map(function (p) {
+        var c0 = shownColor(p), img = (c0.images && c0.images[0]) || Art.make(c0.art), pr = priceOf(p);
+        return '<a class="rv-card" href="#/product/' + esc(p.slug) + '"><span class="rv-ph"><img src="' + esc(img) + '" alt="" loading="lazy">' + favBtn(p.id) + '</span><span class="rv-name">' + esc(p.name) + '</span><span class="rv-price">' + (pr.oldPrice ? '<b class="sale">' + fmt(pr.price) + '</b><s>' + fmt(pr.oldPrice) + '</s>' : '<b>' + fmt(pr.price) + '</b>') + '</span></a>';
+      }).join('') + '</div></div></section>';
+    $('.rv-clear', box).addEventListener('click', function () { var prev = recentIds(); try { localStorage.removeItem(LS_RECENT); } catch (e) {} box.innerHTML = ''; toastUndo('История просмотров очищена', function () { try { localStorage.setItem(LS_RECENT, JSON.stringify(prev)); } catch (e) {} drawRecent(box, exceptId); }); });
   }
 
   /* Блок «Преимущества» на главной: карточки с объёмными иконками.
@@ -871,14 +987,20 @@
     // Цвет: из адреса, иначе первый, где что-то есть в наличии
     var col = colors.find(function (c) { return c.id === q.color; }) || colors.find(function (c) { return Pricing.stockOf(c) > 0; }) || colors[0];
     var sel = null, qty = 1;
+    var pre = p.preorder && Pricing.preorderLeft(p) > 0, preLeft = Pricing.preorderLeft(p);
+    function preDate() { return p.preorderShip ? fmtDate(p.preorderShip).replace(/ \d{4} г\.$/, '') : ''; }
     var related = gProducts().filter(function (x) { return x.id !== p.id && x.categoryId === p.categoryId; }).concat(gProducts().filter(function (x) { return x.id !== p.id && x.categoryId !== p.categoryId; })).slice(0, 4);
     var delivPage = D.pages.find(function (x) { return x.slug === 'delivery'; });
 
     v.innerHTML = '<div class="wrap"><div class="page-head" style="padding-bottom:20px"><div class="crumbs"><a href="#/">Главная</a><span>/</span><a href="#/catalog">Каталог</a>' + (cat ? '<span>/</span><a href="#/catalog?cat=' + esc(cat.slug) + '">' + esc(cat.name) + '</a>' : '') + '</div></div>' +
       '<div class="product"><div id="galleryBox"></div>' +
       '<div class="pinfo"><div style="display:grid;gap:14px">' + (function () { var b = badgeHtml(p, pr); return b.length ? '<div class="badges-row">' + b.join('') + '</div>' : ''; })() + '<h1>' + esc(p.name) + '</h1>' + specsSummaryHtml(p) + priceHtml(pr) +
+        (partsOn() && partsFits(pr.price) ? '<button type="button" class="parts-chip" id="partsInfo"><span class="parts-ic" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span><b>4 платежа по ' + fmt(Math.ceil(pr.price / 4)) + '</b><small>Частями без переплаты · при оформлении</small></span><span class="parts-go" aria-hidden="true">›</span></button>' : '') +
         (Pricing.bonusFor(pr.price, D.settings) > 0 ? '<div class="p-bonus">' + bonusLine(pr.price, 'p-bonus-n') + '<span class="muted">за покупку · 1 бонус = 1 ₽. Начислим на бонусный счёт ' + (bonusCfg().creditOn === 'done' ? 'после получения заказа' : 'после оплаты') + ', потратить можно на следующие покупки — хоть все сразу' + (API.user ? '' : '. Нужен <a class="link" href="#/account">личный кабинет</a>') + '</span></div>' : '') +
-        (pr.promotion ? '<span class="promo-note">Акция «' + esc(pr.promotion.title) + '»' + (pr.promotion.endsAt ? ' до ' + esc(fmtDate(pr.promotion.endsAt)) : '') + '</span>' : '') + '</div>' +
+        (pr.promotion ? '<span class="promo-note">Акция «' + esc(pr.promotion.title) + '»' + (pr.promotion.endsAt ? ' до ' + esc(fmtDate(pr.promotion.endsAt)) : '') + '</span>' : '') +
+        (pre ? '<div class="pre-box"><div class="pre-top"><b>Предзаказ</b>' + (p.preorderShip ? '<span>отправим ' + esc(preDate()) + '</span>' : '') + '</div>' +
+          (preLeft !== Infinity ? '<span class="pre-bar"><i style="width:' + Math.min(100, Math.round((p.preorderSold || 0) / Number(p.preorderLimit) * 100)) + '%"></i></span><span class="pre-left">' + ((p.preorderSold || 0) ? 'Осталось ' + preLeft + ' ' + plural(preLeft, 'место', 'места', 'мест') + ' из ' + Number(p.preorderLimit) : 'В партии ' + Number(p.preorderLimit) + ' ' + plural(Number(p.preorderLimit), 'место', 'места', 'мест')) + '</span>' : '') +
+          '<p>Размеры, которых нет в наличии, можно заказать заранее. Если не успеем к сроку — напишем и вернём деньги, если захотите.</p></div>' : '') + '</div>' +
       '<div><div class="opt-head"><span>Цвет: <b class="color-name" id="colorName"></b></span>' + (colors.length > 1 ? '<span class="muted" style="font-size:13px">' + colors.length + ' ' + plural(colors.length, 'цвет', 'цвета', 'цветов') + '</span>' : '') + '</div>' +
         '<div class="swatch-row" id="colorChips" role="radiogroup" aria-label="Цвет">' + colors.map(function (c) {
           var out = Pricing.stockOf(c) === 0;
@@ -895,7 +1017,12 @@
         specsHtml(p) +
         (delivPage ? '<details>' + accSum('box', 'Доставка и возврат', 'СДЭК по России · возврат 14 дней') + '<div class="body prose p-deliv">' + md(delivPage.body) + '</div></details>' : '') +
       '</div></div></div>' +
-      (related.length ? '<section class="section" style="border-top:1px solid var(--line)"><div class="section-head"><h2>Вам может понравиться</h2></div><div class="grid">' + related.map(card).join('') + '</div></section>' : '') + '</div>';
+      '<div id="lookBox"></div>' +
+      (related.length ? '<section class="section" style="border-top:1px solid var(--line)"><div class="section-head"><h2>Вам может понравиться</h2></div><div class="grid">' + related.map(card).join('') + '</div></section>' : '') + '</div>' +
+      '<div id="recentBox"></div>';
+    drawRecent($('#recentBox', v), p.id); recentAdd(p.id);
+    stat('p'); if (window.Metrika) Metrika.ec('detail', [ecItem(p, (shownColor(p) || {}).name)]);
+    drawLook($('#lookBox', v), p, function () { return { col: col, size: sel }; });
 
     function sizeOf() { return (col.sizes || []).find(function (x) { return x.size === sel; }); }
     function drawGallery() {
@@ -923,28 +1050,32 @@
       $('#colorName').textContent = col.name;
       $$('#colorChips .swatch-btn').forEach(function (b) { var on = b.getAttribute('data-color') === col.id; b.classList.toggle('on', on); b.setAttribute('aria-checked', on); });
       var sizes = col.sizes || [], avail = sizes.filter(function (s) { return s.stock > 0; });
-      var cur = sizeOf(); if (!cur || (cur.stock <= 0 && !notifyOn)) sel = null;
+      var cur = sizeOf(); if (!cur || (cur.stock <= 0 && !notifyOn && !pre)) sel = null;
       if (!sel && sizes.length === 1 && avail.length) sel = sizes[0].size;
       $('#sizeChips').innerHTML = sizes.map(function (s) {
         var out = s.stock <= 0;
+        if (out && pre) return '<button class="chip preo' + (sel === s.size ? ' on' : '') + '" data-size="' + esc(s.size) + '" title="Предзаказ' + (preDate() ? ', отправим ' + esc(preDate()) : '') + '">' + esc(s.size) + '</button>';
         return '<button class="chip' + (out ? ' out' : '') + (sel === s.size ? ' on' : '') + '" data-size="' + esc(s.size) + '"' +
           (out ? (notifyOn ? ' title="Нет в наличии — можно подписаться на поступление" aria-label="' + esc(s.size) + ' — нет в наличии"' : ' disabled title="Нет в наличии" aria-label="' + esc(s.size) + ' — нет в наличии"') : '') + '>' + esc(s.size) + '</button>';
       }).join('');
       note();
     }
     // Кнопка: «Добавить в корзину» или «Сообщить о поступлении», если выбранного размера или всего цвета нет
-    function waitMode() { var s = sizeOf(), anyAvail = (col.sizes || []).some(function (x) { return x.stock > 0; }); return notifyOn && ((s && s.stock <= 0) || !anyAvail); }
+    function waitMode() { if (pre) return false; var s = sizeOf(), anyAvail = (col.sizes || []).some(function (x) { return x.stock > 0; }); return notifyOn && ((s && s.stock <= 0) || !anyAvail); }
+    function preMode() { var s = sizeOf(), anyAvail = (col.sizes || []).some(function (x) { return x.stock > 0; }); return pre && ((s && s.stock <= 0) || (!s && !anyAvail)); }
     function updateBtn() {
       var btn = $('#addBtn'), anyAvail = (col.sizes || []).some(function (x) { return x.stock > 0; }), wait = waitMode();
-      btn.disabled = !anyAvail && !notifyOn;
+      btn.disabled = !anyAvail && !notifyOn && !pre;
       btn.classList.toggle('ghost', wait);
-      btn.textContent = wait ? 'Сообщить о поступлении' : anyAvail ? 'Добавить в корзину' : 'Нет в наличии в этом цвете';
+      btn.textContent = wait ? 'Сообщить о поступлении' : preMode() ? 'Оформить предзаказ' : anyAvail ? 'Добавить в корзину' : 'Нет в наличии в этом цвете';
       $('.buy-row .qty').hidden = wait;
-      $('#buyNow').hidden = wait || !anyAvail;
+      $('#buyNow').hidden = wait || (!anyAvail && !pre);
     }
     function note() {
       var n = $('#stockNote'), s = sizeOf(), anyAvail = (col.sizes || []).some(function (x) { return x.stock > 0; });
       n.className = 'stock-note'; updateBtn();
+      if (pre && s && s.stock <= 0) { n.textContent = 'Предзаказ' + (preDate() ? ' · отправим ' + preDate() : '') + (preLeft !== Infinity ? ' · осталось ' + preLeft + ' ' + plural(preLeft, 'место', 'места', 'мест') : ''); n.classList.add('pre'); if (preLeft !== Infinity && qty > preLeft) { qty = preLeft; $('#qty').textContent = qty; } return; }
+      if (pre && !s) { n.textContent = 'Выберите размер'; return; }
       if (!anyAvail && (!s || s.stock <= 0)) { n.textContent = notifyOn ? 'Этого цвета сейчас нет. Оставьте почту — напишем, когда он появится.' : (colors.length > 1 ? 'Посмотрите другие цвета' : ''); return; }
       if (!s) { n.textContent = 'Выберите размер'; return; }
       if (s.stock <= 0) { n.textContent = 'Размера ' + s.size + ' сейчас нет. Можем сообщить на почту, когда он появится.'; n.classList.add('low'); return; }
@@ -959,12 +1090,13 @@
       try { history.replaceState(null, '', '/product/' + p.slug + '?color=' + encodeURIComponent(col.id)); } catch (ex) {}
     });
     $('#sizeChips').addEventListener('click', function (e) { var b = e.target.closest('[data-size]'); if (!b || b.disabled) return; sel = b.getAttribute('data-size'); $$('#sizeChips .chip').forEach(function (c) { c.classList.toggle('on', c === b); }); note(); });
-    $$('[data-q]').forEach(function (b) { b.addEventListener('click', function () { var s = sizeOf(); var max = s ? s.stock : 99; qty = Math.max(1, Math.min(max, qty + Number(b.getAttribute('data-q')))); $('#qty').textContent = qty; }); });
+    $$('[data-q]').forEach(function (b) { b.addEventListener('click', function () { var s = sizeOf(); var max = s ? (s.stock > 0 ? s.stock : pre ? (preLeft === Infinity ? 99 : preLeft) : 0) : 99; qty = Math.max(1, Math.min(max, qty + Number(b.getAttribute('data-q')))); $('#qty').textContent = qty; }); });
     $('#addBtn').addEventListener('click', function () {
       if (waitMode()) { openNotify(p, col, sel); return; }
       if (!sel) { var n = $('#stockNote'); n.textContent = 'Сначала выберите размер'; n.className = 'stock-note low'; var sc0 = $('#sizeChips'); if (sc0) { sc0.classList.remove('shake'); void sc0.offsetWidth; sc0.classList.add('shake'); } return; }
       var s = sizeOf(), inCart = (Cart.find(p.id, col.id, sel) || { qty: 0 }).qty;
-      if (inCart + qty > s.stock) { toast('В наличии только ' + s.stock + ' шт. этого размера в цвете «' + col.name + '»', true); return; }
+      if (pre && s.stock <= 0) { if (preLeft !== Infinity && inCart + qty > preLeft) { toast('По предзаказу осталось ' + preLeft + ' ' + plural(preLeft, 'место', 'места', 'мест'), true); return; } }
+      else if (inCart + qty > s.stock) { toast('В наличии только ' + s.stock + ' шт. этого размера в цвете «' + col.name + '»', true); return; }
       Cart.add(p.id, col.id, sel, qty);
       var ab = $('#addBtn'); ab.classList.add('done'); ab.textContent = 'Добавлено';
       setTimeout(function () { if (document.body.contains(ab)) { ab.classList.remove('done'); ab.textContent = 'Добавить в корзину'; } }, 1600);
@@ -973,10 +1105,15 @@
     // «Купить сейчас»: оформляем только этот товар, корзину не трогаем
     $('#buyNow').addEventListener('click', function () {
       if (!sel) { var n = $('#stockNote'); n.textContent = 'Сначала выберите размер'; n.className = 'stock-note low'; var sc = $('#sizeChips'); if (sc) { sc.classList.remove('shake'); void sc.offsetWidth; sc.classList.add('shake'); } return; }
-      var s = sizeOf(); if (!s || s.stock <= 0) { toast('Этого размера сейчас нет', true); return; }
-      if (qty > s.stock) { toast('В наличии только ' + s.stock + ' шт.', true); return; }
+      var s = sizeOf(); if (!s || (s.stock <= 0 && !pre)) { toast('Этого размера сейчас нет', true); return; }
+      if (s.stock > 0 && qty > s.stock) { toast('В наличии только ' + s.stock + ' шт.', true); return; }
       BuyNow.start(p.id, col.id, sel, qty);
       go('#/checkout?buy=1');
+    });
+    var pi = $('#partsInfo'); if (pi) pi.addEventListener('click', function () {
+      var sum = priceOf(p).price;
+      openModal('<span class="eyebrow">Оплата частями</span><h3 class="serif" style="font-size:34px;margin:14px 0 8px">4 платежа по ' + fmt(Math.ceil(sum / 4)) + '</h3><p class="muted" style="margin-bottom:22px">Сервис «Плати частями» от Сбера. Без процентов и переплаты: первую часть платите сразу, остальные спишутся автоматически раз в две недели.</p>' +
+        partsPlanHtml(sum) + '<ul class="parts-how"><li>Выберите «Частями» на шаге оплаты при оформлении</li><li>Подтвердите первый платёж кодом из SMS на странице ЮKassa</li><li>Заказ собираем сразу — как при обычной оплате</li></ul><p class="muted" style="font-size:12.5px;margin-top:14px">Для заказов от 1 000 до 50 000 ₽. Решение об оплате частями принимает сервис.</p>');
     });
     var oc = $('#openChart'); if (oc) oc.addEventListener('click', function () {
       openModal(fitMeasuresHtml(p) + (chart ? '<h3 class="serif" style="font-size:34px;margin-bottom:6px">Таблица размеров</h3><p class="muted" style="margin-bottom:22px">' + esc(chart.name) + '</p>' + chartTable(chart) + (chart.note ? '<p class="muted" style="margin-top:16px;font-size:14px">' + esc(chart.note) + '</p>' : '') + measureHtml() : ''));
@@ -1225,9 +1362,19 @@
   }
 
   /* ---------- Корзина ---------- */
+  /* ---------- Оплата частями («Плати частями» через ЮKassa): 4 платежа раз в две недели ---------- */
+  function partsOn() { var p = D.settings.payment || {}; return !!(p.parts && p.parts.enabled && D.payReady); }
+  function partsFits(sum) { return sum >= 1000 && sum <= 50000; }
+  function partsPlan(sum) {
+    var part = Math.floor(sum / 4), first = sum - part * 3, out = [];
+    for (var i = 0; i < 4; i++) { var d = new Date(Date.now() + i * 14 * 864e5); out.push({ sum: i ? part : first, when: i ? d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) : 'Сегодня' }); }
+    return out;
+  }
+  function partsPlanHtml(sum) { return '<div class="parts-plan">' + partsPlan(sum).map(function (x, i) { return '<div class="' + (i ? '' : 'now') + '"><i></i><b class="num">' + fmt(x.sum) + '</b><span>' + x.when + '</span></div>'; }).join('') + '</div>'; }
+  function preTag(l) { return '<span class="pre-tag">Предзаказ' + (l.shipDate ? ' · отправим ' + esc(fmtDate(l.shipDate).replace(/ \d{4} г\.$/, '')) : '') + '</span>'; }
   function lineHtml(l) {
     return '<div class="cart-line"><a class="ph" href="#/product/' + esc(l.slug) + '?color=' + esc(l.colorId) + '"><img src="' + esc(l.image || Art.make(l.art)) + '" alt=""></a>' +
-      '<div class="info"><a href="#/product/' + esc(l.slug) + '?color=' + esc(l.colorId) + '">' + esc(l.name) + '</a><span class="sub">' + (l.color ? 'Цвет: ' + esc(l.color) + ' · ' : '') + 'Размер: ' + esc(l.size) + '</span>' + priceHtml(l) + (l.problem ? '<span class="problem">' + esc(l.problem) + '</span>' : '') + '</div>' +
+      '<div class="info"><a href="#/product/' + esc(l.slug) + '?color=' + esc(l.colorId) + '">' + esc(l.name) + '</a><span class="sub">' + (l.color ? 'Цвет: ' + esc(l.color) + ' · ' : '') + 'Размер: ' + esc(l.size) + '</span>' + (l.preorder ? preTag(l) : '') + priceHtml(l) + (l.problem ? '<span class="problem">' + esc(l.problem) + '</span>' : '') + '</div>' +
       '<div class="side"><div class="qty"><button data-line="' + esc(l.productId) + '|' + esc(l.colorId) + '|' + esc(l.size) + '" data-d="-1" aria-label="Меньше">−</button><span class="num">' + l.qty + '</span><button data-line="' + esc(l.productId) + '|' + esc(l.colorId) + '|' + esc(l.size) + '" data-d="1" aria-label="Больше"' + (l.qty >= l.stock ? ' disabled' : '') + '>+</button></div>' +
       '<button class="remove" data-rm="' + esc(l.productId) + '|' + esc(l.colorId) + '|' + esc(l.size) + '">Удалить</button></div></div>';
   }
@@ -1264,8 +1411,17 @@
     body.innerHTML = bracketHint(q) + q.lines.map(lineHtml).join('');
     foot.innerHTML = (q.saleDiscount ? '<div class="sum-row disc"><span>Скидка</span><span>−' + fmt(q.saleDiscount) + '</span></div>' : '') +
       '<div class="sum-row total"><span>Итого</span><span>' + fmt(q.subtotal) + '</span></div>' + earnRow(q) + '<p class="muted" style="font-size:13px">' + (API.user && API.user.bonus && q.bonus.enabled ? 'Доставка, промокод и оплата бонусами — на следующем шаге' : 'Доставка и промокод — на следующем шаге') + '</p>' +
-      '<a class="btn block" href="#/checkout">Оформить заказ</a><a class="btn ghost block" href="#/cart">Перейти в корзину</a>';
+      '<a class="btn block" href="#/checkout">Оформить заказ</a><a class="btn ghost block" href="#/cart">Перейти в корзину</a>' + remindHtml();
   }
+  // Согласие на напоминание о корзине — спрашиваем один раз, у вошедших покупателей; меняется в профиле
+  function remindHtml() {
+    if (!API.user || API.user.cartRemind !== null || !D.mailReady) return '';
+    return '<label class="remind-opt"><input type="checkbox" data-remind> <span><b>Напомнить на почту</b><small>Если не успеете оформить заказ — одно письмо через несколько часов</small></span></label>';
+  }
+  document.addEventListener('change', async function (e) {
+    var r = e.target.closest && e.target.closest('[data-remind]'); if (!r || !API.user) return;
+    try { await API.savePrefs({ cartRemind: r.checked }); toast(r.checked ? 'Напомним, если не успеете оформить' : 'Напоминания отключены'); } catch (ex) { toast(errMsg(ex), true); }
+  });
   function openCart() { renderCartDrawer(); openPanel('cartDrawer'); }
 
   function cartPage(v) {
@@ -1278,7 +1434,7 @@
       $('#cpSum').innerHTML = '<div class="sum-row"><span>' + q.count + ' ' + plural(q.count, 'товар', 'товара', 'товаров') + '</span><span>' + fmt(q.baseTotal) + '</span></div>' +
         (q.saleDiscount ? '<div class="sum-row disc"><span>Скидка по акциям</span><span>−' + fmt(q.saleDiscount) + '</span></div>' : '') +
         '<div class="sum-row total"><span>Итого</span><span>' + fmt(q.subtotal) + '</span></div>' + earnRow(q) +
-        (API.user && API.user.bonus && q.bonus.enabled ? '<p class="muted" style="font-size:13px">На бонусном счёте ' + bonusNum(API.user.bonus) + ' ' + bonusWord(API.user.bonus) + ' — спишете при оформлении</p>' : '') + '<a class="btn block" href="#/checkout">Оформить заказ</a>';
+        (API.user && API.user.bonus && q.bonus.enabled ? '<p class="muted" style="font-size:13px">На бонусном счёте ' + bonusNum(API.user.bonus) + ' ' + bonusWord(API.user.bonus) + ' — спишете при оформлении</p>' : '') + '<a class="btn block" href="#/checkout">Оформить заказ</a>' + remindHtml();
     };
     cartPageDraw = draw; draw();
   }
@@ -1299,6 +1455,7 @@
   }
   function checkout(v) {
     var buy = coSrc() === BuyNow;
+    if (coSrc().get().length) { stat('k'); if (window.Metrika) Metrika.goal('checkout'); }
     if (!coSrc().get().length) { v.innerHTML = '<div class="wrap"><div class="empty"><h3>Корзина пуста</h3><a class="btn ghost" href="#/catalog">В каталог</a></div></div>'; return; }
     var s = D.settings, u = API.user || {}, methods = (s.delivery && s.delivery.methods) || [], pay = Object.assign({}, s.payment || {});
     if (!D.payReady) pay.online = false; // ЮKassa ещё не подключена — онлайн-оплату не предлагаем
@@ -1331,6 +1488,7 @@
       coStep(3, 'pay', 'Оплата', 'Оплатите заказ сразу после подтверждения',
         '<div class="options" id="payOpts">' +
         (pay.online ? '<label class="option ico"><input type="radio" name="pay" value="online">' + optIc('payment') + '<span><b>' + esc(pay.onlineLabel || 'Онлайн') + (bonusCfg().enabled && bonusCfg().onlineExtra > 0 ? ' <em class="pay-bonus">+' + bonusCfg().onlineExtra + '% бонусами</em>' : '') + '</b><small>Быстро и безопасно через ЮKassa' + (bonusCfg().enabled && bonusCfg().onlineExtra > 0 ? (API.user ? '. Бонусы придут на следующий заказ' : '. Бонусы — для покупателей с личным кабинетом') : '') + '</small><span class="pay-marks" aria-label="Карта «Мир», СБП, SberPay, T-Pay"><i>МИР</i><i>СБП</i><i>SberPay</i><i>T-Pay</i></span></span><span></span></label>' : '') +
+        (pay.online && partsOn() ? '<label class="option ico opt-parts" id="optParts" hidden><input type="radio" name="pay" value="parts"><span class="opt-ic parts-opt-ic" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span><b>Частями — 4 платежа</b><small id="partsHint">Без переплаты, раз в две недели · «Плати частями»</small><span id="partsPlanBox"></span></span><span class="opt-price" id="partsPrice"></span></label>' : '') +
         (!pay.online && !pay.cod ? '<p class="demo-note">Оформление заказов временно недоступно — свяжитесь с нами по телефону из раздела «Контакты».</p>' : '') +
         (pay.cod ? '<label class="option ico"><input type="radio" name="pay" value="cod">' + optIc('cash') + '<span><b>' + esc(pay.codLabel || 'При получении') + '</b><small id="codHint">Наличными или картой при получении</small></span><span></span></label>' : '') + '</div>' +
         (pay.online ? '<p class="co-secure" id="coSecure"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.5 3 8.3 7 10 4-1.7 7-5.5 7-10V6z"/><path d="m9 12 2 2 4-4"/></svg><span>После подтверждения откроется защищённая страница ЮKassa. Данные карты к нам не попадают, чек придёт на почту.</span></p>' : '') +
@@ -1338,6 +1496,7 @@
       '</div>' +
       '</div><aside class="summary"><h3 class="serif" style="font-size:28px">Ваш заказ</h3><div id="coSum"></div>' +
         '<div class="promo-form"><input class="input" id="co-code" placeholder="Промокод" autocomplete="off" aria-label="Промокод"><button type="button" class="btn ghost" id="applyCode">Применить</button></div><div class="promo-msg" id="promoMsg"></div>' +
+        '<details class="co-gift" id="coGift"><summary>Есть подарочный сертификат?</summary><div class="promo-form"><input class="input" id="co-gift" placeholder="GIFT-XXXX-XXXX" autocomplete="off" autocapitalize="characters" aria-label="Код сертификата"><button type="button" class="btn ghost" id="applyGift">Применить</button></div><div class="gift-msg" id="giftMsg"></div></details>' +
         '<div id="coBonus"></div><div id="coTotals" style="display:grid;gap:10px"></div>' +
         // Оферта и согласие на обработку персональных данных — отдельными галочками (согласие по 152-ФЗ даётся отдельно от других документов)
         '<label class="check"><input type="checkbox" id="co-offer"> <span>Принимаю условия <a href="#/page/offer" data-page-modal="offer">публичной оферты</a></span></label>' +
@@ -1369,7 +1528,7 @@
     }
     function drawOpts() {
       $('#delivOpts').innerHTML = methods.map(function (m) { return '<label class="option ico' + (st.deliveryId === m.id ? ' on' : '') + '"><input type="radio" name="deliv" value="' + esc(m.id) + '"' + (st.deliveryId === m.id ? ' checked' : '') + '>' + optIc(m.needsAddress === false ? 'pin' : 'delivery') + '<span><b>' + esc(m.name) + '</b><small>' + esc(m.desc || '') + (m.freeFrom ? ' · бесплатно от ' + fmt(m.freeFrom) : '') + '</small></span><span class="num opt-price" data-dp="' + esc(m.id) + '"></span></label>'; }).join('');
-      $$('#payOpts .option').forEach(function (o) { var i = $('input', o); i.checked = i.value === st.payment; o.classList.toggle('on', i.checked); });
+      $$('#payOpts .option').forEach(function (o) { var i = $('input', o); i.checked = i.value === (st.parts ? 'parts' : st.payment); o.classList.toggle('on', i.checked); });
       var m = methods.find(function (x) { return x.id === st.deliveryId; });
       var cm = cdekMode(), pm = cm === 'pvz';
       $('#addrBox').hidden = !(m && m.needsAddress !== false) || !!cm;
@@ -1403,14 +1562,14 @@
       var contact = { email: $('#co-email').value, phone: $('#co-phone').value }, my = ++st.sumSeq;
       // цена СДЭК считается по городу выбранного пункта
       var extra = cdekMode() && st.city ? { cityCode: st.city.code, pvzType: doorMode() ? 'door' : st.pvz ? st.pvz.type : 'pvz' } : {};
-      extra.payment = st.payment;
+      extra.payment = st.payment; if (st.gift) extra.gift = st.gift;
       var q = await cartQuote(st.code, st.deliveryId, contact, st.useBonus, extra);
       if (my !== st.sumSeq || !$('#coSum')) return q; // ответ пришёл, когда покупатель уже ушёл со страницы
       st.q = q;
       // Товары в заказе: количество и «Убрать» прямо здесь, без возврата в корзину
       $('#coSum').innerHTML = '<div class="mini-lines co-lines">' + q.lines.map(function (l) {
         var key = esc(l.productId + '|' + (l.colorId || '') + '|' + l.size);
-        return '<div class="mini-line co-line"><img src="' + esc(l.image || Art.make(l.art)) + '" alt=""><div><div>' + esc(l.name) + '</div><div class="sub">' + (l.color ? esc(l.color) + ' · ' : '') + 'размер ' + esc(l.size) + (l.problem ? ' · <span style="color:var(--danger)">' + esc(l.problem) + '</span>' : '') + '</div>' +
+        return '<div class="mini-line co-line"><img src="' + esc(l.image || Art.make(l.art)) + '" alt=""><div><div>' + esc(l.name) + '</div><div class="sub">' + (l.color ? esc(l.color) + ' · ' : '') + 'размер ' + esc(l.size) + (l.problem ? ' · <span style="color:var(--danger)">' + esc(l.problem) + '</span>' : '') + '</div>' + (l.preorder ? preTag(l) : '') +
           '<div class="co-line-acts"><span class="co-qty"><button type="button" data-co-q="-1" data-co-key="' + key + '" aria-label="Меньше"' + (l.qty <= 1 ? ' disabled' : '') + '>−</button><b>' + l.qty + '</b><button type="button" data-co-q="1" data-co-key="' + key + '" aria-label="Больше">+</button></span>' +
           '<button type="button" class="co-rm" data-co-rm="' + key + '">Убрать</button></div></div><span class="num">' + fmt(l.total) + '</span></div>';
       }).join('') + '</div>';
@@ -1430,6 +1589,7 @@
         (q.promoDiscount ? '<div class="sum-row disc"><span>Промокод ' + esc(q.promo.code) + '</span><span>−' + fmt(q.promoDiscount) + '</span></div>' : '') +
         '<div class="sum-row"><span>Доставка' + (q.delivery && q.delivery.days ? ' <small class="muted">' + esc(q.delivery.days) + ' ' + plural(Number(String(q.delivery.days).split('–').pop()), 'день', 'дня', 'дней') + '</small>' : '') + '</span><span>' + (q.delivery ? (q.delivery.pending ? '<span class="muted">после выбора пункта</span>' : q.deliveryPrice ? fmt(q.deliveryPrice) : 'Бесплатно') : '—') + '</span></div>' +
         (q.bonusUsed ? '<div class="sum-row disc"><span>Оплата бонусами</span><span>−' + fmt(q.bonusUsed) + '</span></div>' : '') +
+        (q.giftUsed ? '<div class="sum-row disc"><span>Подарочный сертификат</span><span>−' + fmt(q.giftUsed) + '</span></div>' : '') +
         '<div class="sum-row total"><span>К оплате</span><span>' + fmt(q.total) + '</span></div>' + earnRow(q);
       // Бонусный счёт: переключатель «списать», либо подсказка гостю
       var bal = q.bonus.balance, box = $('#coBonus');
@@ -1439,8 +1599,17 @@
       } else if (q.bonus.enabled && !API.user && q.bonusEarn > 0) {
         box.innerHTML = '<p class="bonus-guest"><i class="b-ic" aria-hidden="true">Б</i><span><a class="link" href="#/account?back=checkout">Войдите</a> — и получите +' + bonusNum(q.bonusEarn) + ' ' + bonusWord(q.bonusEarn) + ' за этот заказ</span></p>';
       } else box.innerHTML = '';
+      var gm = $('#giftMsg');
+      if (gm) gm.innerHTML = !q.gift ? '' : q.gift.ok ? '<div class="gift-ok"><span class="gift-ic" aria-hidden="true">✓</span><div><b>Сертификат ' + esc(q.gift.code) + ' — спишем ' + fmt(q.giftUsed) + '</b><small>' + esc(q.gift.message) + '</small></div><button type="button" class="link" data-gift-clear>Убрать</button></div>' : '<p class="promo-msg bad">' + esc(q.gift.message) + '</p>';
       var free = q.lines.length && q.total === 0;
       $('#bonusPaid').hidden = !free; $('#payOpts').hidden = free; st.free = free;
+      if (free) $('#bonusPaid').textContent = 'Заказ полностью оплачен ' + (q.giftUsed && q.bonusUsed ? 'сертификатом и бонусами' : q.giftUsed ? 'подарочным сертификатом' : 'бонусами') + ' — платить ничего не нужно.';
+      var op = $('#optParts');
+      if (op) {
+        var fits = partsFits(q.total); op.hidden = !fits;
+        if (fits) { $('#partsPrice').textContent = '4 × ' + fmt(Math.ceil(q.total / 4)); $('#partsPlanBox').innerHTML = st.parts ? partsPlanHtml(q.total) : ''; }
+        else if (st.parts) { st.parts = false; drawOpts(); }
+      }
       submitLabel(); if ($('#coSecure')) $('#coSecure').hidden = st.payment !== 'online' || free;
       return q;
     }
@@ -1557,12 +1726,15 @@
     $('#delivOpts').addEventListener('change', function (e) { st.deliveryId = e.target.value; drawOpts(); drawSum(); });
     $('#coBonus').addEventListener('change', function (e) { if (e.target.id === 'co-bonus') { st.useBonus = e.target.checked; drawSum(); } });
     $('#payOpts').addEventListener('change', function (e) {
-      st.payment = e.target.value;
+      st.parts = e.target.value === 'parts'; st.payment = st.parts ? 'online' : e.target.value;
       // при оплате при получении подходят не все пункты СДЭК
       if (codNow() && st.pvz && !st.pvz.cod) { st.pvz = null; st.codReset = true; pvzSave(); }
       drawOpts(); drawSum(); if (st.city && st.points) drawPoints();
     });
     $('#applyCode').addEventListener('click', function () { st.code = $('#co-code').value.trim(); drawSum(); });
+    $('#applyGift').addEventListener('click', function () { st.gift = $('#co-gift').value.trim(); drawSum(); });
+    $('#co-gift').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); $('#applyGift').click(); } });
+    $('#giftMsg').addEventListener('click', function (e) { if (e.target.closest('[data-gift-clear]')) { st.gift = ''; $('#co-gift').value = ''; drawSum(); } });
     $('#promoMsg').addEventListener('click', function (e) {
       if (e.target.closest('[data-promo-clear]')) { st.code = ''; $('#co-code').value = ''; drawSum(); }
       if (e.target.closest('[data-promo-login]')) { try { sessionStorage.setItem('albakov:code', st.code); } catch (ex) {} }
@@ -1589,7 +1761,8 @@
       var btn = $('#coSubmit'); btn.disabled = true; btn.textContent = st.payment === 'online' && !st.free ? 'Переходим к оплате…' : 'Оформляем…';
       try {
         if (!st.idem) st.idem = Array.from(crypto.getRandomValues(new Uint8Array(16)), function (x) { return ('0' + x.toString(16)).slice(-2); }).join('');
-        var r = await API.placeOrder({ idem: st.idem, saveAddress: !!($('#co-save') && $('#co-save').checked), lines: coSrc().get(), code: st.code, deliveryId: st.deliveryId, payment: st.payment, useBonus: st.useBonus, customer: f, city: needAddr ? $('#co-city').value.trim() : '', address: needAddr ? $('#co-addr').value.trim() : doorMode() ? (st.addr || '').trim() : '', pvz: pvzMode() && st.pvz ? st.pvz.code : '', cityCode: cdekMode() && st.city ? st.city.code : '', pvzType: st.pvz ? st.pvz.type : '', comment: $('#co-comment').value.trim(), consent: true });
+        var r = await API.placeOrder({ gift: st.gift && st.q && st.q.gift && st.q.gift.ok ? st.gift : '', parts: !!st.parts, idem: st.idem, saveAddress: !!($('#co-save') && $('#co-save').checked), lines: coSrc().get(), code: st.code, deliveryId: st.deliveryId, payment: st.payment, useBonus: st.useBonus, customer: f, city: needAddr ? $('#co-city').value.trim() : '', address: needAddr ? $('#co-addr').value.trim() : doorMode() ? (st.addr || '').trim() : '', pvz: pvzMode() && st.pvz ? st.pvz.code : '', cityCode: cdekMode() && st.city ? st.city.code : '', pvzType: st.pvz ? st.pvz.type : '', comment: $('#co-comment').value.trim(), consent: true });
+        if (window.Metrika && !r.repeated) { Metrika.ec('purchase', r.order.items.map(function (i) { var pp = D.products.find(function (x) { return x.id === i.productId; }); return pp ? ecItem(pp, i.color, i.size, i.qty, i.price) : { id: i.productId, name: i.name, price: i.price, quantity: i.qty }; }), { id: r.order.number, revenue: r.order.total }); Metrika.goal('order', { order_price: r.order.total, currency: 'RUB' }); }
         if (buy) BuyNow.clear(); else Cart.clear();
         if (r.payUrl) { location.href = r.payUrl; return; }
         go('#/order/' + r.order.id);
@@ -1703,12 +1876,12 @@
     v.innerHTML = '<div class="loader">…</div>';
     try {
       var o = await API.getOrder(parts[1]);
-      var payLabel = o.payment.method === 'exchange' ? 'Обмен по заказу № ' + (o.exchangeOf ? o.exchangeOf.number : '') : o.payment.method === 'bonus' ? 'Оплачен бонусами' : o.payment.method === 'online' ? PAY[o.payment.status] : 'Оплата при получении';
+      var payLabel = o.payment.method === 'exchange' ? 'Обмен по заказу № ' + (o.exchangeOf ? o.exchangeOf.number : '') : o.payment.method === 'gift' ? 'Оплачен подарочным сертификатом' : o.payment.method === 'bonus' ? 'Оплачен бонусами' : o.payment.method === 'online' ? PAY[o.payment.status] : 'Оплата при получении';
       v.innerHTML = '<div class="wrap"><div class="success"><span class="eyebrow">Заказ № ' + esc(o.number) + '</span><h1>' + (o.status === 'returned' ? 'Возврат оформлен' : 'Спасибо за заказ') + '</h1>' +
         '<p class="muted" style="max-width:46ch">' + (D.mailReady ? 'Подтверждение придёт на ' + esc(o.customer.email) + (o.payment.method === 'online' && o.payment.status !== 'paid' ? ' после оплаты' : '') + '. ' : '') + orderNext(o) + '</p>' +
         '<div style="display:flex;gap:18px;flex-wrap:wrap;justify-content:center"><span class="status ' + esc(o.status) + '">' + esc(STATUS[o.status] || o.status) + '</span><span class="status ' + esc(o.payment.status) + '">' + esc(payLabel) + '</span></div>' +
         trackHtml(o) + returnsHtml(o) + (API.user || o.requestState ? requestsHtml(o) : '') +
-        '<div class="order-card" style="width:100%;text-align:left">' + o.items.map(function (i) { return '<div class="mini-line"><img src="' + esc(i.image || Art.make(i.art)) + '" alt=""><div><div>' + esc(i.name) + '</div><div class="sub">' + (i.color ? esc(i.color) + ' · ' : '') + esc(i.size) + ' · ' + i.qty + ' шт.</div></div><span class="num">' + fmt(i.price * i.qty) + '</span></div>'; }).join('') +
+        '<div class="order-card" style="width:100%;text-align:left">' + o.items.map(function (i) { return '<div class="mini-line"><img src="' + esc(i.image || Art.make(i.art)) + '" alt=""><div><div>' + esc(i.name) + '</div><div class="sub">' + (i.color ? esc(i.color) + ' · ' : '') + esc(i.size) + ' · ' + i.qty + ' шт.</div>' + (i.preorder ? preTag(i) : '') + '</div><span class="num">' + fmt(i.price * i.qty) + '</span></div>'; }).join('') +
           (o.promoDiscount ? '<div class="sum-row disc"><span>Промокод ' + esc(o.promoCode) + '</span><span>−' + fmt(o.promoDiscount) + '</span></div>' : '') +
           '<div class="sum-row"><span>' + esc(o.delivery && o.delivery.name || 'Доставка') + '</span><span>' + (o.delivery && o.delivery.price ? fmt(o.delivery.price) : 'Бесплатно') + '</span></div>' +
           (o.bonusUsed ? '<div class="sum-row disc"><span>Оплачено бонусами</span><span>−' + fmt(o.bonusUsed) + '</span></div>' : '') +
@@ -1880,6 +2053,7 @@
         '<label class="field"><span>Электронная почта</span><input class="input" id="pf-email" type="email" autocomplete="email" value="' + esc(u.email) + '"></label></div></fieldset>' +
       '<fieldset><legend>Пароль</legend><p>Заполните, только если хотите сменить пароль.</p>' +
         '<label class="field"><span>Новый пароль</span><input class="input" id="pf-pass" type="password" autocomplete="new-password" placeholder="Не короче 6 символов"></label></fieldset>' +
+      '<fieldset><legend>Письма</legend><p>Только по делу — никаких рассылок.</p><label class="check"><input type="checkbox" data-remind' + (u.cartRemind ? ' checked' : '') + '> <span>Напоминать о товарах в корзине, если я не оформил заказ<br><small class="muted">Одно письмо на корзину, через несколько часов</small></span></label></fieldset>' +
       '<p class="form-error" id="pfErr"></p><div class="acc-profile-act"><button class="btn">Сохранить изменения</button><button class="btn ghost" type="button" id="pfOut">Выйти из аккаунта</button></div></form>';
     phoneMask($('#pf-phone'));
     $('#pfOut').addEventListener('click', async function () { await API.logout(); toast('Вы вышли из аккаунта'); go('#/'); });
@@ -2107,7 +2281,7 @@
       '<div class="tabs"><button data-m="login"' + (mode === 'login' ? ' class="on"' : '') + '>Вход</button><button data-m="register"' + (mode === 'register' ? ' class="on"' : '') + '>Регистрация</button></div>' +
       (mode === 'login' ?
         '<form class="form" id="authForm" novalidate><label class="field"><span>Телефон или электронная почта</span><input class="input" id="lg-login" autocomplete="username"></label>' +
-        '<label class="field"><span>Пароль</span><input class="input" id="lg-pass" type="password" autocomplete="current-password"></label><p class="form-error" id="authErr"></p><button class="btn block">Войти</button><button type="button" class="link auth-forgot" id="lgForgot">Забыли пароль?</button></form>'
+        '<label class="field"><span>Пароль</span><input class="input" id="lg-pass" type="password" autocomplete="current-password"></label><p class="form-error" id="authErr"></p><button class="btn block">Войти</button><div class="auth-links"><button type="button" class="link auth-forgot" id="lgForgot">Забыли пароль?</button><a class="link auth-forgot" href="#/track">Где мой заказ — без входа</a></div></form>'
       :
         '<form class="form" id="authForm" novalidate><div class="row2"><label class="field"><span>Имя</span><input class="input" id="rg-first" autocomplete="given-name" value="' + esc(pre.firstName || '') + '"></label>' +
         '<label class="field"><span>Фамилия</span><input class="input" id="rg-last" autocomplete="family-name" value="' + esc(pre.lastName || '') + '"></label></div>' +
@@ -2579,6 +2753,103 @@
     $('.toast-undo', t).addEventListener('click', function () { undo(); t.remove(); });
     setTimeout(function () { t.classList.add('out'); setTimeout(function () { t.remove(); }, 400); }, 5000);
   }
+  /* ---------- Подарочные сертификаты ---------- */
+  function giftPage(v) {
+    var cfg = D.giftCfg || { enabled: false, nominals: [5000, 10000, 20000], min: 3000, max: 100000, months: 12 }, u = API.user || {};
+    var canBuy = cfg.enabled && D.payReady;
+    var st = { amount: cfg.nominals[1] || cfg.nominals[0] || 10000, custom: false, when: 'now' };
+    var tomorrow = new Date(Date.now() + 864e5 + 3 * 36e5).toISOString().slice(0, 10), maxDate = new Date(Date.now() + 365 * 864e5).toISOString().slice(0, 10);
+    v.innerHTML = '<div class="wrap gift-page"><div class="page-head"><span class="eyebrow">Подарочные сертификаты</span><h1>Подарите ' + esc(D.settings.storeName || 'ALBAKOV') + '</h1>' +
+      '<p class="muted gift-lead">Электронный сертификат придёт получателю на почту — сразу или в день праздника. Им можно оплатить любые вещи, целиком или частями.</p></div>' +
+      '<div class="gift-grid"><div class="gift-visual"><div class="gift-card" id="gcCard"><i class="gc-glow" aria-hidden="true"></i>' +
+        '<div class="gc-top"><span class="gc-word">' + esc(String(D.settings.storeName || 'ALBAKOV').toUpperCase()) + '</span><span class="gc-label">Подарочный сертификат</span></div>' +
+        '<b class="gc-amount num" id="gcAmount"></b>' +
+        '<div class="gc-bottom"><span id="gcFor">Для получателя</span><span class="gc-code">GIFT-••••-••••</span></div></div>' +
+        '<ul class="gift-facts"><li><b>' + cfg.months + ' ' + plural(cfg.months, 'месяц', 'месяца', 'месяцев') + '</b><span>срок действия</span></li><li><b>Частями</b><span>можно тратить несколько раз</span></li><li><b>На почту</b><span>в выбранный день</span></li></ul></div>' +
+      '<form class="gift-form" id="gfForm" novalidate>' +
+        '<div class="gf-sec"><span class="gf-k">Сумма</span><div class="gf-noms">' + cfg.nominals.map(function (n) { return '<button type="button" class="chip" data-nom="' + n + '">' + fmt(n) + '</button>'; }).join('') + '<button type="button" class="chip" data-nom="custom">Своя сумма</button></div>' +
+          '<label class="field gf-custom" id="gfCustom" hidden><span>Своя сумма, ₽ <small class="muted">— от ' + fmt(cfg.min) + ' до ' + fmt(cfg.max) + '</small></span><input class="input num" id="gf-amount" inputmode="numeric" placeholder="15 000"></label></div>' +
+        '<div class="gf-sec"><span class="gf-k">Кому</span><div class="row2"><label class="field"><span>Имя получателя</span><input class="input" id="gf-to" maxlength="60" placeholder="Анна"></label><label class="field"><span>Почта получателя</span><input class="input" id="gf-email" type="email" placeholder="anna@mail.ru"></label></div>' +
+          '<label class="field"><span>Пожелание <small class="muted">— необязательно</small></span><textarea class="textarea" id="gf-msg" rows="2" maxlength="300" placeholder="С днём рождения! Выбери то, что понравится"></textarea></label>' +
+          '<div class="gf-when" role="radiogroup" aria-label="Когда отправить"><label><input type="radio" name="gf-when" value="now" checked><span>Отправить сразу после оплаты</span></label><label><input type="radio" name="gf-when" value="date"><span>В выбранный день</span></label></div>' +
+          '<label class="field" id="gfDate" hidden><span>Дата отправки <small class="muted">— письмо придёт в 10:00 по Москве</small></span><input class="input" id="gf-date" type="date" min="' + tomorrow + '" max="' + maxDate + '" value="' + tomorrow + '"></label></div>' +
+        '<div class="gf-sec"><span class="gf-k">От кого</span><div class="row2"><label class="field"><span>Ваше имя</span><input class="input" id="gf-first" autocomplete="given-name" value="' + esc(u.firstName || '') + '"></label><label class="field"><span>Фамилия</span><input class="input" id="gf-last" autocomplete="family-name" value="' + esc(u.lastName || '') + '"></label>' +
+          '<label class="field"><span>Телефон</span><input class="input" id="gf-phone" type="tel" autocomplete="tel" placeholder="+7 (___) ___-__-__" value="' + esc(fmtPhone(u.phone)) + '"></label><label class="field"><span>Ваша почта — для чека</span><input class="input" id="gf-me" type="email" autocomplete="email" value="' + esc(u.email || '') + '"></label></div>' +
+          '<label class="field"><span>Подпись в сертификате <small class="muted">— необязательно</small></span><input class="input" id="gf-from" maxlength="60" placeholder="Например, Илья" value="' + esc(u.firstName || '') + '"></label></div>' +
+        '<label class="check"><input type="checkbox" id="gf-offer"> <span>Принимаю условия <a href="#/page/offer" data-page-modal="offer">публичной оферты</a></span></label>' +
+        '<label class="check"><input type="checkbox" id="gf-agree"> <span>Даю <a href="#/page/consent" data-page-modal="consent">согласие на обработку персональных данных</a></span></label>' +
+        '<p class="form-error" id="gfErr"></p>' +
+        (canBuy ? '<button class="btn block gf-pay" id="gfPay"><span id="gfPayT"></span><span class="bn-ic" aria-hidden="true">' + ARROW + '</span></button><p class="gf-note">Оплата через ЮKassa. Код придёт получателю письмом, вам — чек на почту.</p>'
+          : '<div class="gf-soon"><b>Покупка онлайн скоро появится</b><p>Пока сертификат можно заказать, написав нам — оформим и пришлём код на почту.</p><a class="btn ghost" href="#/account?tab=support&new=1">Написать нам</a></div>') +
+      '</form></div>' +
+      '<section class="gift-check"><div><h2>Проверить остаток</h2><p class="muted">Введите код сертификата — покажем, сколько на нём осталось и до какого числа он действует.</p></div>' +
+        '<form class="gc-form" id="gcForm"><input class="input" id="gc-code" placeholder="GIFT-XXXX-XXXX" autocomplete="off" autocapitalize="characters" aria-label="Код сертификата"><button class="btn">Проверить</button></form><div id="gcRes" class="gc-res"></div></section></div>';
+    phoneMask($('#gf-phone'));
+    function amount() { return st.custom ? Math.round(Number(String($('#gf-amount').value).replace(/\D/g, '')) || 0) : st.amount; }
+    function sync() {
+      $$('[data-nom]', v).forEach(function (b) { b.classList.toggle('on', st.custom ? b.getAttribute('data-nom') === 'custom' : Number(b.getAttribute('data-nom')) === st.amount); });
+      $('#gfCustom').hidden = !st.custom;
+      var a = amount(); $('#gcAmount').textContent = a ? fmt(a) : '— ₽';
+      var to = $('#gf-to').value.trim(), from = $('#gf-from').value.trim();
+      $('#gcFor').textContent = [to ? 'Для ' + to : 'Для получателя', from ? 'от ' + from : ''].filter(Boolean).join(' · ');
+      $('#gfDate').hidden = st.when !== 'date';
+      if ($('#gfPayT')) $('#gfPayT').textContent = a ? 'Оплатить ' + fmt(a) : 'Выберите сумму';
+    }
+    v.addEventListener('click', function (e) { var b = e.target.closest('[data-nom]'); if (!b) return; var n = b.getAttribute('data-nom'); st.custom = n === 'custom'; if (!st.custom) st.amount = Number(n); sync(); if (st.custom) $('#gf-amount').focus(); });
+    ['gf-to', 'gf-from', 'gf-amount'].forEach(function (id) { $('#' + id).addEventListener('input', sync); });
+    $$('input[name="gf-when"]', v).forEach(function (r) { r.addEventListener('change', function () { st.when = r.value; sync(); }); });
+    // наклон карты за курсором
+    bindCardTilt($('#gcCard'));
+    sync();
+    $('#gfForm').addEventListener('submit', async function (e) {
+      e.preventDefault(); var err = $('#gfErr'); if (!canBuy) return;
+      var a = amount(), f = { firstName: $('#gf-first').value.trim(), lastName: $('#gf-last').value.trim(), phone: $('#gf-phone').value, email: $('#gf-me').value.trim() };
+      var checks = [['gf-email', validEmail($('#gf-email').value.trim())], ['gf-first', !!f.firstName], ['gf-last', !!f.lastName], ['gf-phone', validPhone(f.phone)], ['gf-me', validEmail(f.email)]];
+      checks.forEach(function (c) { $('#' + c[0]).classList.toggle('invalid', !c[1]); });
+      if (!(a >= cfg.min && a <= cfg.max)) { err.textContent = 'Сумма — от ' + fmt(cfg.min) + ' до ' + fmt(cfg.max); return; }
+      if (checks.some(function (c) { return !c[1]; })) { err.textContent = 'Заполните выделенные поля'; return; }
+      if (!$('#gf-offer').checked) { err.textContent = 'Примите условия публичной оферты'; return; }
+      if (!$('#gf-agree').checked) { err.textContent = 'Нужно согласие на обработку персональных данных'; return; }
+      err.textContent = ''; var b = $('#gfPay'); b.disabled = true; $('#gfPayT').textContent = 'Переходим к оплате…';
+      try {
+        var r = await API.buyGift({ amount: a, toName: $('#gf-to').value, toEmail: $('#gf-email').value, message: $('#gf-msg').value, fromName: $('#gf-from').value, sendAt: st.when === 'date' ? $('#gf-date').value : '', customer: f, consent: true });
+        if (r.payUrl) { location.href = r.payUrl; return; }
+        go('#/order/' + r.order.id);
+      } catch (ex) { err.textContent = errMsg(ex); b.disabled = false; sync(); }
+    });
+    $('#gcForm').addEventListener('submit', async function (e) {
+      e.preventDefault(); var box = $('#gcRes'), code = $('#gc-code').value.trim(); if (!code) return;
+      try {
+        var g = await API.checkGift(code);
+        box.innerHTML = '<div class="gc-card-res' + (g.state === 'active' ? '' : ' off') + '"><div><span class="gf-k">' + esc(g.code) + '</span><b class="num">' + fmt(g.balance) + '</b><span class="muted">из ' + fmt(g.amount) + (g.expiresAt ? ' · действует до ' + esc(fmtDate(g.expiresAt.slice(0, 10))) : '') + '</span></div>' + (g.message ? '<p>' + esc(g.message) + '</p>' : '<a class="btn ghost" href="#/catalog">Выбрать вещи</a>') + '</div>';
+      } catch (ex) { box.innerHTML = '<p class="promo-msg bad">' + esc(errMsg(ex)) + '</p>'; }
+    });
+  }
+
+  /* ---------- Где мой заказ: без входа, по номеру и телефону ---------- */
+  function trackPage(v, parts, q) {
+    v.innerHTML = '<div class="wrap trk-page"><div class="page-head"><span class="eyebrow">Без входа в кабинет</span><h1>Где мой заказ</h1>' +
+      '<p class="muted trk-lead">Номер заказа есть в письме и SMS после оформления. Телефон — тот, что вы указали в заказе.</p></div>' +
+      '<div class="trk-grid"><form class="trk-form" id="trkForm" novalidate>' +
+        '<label class="field"><span>Номер заказа</span><input class="input" id="trk-n" inputmode="numeric" autocomplete="off" placeholder="Например, 1042" value="' + esc(q.n || '') + '"></label>' +
+        '<label class="field"><span>Телефон из заказа</span><input class="input" id="trk-p" type="tel" autocomplete="tel" placeholder="+7 (___) ___-__-__"></label>' +
+        '<p class="form-error" id="trkErr"></p><button class="btn block trk-btn"><span>Найти заказ</span><span class="bn-ic" aria-hidden="true">' + ARROW + '</span></button></form>' +
+      '<aside class="trk-aside">' +
+        '<div class="trk-tip"><span class="trk-tip-ic">' + ICON.bag + '</span><div><b>Что вы увидите</b><p>Состав заказа, этап доставки, трек-номер СДЭК и куда приедет посылка.</p></div></div>' +
+        (API.user ? '<div class="trk-tip"><span class="trk-tip-ic">' + ICON.user + '</span><div><b>Вы вошли в кабинет</b><p>Все ваши заказы — в разделе <a class="link" href="#/account?tab=orders">Мои заказы</a>.</p></div></div>'
+          : '<div class="trk-tip"><span class="trk-tip-ic">' + ICON.user + '</span><div><b>Есть аккаунт?</b><p><a class="link" href="#/account">Войдите</a> — там история всех заказов и бонусы.</p></div></div>') +
+      '</aside></div></div>';
+    phoneMask($('#trk-p'));
+    $('#trkForm').addEventListener('submit', async function (e) {
+      e.preventDefault();
+      var n = $('#trk-n').value.replace(/\D/g, ''), ph = $('#trk-p').value, err = $('#trkErr');
+      $('#trk-n').classList.toggle('invalid', !n); $('#trk-p').classList.toggle('invalid', !validPhone(ph));
+      if (!n) { err.textContent = 'Укажите номер заказа'; return; }
+      if (!validPhone(ph)) { err.textContent = 'Укажите телефон полностью'; return; }
+      var b = $('.trk-btn'); b.disabled = true; err.textContent = '';
+      try { var r = await API.track(n, ph); go('#/order/' + r.id); } catch (ex) { err.textContent = errMsg(ex); b.disabled = false; }
+    });
+  }
   function favoritesPage(v) {
     v.innerHTML = '<div class="wrap"><div class="page-head"><span class="eyebrow">Сохранённые вещи</span><h1>Избранное</h1></div><div id="favBox" class="fav-box"></div></div>';
     bindFavList($('#favBox'));
@@ -2616,6 +2887,7 @@
     API = c.api; D = c.data;
     window.App = { careIcon: careIcon, API: API, D: D, plural: plural, slideHtml: slideHtml, slidePromo: slidePromo, slideVisible: slideVisible, hashPath: hashPath, brandHtml: brandHtml, brandMode: brandMode, esc: esc, fmt: fmt, md: md, toast: toast, errMsg: errMsg, imgOf: imgOf, refresh: refresh, go: go, openModal: openModal, closePanels: closePanels, fmtPhone: fmtPhone, fmtDate: fmtDate, STATUS: STATUS, PAY: PAY, chartTable: chartTable };
     renderShell();
+    initAnalytics();
     document.addEventListener('click', function (e) {
       var a = e.target.closest('[data-act]'); if (a) {
         var act = a.getAttribute('data-act');
@@ -2711,10 +2983,10 @@
   }
   /* Сообщение о cookie: один раз на устройстве. Сайт использует только необходимые cookie, без аналитики и рекламы */
   function cookieNote() {
-    var k = 'albakov:cookies'; try { if (localStorage.getItem(k)) return; } catch (e) { return; }
+    var k = (D.settings.metrika || {}).id ? 'albakov:cookies2' : 'albakov:cookies'; try { if (localStorage.getItem(k)) return; } catch (e) { return; }
     if (/^#\/admin/.test(curRoute())) return;
     var el = document.createElement('div'); el.className = 'cookie-note'; el.setAttribute('role', 'status');
-    el.innerHTML = '<p>Используем только необходимые cookie — для входа и корзины. <a href="#/page/privacy" data-page-modal="privacy">Подробнее</a></p><button class="btn sm" type="button">Понятно</button>';
+    el.innerHTML = '<p>' + ((D.settings.metrika || {}).id ? 'Используем cookie для входа, корзины и Яндекс Метрики — она помогает нам делать сайт удобнее.' : 'Используем только необходимые cookie — для входа и корзины.') + ' <a href="#/page/privacy" data-page-modal="privacy">Подробнее</a></p><button class="btn sm" type="button">Понятно</button>';
     document.body.appendChild(el);
     $('button', el).addEventListener('click', function () { try { localStorage.setItem(k, '1'); } catch (e) {} el.classList.add('out'); setTimeout(function () { el.remove(); }, 400); });
   }

@@ -10,7 +10,7 @@
 
   var SECTIONS = [
     ['overview', 'Обзор'], ['orders', 'Заказы'], ['support', 'Поддержка'], ['products', 'Товары'], ['categories', 'Категории'], ['sizeCharts', 'Размерные сетки'],
-    ['promotions', 'Акции'], ['promocodes', 'Промокоды'], ['bonus', 'Бонусы'], ['exchange', 'Обмен и возвраты'], ['customers', 'Покупатели'], ['notify', 'Сообщить о поступлении'], ['mail', 'Письма'], ['sections', 'Разделы: женщинам / мужчинам'], ['brand', 'Логотип и название'], ['slider', 'Слайдер на главной'], ['home', 'Главная страница'], ['pages', 'Страницы'],
+    ['promotions', 'Акции'], ['promocodes', 'Промокоды'], ['bonus', 'Бонусы'], ['exchange', 'Обмен и возвраты'], ['customers', 'Покупатели'], ['notify', 'Сообщить о поступлении'], ['mail', 'Письма'], ['telegram', 'Уведомления в Telegram'], ['analytics', 'Аналитика'], ['gifts', 'Подарочные сертификаты'], ['sections', 'Разделы: женщинам / мужчинам'], ['brand', 'Логотип и название'], ['slider', 'Слайдер на главной'], ['home', 'Главная страница'], ['pages', 'Страницы'],
     ['menu', 'Меню, контакты, соцсети'], ['payment', 'Оплата и доставка'], ['settings', 'Настройки']
   ];
   var TAX = [[1, 'ОСН — общая система'], [2, 'УСН «Доходы»'], [3, 'УСН «Доходы минус расходы»'], [5, 'ЕСХН'], [6, 'Патентная система']];
@@ -197,7 +197,7 @@
       '</nav><div class="adm-side-foot"><a href="#/" class="muted">← В магазин</a><button class="muted" id="admOut">Выйти</button></div></aside><section class="adm-main" id="admMain"></section></div>';
     $('#admOut').addEventListener('click', async function () { await API.adminLogout(); DATA = null; window.ALB_NAV.go('#/'); await A().refresh(); });
     var main = $('#admMain');
-    var fn = { overview: overview, orders: orders, support: supportSection, products: products, categories: categories, sizeCharts: sizeCharts, promotions: promotions, promocodes: promocodes, bonus: bonusSection, exchange: exchangeSection, customers: customers, notify: notifySection, mail: mailSection, sections: sectionsSettings, brand: brandSection, slider: sliderSection, home: homeSettings, pages: pages, menu: menuSettings, payment: paymentSettings, settings: generalSettings }[s] || overview;
+    var fn = { overview: overview, orders: orders, support: supportSection, products: products, categories: categories, sizeCharts: sizeCharts, promotions: promotions, promocodes: promocodes, bonus: bonusSection, exchange: exchangeSection, customers: customers, notify: notifySection, mail: mailSection, telegram: telegramSection, analytics: analyticsSection, gifts: giftsSection, sections: sectionsSettings, brand: brandSection, slider: sliderSection, home: homeSettings, pages: pages, menu: menuSettings, payment: paymentSettings, settings: generalSettings }[s] || overview;
     fn(main, q);
   }
   function waitBadge() { var n = (DATA.waitlist || []).filter(function (w) { return w.status === 'waiting' || w.status === 'failed'; }).length; return n ? ' <span class="adm-badge muted-badge">' + n + '</span>' : ''; }
@@ -265,6 +265,7 @@
         stat('Новые заказы', newN, '#/admin?s=orders&f=new') + stat('Заказов сегодня', todayN, '#/admin?s=orders') + stat('Выручка, всего', fmt(revenue), '#/admin?s=orders') + stat('Покупателей', DATA.users.length, '#/admin?s=customers') +
         stat('Товаров в продаже', DATA.products.filter(function (p) { return p.active !== false; }).length, '#/admin?s=products') + stat('Активных акций', promosActive, '#/admin?s=promotions') + stat('Активных промокодов', codesActive, '#/admin?s=promocodes') +
       '</div>' +
+      (function () { var t = sumDays(statDays(7)); return '<a class="adm-card an-mini" href="#/admin?s=analytics"><div><span class="adm-h3">Посетители за 7 дней</span><b class="num">' + t.v.toLocaleString('ru-RU') + '</b></div><div><span class="adm-h3">Конверсия в заказ</span><b>' + pct(t.o, t.v) + '</b></div><div class="an-mini-f">' + funnelHtml(t) + '</div><span class="an-more">Подробнее →</span></a>'; })() +
       '<div class="adm-two"><div class="adm-card"><h3 class="adm-h3">Последние заказы</h3>' + (o.length ? ordersTable(o.slice().reverse().slice(0, 6)) : '<p class="muted">Заказов пока нет.</p>') + '</div>' +
       '<div class="adm-card"><h3 class="adm-h3">Заканчиваются</h3>' + (low.length ? '<div class="adm-list">' + low.slice(0, 10).map(function (x) { return '<a href="#/admin?s=products&id=' + esc(x.p.id) + '" class="adm-li"><span>' + esc(x.p.name) + ' <span class="muted">· ' + esc(x.c.name) + ' · ' + esc(x.s.size) + '</span></span><span class="num ' + (x.s.stock ? 'warn' : 'bad') + '">' + x.s.stock + ' шт.</span></a>'; }).join('') + '</div>' : '<p class="muted">Все размеры в наличии.</p>') + '</div></div>';
   }
@@ -282,6 +283,7 @@
   function payText(o) {
     if (o.payment.method === 'exchange') return 'Обмен';
     if (o.payment.method === 'bonus') return 'Бонусами';
+    if (o.payment.method === 'gift') return 'Сертификатом';
     if (o.payment.method === 'cod' && o.payment.status === 'pending') return 'При получении';
     if (o.payment.status === 'paid' && o.refunded) return 'Частичный возврат';
     return A().PAY[o.payment.status];
@@ -322,7 +324,7 @@
       '<div><span>Возвращено</span><b class="num' + (back ? ' rf-back' : '') + '">' + (back ? '−' + fmt(back) : '0 ₽') + '</b></div>' +
       '<div><span>Осталось у магазина</span><b class="num">' + fmt(pm.status === 'paid' || pm.status === 'refunded' ? left : 0) + '</b></div></div>';
     var meta = '<dl class="rf-meta"><dt>Плательщик</dt><dd>' + esc(c.lastName + ' ' + c.firstName) + ' · ' + esc(A().fmtPhone(c.phone)) + '</dd>' +
-      '<dt>Способ</dt><dd>' + (pm.method === 'online' ? 'Онлайн через ЮKassa' : pm.method === 'bonus' ? 'Бонусами' : 'При получении') + '</dd>' +
+      '<dt>Способ</dt><dd>' + (pm.method === 'online' ? 'Онлайн через ЮKassa' + (pm.variant === 'parts' ? ' — частями' : '') : pm.method === 'bonus' ? 'Бонусами' : pm.method === 'gift' ? 'Подарочным сертификатом' : 'При получении') + (o.giftUsed ? ' · сертификатом ' + fmt(o.giftUsed) + ' (' + esc(o.giftCode) + ')' : '') + '</dd>' +
       (online ? '<dt>Платёж ЮKassa</dt><dd><span class="copyable num">' + esc(pm.providerId) + '</span></dd>' : '') + '</dl>';
     var hist = refunds.length ? '<div class="rf-hist"><b>История возвратов</b>' + refunds.map(function (r) {
       var what = r.items.map(function (i) { return esc(i.name) + ', ' + esc(i.size) + ' × ' + i.qty; }); if (r.delivery) what.push('доставка');
@@ -686,6 +688,11 @@
           { k: 'description', label: 'Описание', type: 'textarea' },
           { k: 'composition', label: 'Состав — свой текст', type: 'textarea', rows: 2, hint: 'Нужен, только если состава нет среди вариантов в «Характеристиках» ниже' },
           { k: 'care', label: 'Уход — дополнительно', type: 'textarea', rows: 2, hint: 'Основное отмечается значками в «Характеристиках». Сюда — то, чего там нет' },
+          { section: 'Образ и предзаказ' },
+          { k: 'look', label: 'С этим носят — отметьте до 4 вещей', type: 'multi', options: DATA.products.map(function (x) { return [x.id, x.name]; }), hint: 'В карточке товара появится блок «Соберите образ»: покупатель выберет размеры и добавит все вещи одной кнопкой' },
+          { k: 'preorder', label: 'Предзаказ: можно заказать размеры, которых нет в наличии', type: 'checkbox', hint: 'Подходит для вещей, которые ещё шьются. Такие заказы приходят с пометкой «предзаказ»' },
+          { k: 'preorderShip', label: 'Когда отправим по предзаказу', type: 'date' },
+          { k: 'preorderLimit', label: 'Мест в партии', type: 'number', hint: 'Сколько вещей можно заказать заранее. 0 — без ограничения' },
           { section: 'Служебное' },
           { k: 'slug', label: 'Адрес страницы', hint: 'Латиницей. Заполнится сам из названия, если оставить пустым.' },
           { k: 'createdAt', label: 'Дата поступления', type: 'date', hint: 'Для сортировки «Сначала новые»' }
@@ -1114,6 +1121,147 @@
     });
   }
 
+  /* ================= Аналитика: своя воронка + Яндекс Метрика ================= */
+  function statDays(n) {
+    var out = [], st = DATA.stats || {};
+    for (var i = n - 1; i >= 0; i--) { var d = new Date(Date.now() + 3 * 36e5 - i * 864e5).toISOString().slice(0, 10); out.push(Object.assign({ day: d, v: 0, p: 0, c: 0, k: 0, src: {}, dev: { m: 0, d: 0 } }, st[d] || {})); }
+    var ord = DATA.orders.filter(function (o) { return !o.test; });
+    out.forEach(function (x) {
+      var list = ord.filter(function (o) { return new Date(new Date(o.createdAt).getTime() + 3 * 36e5).toISOString().slice(0, 10) === x.day; });
+      x.o = list.length; x.rev = list.filter(function (o) { return o.status !== 'canceled'; }).reduce(function (s, o) { return s + o.total - (o.refunded || 0); }, 0);
+    });
+    return out;
+  }
+  function sumDays(days) {
+    var t = { v: 0, p: 0, c: 0, k: 0, o: 0, rev: 0, src: {}, m: 0, d: 0 };
+    days.forEach(function (x) { ['v', 'p', 'c', 'k', 'o', 'rev'].forEach(function (k) { t[k] += x[k] || 0; }); Object.keys(x.src || {}).forEach(function (k) { t.src[k] = (t.src[k] || 0) + x.src[k]; }); t.m += (x.dev || {}).m || 0; t.d += (x.dev || {}).d || 0; });
+    return t;
+  }
+  var SRC_NAMES = { instagram: 'Instagram', telegram: 'Telegram', vk: 'ВКонтакте', yandex: 'Яндекс', google: 'Google', direct: 'Прямые заходы', other: 'Другие сайты' };
+  function pct(a, b) { return b ? (Math.round(Math.min(a, b) / b * 1000) / 10).toString().replace('.', ',') + '%' : '—'; }
+  function funnelHtml(t) {
+    var steps = [['Зашли на сайт', t.v], ['Открыли товар', t.p], ['Положили в корзину', t.c], ['Начали оформление', t.k], ['Оформили заказ', t.o]];
+    var max = Math.max(1, t.v), worst = -1, worstRate = 2;
+    steps.forEach(function (x, i) { if (i && steps[i - 1][1] >= 5) { var r = x[1] / steps[i - 1][1]; if (r < worstRate) { worstRate = r; worst = i; } } });
+    return '<div class="an-funnel">' + steps.map(function (x, i) {
+      var h = Math.max(4, Math.min(100, Math.round(x[1] / max * 100)));
+      return '<div class="an-step' + (i === worst ? ' is-worst' : '') + '"><div class="an-col"><i style="height:' + h + '%"></i></div><b class="num">' + x[1].toLocaleString('ru-RU') + (i ? ' <span>' + pct(x[1], steps[i - 1][1]) + '</span>' : '') + '</b><small>' + x[0] + (i === worst ? ' · здесь уходят чаще всего' : '') + '</small></div>';
+    }).join('') + '</div>';
+  }
+  function analyticsSection(m, q) {
+    var n = Number((q && q.d) || 7) === 30 ? 30 : 7, days = statDays(n), prev = sumDays(statDays(n * 2).slice(0, n)), t = sumDays(days);
+    var delta = function (a, b) { if (!b) return ''; var d = Math.round((a - b) / b * 100); return '<span class="an-d ' + (d >= 0 ? 'up' : 'down') + '">' + (d >= 0 ? '▲ ' : '▼ ') + Math.abs(d) + '% к прошлым ' + n + ' дн.</span>'; };
+    var mk = (DATA.settings.metrika || {}), srcs = Object.keys(t.src).sort(function (a, b) { return t.src[b] - t.src[a]; }), srcTotal = srcs.reduce(function (s, k) { return s + t.src[k]; }, 0);
+    var maxV = Math.max(1, Math.max.apply(null, days.map(function (x) { return x.v; })));
+    m.innerHTML = head('Аналитика', '<div class="tabs adm-tabs"><a href="#/admin?s=analytics&d=7" class="' + (n === 7 ? 'on' : '') + '">7 дней</a><a href="#/admin?s=analytics&d=30" class="' + (n === 30 ? 'on' : '') + '">30 дней</a></div>',
+        'Своя статистика сайта: без cookie и без персональных данных покупателей. Подробные отчёты, карта кликов и записи визитов — в Яндекс Метрике (подключается ниже).') +
+      '<div class="adm-stats an-kpi">' +
+        '<div class="adm-stat"><span class="eyebrow">Посетители</span><b class="num">' + t.v.toLocaleString('ru-RU') + '</b>' + delta(t.v, prev.v) + '</div>' +
+        '<div class="adm-stat"><span class="eyebrow">Конверсия в заказ</span><b>' + pct(t.o, t.v) + '</b><span class="an-d">' + t.o + ' ' + plural(t.o, 'заказ', 'заказа', 'заказов') + '</span></div>' +
+        '<div class="adm-stat"><span class="eyebrow">Выручка</span><b class="num">' + fmt(t.rev) + '</b>' + delta(t.rev, prev.rev) + '</div>' +
+        '<div class="adm-stat"><span class="eyebrow">Средний чек</span><b class="num">' + (t.o ? fmt(Math.round(t.rev / t.o)) : '—') + '</b>' + (t.m + t.d ? '<span class="an-d">с телефона ' + pct(t.m, t.m + t.d) + ' визитов</span>' : '') + '</div>' +
+      '</div>' +
+      (t.v ? '' : '<div class="adm-alert an-empty"><b>Статистика только начала собираться.</b> Цифры появятся, как только на сайт зайдут первые покупатели — обычно уже в течение часа. Боты и ваши визиты в админку не считаются.</div>') + '<div class="adm-card"><h3 class="adm-h3">Воронка: где уходят покупатели</h3>' + funnelHtml(t) + '</div>' +
+      '<div class="adm-two" style="margin-top:16px"><div class="adm-card"><h3 class="adm-h3">Посетители и заказы по дням</h3><div class="an-chart">' + days.map(function (x) {
+          return '<div class="an-day" title="' + x.day.split('-').reverse().slice(0, 2).join('.') + ': ' + x.v + ' посет., ' + x.o + ' зак."><div class="an-bar"><i style="height:' + Math.round(x.v / maxV * 100) + '%"></i>' + (x.o ? '<em style="bottom:' + Math.min(96, Math.round(x.v / maxV * 100)) + '%">' + x.o + '</em>' : '') + '</div><span>' + (n === 7 ? ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'][new Date(x.day).getDay()] : (Number(x.day.slice(8)) % 5 === 1 ? Number(x.day.slice(8)) : '')) + '</span></div>';
+        }).join('') + '</div><p class="muted" style="font-size:12px;margin-top:10px">Столбик — посетители, число над ним — заказы за день</p></div>' +
+        '<div class="adm-card"><h3 class="adm-h3">Откуда приходят</h3>' + (srcs.length ? '<div class="an-src">' + srcs.map(function (k) { return '<div class="an-src-row"><span>' + (SRC_NAMES[k] || k) + '</span><span class="an-src-bar"><i style="width:' + Math.round(t.src[k] / srcTotal * 100) + '%"></i></span><b class="num">' + pct(t.src[k], srcTotal) + '</b></div>'; }).join('') + '</div>' : '<p class="muted">Данные появятся после первых посещений.</p>') +
+          '<p class="muted" style="font-size:12px;margin-top:12px">Ссылки в соцсетях лучше размечать: <span class="copyable">?utm_source=instagram</span> — тогда переходы считаются точно</p></div></div>' +
+      '<div class="adm-card" style="margin-top:16px"><h3 class="adm-h3">Яндекс Метрика</h3>' +
+        '<p class="muted" style="font-size:14px;max-width:70ch;margin-bottom:16px">Создайте счётчик на <a class="link" href="https://metrika.yandex.ru/add" target="_blank" rel="noopener">metrika.yandex.ru</a> (адрес сайта — albakovofficial.ru, галочка «Электронная коммерция»), скопируйте номер счётчика и вставьте сюда. Сайт сам отправит в Метрику просмотры товаров, корзину и заказы.</p>' +
+        '<div class="adm-form"><label class="field"><span>Номер счётчика</span><input class="input num" id="mkId" inputmode="numeric" placeholder="Например, 98765432" value="' + esc(mk.id || '') + '"></label>' +
+        '<label class="check" style="align-self:end;padding-bottom:12px"><input type="checkbox" id="mkWeb"' + (mk.webvisor ? ' checked' : '') + '> <span>Вебвизор — записи визитов<br><small class="muted">Помогает увидеть, где покупателям неудобно. Поля с телефоном, почтой и адресом Метрика скрывает сама</small></span></label></div>' +
+        '<div class="adm-actions" style="margin-top:12px"><button class="btn" id="mkSave" type="button">Сохранить</button>' + (mk.id ? '<a class="btn ghost" href="https://metrika.yandex.ru/dashboard?id=' + esc(mk.id) + '" target="_blank" rel="noopener">Открыть Метрику</a>' : '') + '</div><p class="form-error" id="mkErr"></p></div>';
+    $('#mkSave').addEventListener('click', async function () {
+      var id = $('#mkId').value.replace(/\D/g, '');
+      if ($('#mkId').value.trim() && !/^\d{5,12}$/.test(id)) { $('#mkErr').textContent = 'Номер счётчика — это 5–12 цифр'; return; }
+      var s = clone(DATA.settings); s.metrika = { id: id, webvisor: $('#mkWeb').checked };
+      try { await A().API.adminSave('settings', s); await afterSave(id ? 'Метрика подключена' : 'Метрика отключена'); } catch (e) { $('#mkErr').textContent = A().errMsg(e); }
+    });
+  }
+
+  /* ================= Подарочные сертификаты ================= */
+  var GIFT_ST = { active: ['Действует', 'done'], pending: ['Ждёт оплаты', 'pending'], used: ['Использован', 'canceled'], expired: ['Истёк', 'canceled'], canceled: ['Отменён', 'canceled'] };
+  function giftsSection(m, q) {
+    var list = (DATA.giftcards || []).slice().reverse(), s = clone(DATA.settings), cfg = Object.assign({ enabled: true, nominals: [5000, 10000, 20000, 30000], min: 3000, max: 100000, months: 12 }, s.gifts || {});
+    var f = (q && q.f) || 'all', shown = list.filter(function (g) { return f === 'all' || g.state === f; });
+    var sold = list.filter(function (g) { return g.state !== 'pending' && g.state !== 'canceled'; }), sum = function (a, k) { return a.reduce(function (t, g) { return t + (g[k] || 0); }, 0); };
+    m.innerHTML = head('Подарочные сертификаты', '<button class="btn" id="gNew" type="button">+ Выпустить сертификат</button>', 'Покупатели покупают сертификаты на странице <a class="link" href="#/gift" target="_blank">/gift</a> и оплачивают онлайн. Код уходит получателю письмом. Здесь же можно выпустить сертификат вручную — для подарка или розыгрыша.') +
+      '<div class="adm-stats"><div class="adm-stat"><span class="eyebrow">Продано и выпущено</span><b class="num">' + sold.length + '</b></div><div class="adm-stat"><span class="eyebrow">На сумму</span><b class="num">' + fmt(sum(sold, 'amount')) + '</b></div><div class="adm-stat"><span class="eyebrow">Ещё не потрачено</span><b class="num">' + fmt(sum(sold.filter(function (g) { return g.state === 'active'; }), 'balance')) + '</b></div></div>' +
+      '<div class="adm-chips">' + [['all', 'Все'], ['active', 'Действуют'], ['used', 'Использованы'], ['pending', 'Ждут оплаты'], ['expired', 'Истекли'], ['canceled', 'Отменены']].map(function (x) { var n = x[0] === 'all' ? list.length : list.filter(function (g) { return g.state === x[0]; }).length; return '<a class="adm-chip' + (f === x[0] ? ' on' : '') + '" href="#/admin?s=gifts&f=' + x[0] + '">' + x[1] + ' <span>' + n + '</span></a>'; }).join('') + '</div>' +
+      (shown.length ? '<div class="table-wrap"><table class="sizes"><thead><tr><th>Код</th><th>Сумма</th><th>Остаток</th><th>Получатель</th><th>Письмо</th><th>Действует до</th><th>Статус</th><th></th></tr></thead><tbody>' + shown.map(function (g) {
+        var stt = GIFT_ST[g.state] || [g.state, ''];
+        return '<tr><td><span class="copyable" style="letter-spacing:.06em">' + esc(g.code) + '</span>' + (g.manual ? ' <small class="muted">вручную</small>' : '') + '</td><td class="num">' + fmt(g.amount) + '</td><td class="num">' + fmt(g.balance) + '</td>' +
+          '<td>' + esc((g.to && (g.to.name || g.to.email)) || '—') + (g.to && g.to.email && g.to.name ? '<br><small class="muted">' + esc(g.to.email) + '</small>' : '') + '</td>' +
+          '<td>' + (g.sentAt ? 'Отправлено ' + new Date(g.sentAt).toLocaleDateString('ru-RU') : g.sendAt ? 'Отправим ' + g.sendAt.split('-').reverse().join('.') : g.to && g.to.email ? '—' : 'Без письма') + '</td>' +
+          '<td>' + (g.expiresAt ? new Date(g.expiresAt).toLocaleDateString('ru-RU') : '—') + '</td><td><span class="status ' + stt[1] + '">' + stt[0] + '</span></td>' +
+          '<td class="adm-row-tools" style="white-space:nowrap">' + (g.state === 'active' && g.to && g.to.email ? '<button type="button" data-gsend="' + esc(g.id) + '" title="Отправить письмо ещё раз">✉</button>' : '') + (g.state === 'active' || g.state === 'pending' ? '<button type="button" data-gcancel="' + esc(g.id) + '" title="Отменить">✕</button>' : '') + '</td></tr>' +
+          ((g.log || []).length ? '<tr class="g-log"><td colspan="8">' + g.log.map(function (l) { return (l.amount < 0 ? 'Списано ' + fmt(-l.amount) : 'Возвращено ' + fmt(l.amount)) + ' · заказ № ' + esc(l.number || '') + ' · ' + new Date(l.at).toLocaleDateString('ru-RU'); }).join('<br>') + '</td></tr>' : '');
+      }).join('') + '</tbody></table></div>' : '<div class="empty"><h3>Сертификатов пока нет</h3><p>Они появятся здесь, когда кто-то купит сертификат или вы выпустите его вручную.</p></div>') +
+      '<div class="adm-card" style="margin-top:20px"><h3 class="adm-h3">Настройки</h3><div class="adm-form">' +
+        '<label class="check" style="grid-column:1/-1"><input type="checkbox" id="gEn"' + (cfg.enabled ? ' checked' : '') + '> <span>Продавать сертификаты на сайте<br><small class="muted">Покупка работает только с подключённой ЮKassa</small></span></label>' +
+        '<label class="field"><span>Номиналы, ₽ — через запятую</span><input class="input" id="gNoms" value="' + esc(cfg.nominals.join(', ')) + '"></label>' +
+        '<label class="field"><span>Срок действия, месяцев</span><input class="input num" id="gMonths" type="number" min="1" max="36" value="' + cfg.months + '"></label>' +
+        '<label class="field"><span>Своя сумма: от, ₽</span><input class="input num" id="gMin" type="number" value="' + cfg.min + '"></label>' +
+        '<label class="field"><span>Своя сумма: до, ₽</span><input class="input num" id="gMax" type="number" value="' + cfg.max + '"></label>' +
+      '</div><div class="adm-actions" style="margin-top:14px"><button class="btn" id="gSave" type="button">Сохранить</button></div><p class="form-error" id="gErr"></p></div>';
+    m.addEventListener('click', async function (e) {
+      var c = e.target.closest('[data-gcancel]'), sn = e.target.closest('[data-gsend]');
+      if (c) { if (!confirm('Отменить сертификат? Им больше нельзя будет оплатить заказ.')) return; try { await A().API.adminPost('gifts/' + c.getAttribute('data-gcancel') + '/cancel'); await afterSave('Сертификат отменён'); } catch (ex) { toast(A().errMsg(ex), true); } }
+      if (sn) { try { await A().API.adminPost('gifts/' + sn.getAttribute('data-gsend') + '/resend'); toast('Письмо отправлено'); } catch (ex) { toast(A().errMsg(ex), true); } }
+    });
+    $('#gSave').addEventListener('click', async function () {
+      var noms = $('#gNoms').value.split(/[,;\s]+/).map(function (x) { return Math.round(Number(x)); }).filter(function (x) { return x >= 100; }).slice(0, 6);
+      if (!noms.length) { $('#gErr').textContent = 'Укажите хотя бы один номинал'; return; }
+      s.gifts = { enabled: $('#gEn').checked, nominals: noms, months: Math.max(1, Math.min(36, Number($('#gMonths').value) || 12)), min: Math.max(100, Number($('#gMin').value) || 1000), max: Math.max(1000, Number($('#gMax').value) || 100000) };
+      try { await A().API.adminSave('settings', s); await afterSave('Сохранено'); } catch (ex) { $('#gErr').textContent = A().errMsg(ex); }
+    });
+    $('#gNew').addEventListener('click', function () {
+      A().openModal('<h3 class="serif" style="font-size:30px;margin-bottom:6px">Выпустить сертификат</h3><p class="muted" style="margin-bottom:18px;font-size:14px">Без оплаты — для подарка, розыгрыша или замены. Если указать почту, код сразу уйдёт письмом.</p>' +
+        '<form class="form" id="gnForm"><label class="field"><span>Сумма, ₽</span><input class="input num" id="gn-amount" type="number" min="100" value="' + (cfg.nominals[1] || cfg.nominals[0]) + '"></label>' +
+        '<div class="row2"><label class="field"><span>Имя получателя</span><input class="input" id="gn-name"></label><label class="field"><span>Почта получателя <small class="muted">— необязательно</small></span><input class="input" id="gn-email" type="email"></label></div>' +
+        '<label class="field"><span>Пожелание</span><input class="input" id="gn-msg" maxlength="300"></label><p class="form-error" id="gnErr"></p><button class="btn block">Выпустить</button></form>');
+      $('#gnForm').addEventListener('submit', async function (e) {
+        e.preventDefault();
+        try { var r = await A().API.adminPost('gifts', { amount: Number($('#gn-amount').value), toName: $('#gn-name').value, toEmail: $('#gn-email').value, message: $('#gn-msg').value }); A().closePanels(); await afterSave('Сертификат ' + r.gift.code + ' выпущен' + (r.sent ? ' и отправлен' : '')); }
+        catch (ex) { $('#gnErr').textContent = A().errMsg(ex); }
+      });
+    });
+  }
+
+  /* ================= Уведомления в Telegram ================= */
+  function telegramSection(m) {
+    var t = DATA.telegram || {}, s = clone(DATA.settings), tg = s.telegram = Object.assign({ enabled: true, events: {} }, s.telegram || {});
+    var ev = Object.assign({ order: true, paid: true, support: true, stock: true }, tg.events);
+    var step = function (n, done, title, body) { return '<li class="tg-step' + (done ? ' done' : '') + '"><span class="tg-n">' + (done ? '✓' : n) + '</span><div><b>' + title + '</b>' + body + '</div></li>'; };
+    m.innerHTML = head('Уведомления в Telegram', '', 'Новые заказы, оплаты, вопросы покупателей и заканчивающиеся размеры — сразу вам в Telegram. Подключается один раз за пару минут.') +
+      '<div class="adm-two"><div class="adm-card"><ol class="tg-steps">' +
+        step(1, t.connected, 'Создайте бота', t.connected
+          ? '<p>Подключён бот <a class="link" href="https://t.me/' + esc(t.bot) + '" target="_blank" rel="noopener">@' + esc(t.bot) + '</a>. <button class="link" id="tgOff" type="button">Отключить</button></p>'
+          : '<p>Откройте в Telegram <a class="link" href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a>, отправьте ему <b>/newbot</b>, придумайте имя (например, «ALBAKOV Заказы») и адрес бота. BotFather пришлёт токен — длинную строку вида <span class="copyable">123456789:AAE…</span>. Вставьте её сюда:</p>' +
+            '<div class="tg-row"><input class="input" id="tgToken" placeholder="Токен бота" autocomplete="off" spellcheck="false"><button class="btn" id="tgSave" type="button">Подключить</button></div>') +
+        step(2, !!t.chatId, 'Напишите боту', t.chatId
+          ? '<p>Уведомления приходят в чат: <b>' + esc(t.chatName || t.chatId) + '</b>. <button class="link" id="tgFind" type="button">Найти заново</button></p>'
+          : '<p>' + (t.connected ? 'Откройте <a class="link" href="https://t.me/' + esc(t.bot) + '" target="_blank" rel="noopener">@' + esc(t.bot) + '</a>, нажмите «Запустить» — и вернитесь сюда.' : 'После шага 1.') + '</p>' + (t.connected ? '<button class="btn ghost" id="tgFind" type="button">Найти мой чат</button>' : '')) +
+        step(3, !!t.chatId, 'Готово', '<p>Проверьте, как выглядит уведомление о заказе.</p>' + (t.chatId ? '<button class="btn ghost" id="tgTest" type="button">Отправить проверку</button>' : '')) +
+      '</ol><p class="form-error" id="tgErr"></p></div>' +
+      '<div class="adm-card"><h3 class="adm-h3">Что присылать</h3><div class="tg-events">' +
+        [['enabled', 'Уведомления включены', 'Главный выключатель'], ['order', 'Новый заказ', 'Состав, покупатель, доставка, оплата'], ['paid', 'Заказ оплачен', 'Когда пришла онлайн-оплата'], ['support', 'Вопросы покупателей', 'Новые обращения и сообщения в поддержку'], ['stock', 'Заканчивается размер', 'Когда после заказа осталось 2 штуки или меньше']].map(function (x) {
+          var on = x[0] === 'enabled' ? tg.enabled !== false : ev[x[0]];
+          return '<label class="tg-ev"><span><b>' + x[1] + '</b><small>' + x[2] + '</small></span><span class="adm-switch"><input type="checkbox" data-tg="' + x[0] + '"' + (on ? ' checked' : '') + '><span></span></span></label>';
+        }).join('') + '</div></div></div>';
+    var err = $('#tgErr');
+    var busy = function (b, on) { if (b) b.disabled = on; };
+    var sv = $('#tgSave'); if (sv) sv.addEventListener('click', async function () { busy(sv, true); err.textContent = ''; try { await A().API.adminPost('telegram', { token: $('#tgToken').value }); await afterSave('Бот подключён'); } catch (e) { err.textContent = A().errMsg(e); busy(sv, false); } });
+    var off = $('#tgOff'); if (off) off.addEventListener('click', async function () { if (!confirm('Отключить уведомления в Telegram?')) return; await A().API.adminPost('telegram', { token: '' }); await afterSave('Бот отключён'); });
+    var fd = $('#tgFind'); if (fd) fd.addEventListener('click', async function () { busy(fd, true); err.textContent = ''; try { await A().API.adminPost('telegram/find'); await afterSave('Чат найден — проверьте Telegram'); } catch (e) { err.textContent = A().errMsg(e); busy(fd, false); } });
+    var ts = $('#tgTest'); if (ts) ts.addEventListener('click', async function () { busy(ts, true); try { await A().API.adminPost('telegram/test'); toast('Отправили — проверьте Telegram'); } catch (e) { err.textContent = A().errMsg(e); } busy(ts, false); });
+    $$('[data-tg]', m).forEach(function (i) { i.addEventListener('change', async function () {
+      var k = i.getAttribute('data-tg'); if (k === 'enabled') tg.enabled = i.checked; else { ev[k] = i.checked; tg.events = ev; }
+      try { await A().API.adminSave('settings', s); DATA.settings = s; toast('Сохранено'); } catch (e) { toast(A().errMsg(e), true); }
+    }); });
+  }
+
   function homeSettings(m) {
     settingsForm(m, 'Главная страница', 'Тексты, картинки и блоки главной страницы. Выделить слово в заголовке курсивом и цветом: *слово*. Перенос строки — Enter.', [
       { section: 'Верхняя строка' },
@@ -1336,6 +1484,8 @@
         '<div class="pm-card' + (p.cod ? ' on' : '') + '" id="pmCod"><div class="pm-top"><span class="pm-ic">' + PAY_IC.cash + '</span><div><b>При получении</b><span>Наличными или картой в пункте выдачи СДЭК</span></div>' + switchHtml('f-cod', p.cod, 'Оплата при получении') + '</div>' +
           '<label class="pm-f"><span>Название на сайте</span><input class="input" id="f-codLabel" value="' + esc(p.codLabel || '') + '" placeholder="При получении"></label>' +
           '<div class="pm-state"><i aria-hidden="true"></i>' + (A().D.cdekReady ? 'Покупатель видит только пункты СДЭК, где принимают оплату. СДЭК возьмёт сумму заказа и доставки и переведёт вам за вычетом комиссии; после вручения заказ отметится оплаченным' : 'Заказ приходит неоплаченным, оплату отмечаете в заказе') + '</div></div>' +
+        '<div class="pm-card' + ((p.parts || {}).enabled ? ' on' : '') + '" id="pmParts"><div class="pm-top"><span class="pm-ic">' + PAY_IC.card + '</span><div><b>Частями</b><span>«Плати частями» от Сбера через ЮKassa: 4 платежа за 2 месяца, без переплаты для покупателя. Заказы от 1 000 до 50 000 ₽</span></div>' + switchHtml('f-parts', (p.parts || {}).enabled, 'Оплата частями') + '</div>' +
+          '<div class="pm-state ' + (ready ? '' : 'warn') + '"><i aria-hidden="true"></i>' + (ready ? 'Перед включением попросите менеджера ЮKassa подключить «Плати частями». Чеки по этому способу ЮKassa не отправляет — их нужно пробивать своей онлайн-кассой' : 'Работает только с подключённой ЮKassa') + '</div></div>' +
       '</div></section>' +
 
       // ---- ЮKassa
@@ -1383,7 +1533,7 @@
       '</div><div class="adm-bar"><button class="btn" id="stSave">Сохранить</button><span class="form-error" id="stErr"></span></div>';
 
     // переключатели способов оплаты подсвечивают карточку
-    [['f-online', 'pmOnline'], ['f-cod', 'pmCod']].forEach(function (x) { $('#' + x[0]).addEventListener('change', function () { $('#' + x[1]).classList.toggle('on', this.checked); }); });
+    [['f-online', 'pmOnline'], ['f-cod', 'pmCod'], ['f-parts', 'pmParts']].forEach(function (x) { $('#' + x[0]).addEventListener('change', function () { $('#' + x[1]).classList.toggle('on', this.checked); }); });
 
     // доставка: живое превью, порядок, удаление, добавление
     var list = $('#dmList');
@@ -1445,7 +1595,8 @@
       if (methods.some(function (x) { return !x.name; })) { err.textContent = 'У каждого способа доставки должно быть название'; return; }
       var prov = ($('input[name="f-provider"]:checked', m) || {}).value || 'demo';
       s.payment = { provider: prov, online: online, cod: cod, onlineLabel: $('#f-onlineLabel').value.trim() || 'Картой или СБП онлайн', codLabel: $('#f-codLabel').value.trim() || 'При получении',
-        yookassa: { shopId: $('#f-shopId').value.trim(), sendReceipt: $('#f-sendReceipt').checked, taxSystem: Number($('#f-taxSystem').value), vatCode: Number($('#f-vatCode').value) } };
+        yookassa: { shopId: $('#f-shopId').value.trim(), sendReceipt: $('#f-sendReceipt').checked, taxSystem: Number($('#f-taxSystem').value), vatCode: Number($('#f-vatCode').value) },
+        parts: { enabled: $('#f-parts').checked } };
       s.delivery = Object.assign({}, s.delivery, { methods: methods });
       try { await A().API.adminSave('settings', s); await afterSave('Сохранено', '#/admin?s=payment'); } catch (ex) { err.textContent = A().errMsg(ex); }
     });

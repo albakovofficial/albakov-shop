@@ -41,20 +41,25 @@
     return j;
   }
   var Server = {
-    async init(state) { this.user = state.user || null; this.isAdmin = !!state.isAdmin; if (this.user) Fav.merge(this.user); return state.data; },
+    async init(state) { this.user = state.user || null; this.isAdmin = !!state.isAdmin; if (this.user) Fav.merge(this.user); Cart.merge(this.user); return state.data; },
     // Ответ: { user, welcome } — аккаунт создан сразу; { pending } — на почту ушёл код, ждём его
-    async register(f) { var r = await call('POST', 'api/auth/register', f); if (r.user) { this.user = r.user; Fav.merge(r.user); } return r; },
-    async verify(id, code) { var r = await call('POST', 'api/auth/verify', { id: id, code: code }); this.user = r.user; Fav.merge(r.user); return r; },
+    async register(f) { var r = await call('POST', 'api/auth/register', f); if (r.user) { this.user = r.user; Fav.merge(r.user); Cart.merge(r.user); } return r; },
+    async verify(id, code) { var r = await call('POST', 'api/auth/verify', { id: id, code: code }); this.user = r.user; Fav.merge(r.user); Cart.merge(r.user); return r; },
     async resendCode(id) { return await call('POST', 'api/auth/resend', { id: id }); },
     async forgot(l) { return await call('POST', 'api/auth/forgot', { login: l }); },
-    async resetPassword(id, code, password) { this.user = (await call('POST', 'api/auth/reset', { id: id, code: code, password: password })).user; Fav.merge(this.user); return this.user; },
-    async login(l, p) { this.user = (await call('POST', 'api/auth/login', { login: l, password: p })).user; Fav.merge(this.user); return this.user; },
-    async logout() { await call('POST', 'api/auth/logout'); this.user = null; Fav.set([], true); },
+    async resetPassword(id, code, password) { this.user = (await call('POST', 'api/auth/reset', { id: id, code: code, password: password })).user; Fav.merge(this.user); Cart.merge(this.user); return this.user; },
+    async login(l, p) { this.user = (await call('POST', 'api/auth/login', { login: l, password: p })).user; Fav.merge(this.user); Cart.merge(this.user); return this.user; },
+    async logout() { await call('POST', 'api/auth/logout'); this.user = null; Fav.set([], true); Cart.set([], true); },
     async cdekCities(q) { return (await call('GET', 'api/cdek/cities?q=' + encodeURIComponent(q))).cities; },
     async cdekPoints(code) { return (await call('GET', 'api/cdek/points?city=' + encodeURIComponent(code))).points; },
     async adminCdek(body) { return await call('POST', 'api/admin/cdek', body); },
     async adminReturn(id, act, body) { return await call('POST', 'api/admin/orders/' + encodeURIComponent(id) + '/' + act, body || {}); },
     async adminCdekOrder(id, method, act, body) { return (await call(method, 'api/admin/orders/' + encodeURIComponent(id) + '/' + act, body)).order; },
+    async track(number, phone) { var r = await call('POST', 'api/track', { number: number, phone: phone }); var t = lsGet('vanta:otok') || {}; t[r.id] = r.token; lsSet('vanta:otok', t); return r; },
+    async buyGift(f) { var r = await call('POST', 'api/gifts', f); var t = lsGet('vanta:otok') || {}; t[r.order.id] = r.token; lsSet('vanta:otok', t); return r; },
+    async checkGift(code) { return (await call('POST', 'api/gifts/check', { code: code })).gift; },
+    async saveCart(lines) { await call('PUT', 'api/me/cart', { lines: lines }); },
+    async savePrefs(o) { this.user = (await call('PUT', 'api/me/prefs', o)).user; return this.user; },
     async saveFavorites(list) { this.user = (await call('PUT', 'api/me/favorites', { list: list })).user; return this.user; },
     async saveAddresses(list) { this.user = (await call('PUT', 'api/me/addresses', { list: list })).user; return this.user; },
     async updateProfile(f) { this.user = (await call('PUT', 'api/me', f)).user; return this.user; },
@@ -77,12 +82,13 @@
       var r = await call('POST', 'api/orders', p);
       var t = lsGet('vanta:otok') || {}; t[r.order.id] = r.token; lsSet('vanta:otok', t);
       if (r.user) this.user = r.user;
-      return { order: r.order, payUrl: r.payUrl || null };
+      return { order: r.order, payUrl: r.payUrl || null, repeated: !!r.repeated };
     },
     async adminLogin(pw) { await call('POST', 'api/admin/login', { password: pw }); this.isAdmin = true; },
     async adminLogout() { await call('POST', 'api/admin/logout'); this.isAdmin = false; },
     async adminData() { return (await call('GET', 'api/admin/data')).data; },
     async adminHealth() { return (await call('GET', 'api/admin/health')).health; },
+    async adminPost(path, body) { return await call('POST', 'api/admin/' + path, body || {}); },
     async adminSave(name, value) { await call('PUT', 'api/admin/' + name, { value: value }); return true; },
     async adminUpsert(name, item) { return await call('PUT', 'api/admin/' + name + '/' + encodeURIComponent(item.id), { value: item }); },
     async subscribe(b) { return await call('POST', 'api/notify', b); },
@@ -108,7 +114,19 @@
   /* ================= Корзина (всегда в браузере) ================= */
   var Cart = {
     get() { var c = lsGet(LS_CART); return Array.isArray(c) ? c : []; },
-    set(c) { lsSet(LS_CART, c); document.dispatchEvent(new CustomEvent('cart:change')); },
+    set(c, silentSync) {
+      lsSet(LS_CART, c); document.dispatchEvent(new CustomEvent('cart:change'));
+      // у вошедшего покупателя корзина хранится и в аккаунте (через 1,5 с после последнего изменения)
+      if (!silentSync && Server.user) { clearTimeout(this._t); this._t = setTimeout(function () { Server.saveCart(c).catch(function () {}); }, 1500); }
+    },
+    // После входа: товары из корзины этого устройства и из аккаунта объединяются
+    merge(user) {
+      if (!user) return;
+      var self = this, local = this.get(), remote = user.cart || [], out = local.slice();
+      remote.forEach(function (r) { if (!out.some(function (x) { return self.same(x, r.productId, r.colorId, r.size); })) out.push(r); });
+      if (out.length !== local.length) this.set(out, true);
+      if (out.length !== remote.length || local.length) Server.saveCart(out).catch(function () {});
+    },
     same(x, productId, colorId, size) { return x.productId === productId && (!x.colorId || (x.colorId || '') === (colorId || '')) && x.size === size; }, // строки корзины до появления цветов
     find(productId, colorId, size) { var self = this; return this.get().find(function (x) { return self.same(x, productId, colorId, size); }); },
     add(productId, colorId, size, qty) {

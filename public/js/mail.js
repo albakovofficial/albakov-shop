@@ -111,7 +111,7 @@
       (i.image !== undefined ? '<td width="72" valign="top" style="padding:18px 0;' + bt + '"><div style="width:64px;background:' + K.soft + ';border-radius:12px;overflow:hidden;">' + (i.image ? '<img src="' + esc(i.image) + '" width="64" alt="" style="display:block;width:64px;height:auto;border:0;">' : '<div style="height:85px;line-height:85px;font-size:0;">&nbsp;</div>') + '</div></td>' : '') +
       '<td valign="top" style="padding:18px 12px 18px ' + (i.image !== undefined ? '14px' : '0') + ';' + bt + 'font-family:' + F + ';">' +
         '<div style="font-size:15px;font-weight:500;line-height:1.4;color:' + K.ink + ';">' + esc(i.name) + '</div>' +
-        '<div style="margin-top:6px;font-size:13px;line-height:1.5;color:' + K.dim + ';">' + esc([i.color, i.size ? 'размер ' + i.size : '', i.qty ? i.qty + ' шт.' : ''].filter(Boolean).join(' · ')) + '</div></td>' +
+        '<div style="margin-top:6px;font-size:13px;line-height:1.5;color:' + K.dim + ';">' + esc([i.color, i.size ? 'размер ' + i.size : '', i.qty ? i.qty + ' шт.' : '', i.preorder ? 'предзаказ' + (i.shipDate ? ', отправим ' + String(i.shipDate).split('-').reverse().join('.') : '') : ''].filter(Boolean).join(' · ')) + '</div></td>' +
       '<td align="right" valign="top" style="padding:18px 0;' + bt + 'font-family:' + F + ';font-size:15px;color:' + K.ink + ';white-space:nowrap;">' + (price || '') + '</td></tr>';
   }
   function sumRow(l, r, strong) {
@@ -246,6 +246,39 @@
   }
 
   /* Письмо после регистрации. ctx: { store, logo, name, url, bonusPercent, promo: { code, text }, contacts } */
+  /* Напоминание о корзине (только с согласия покупателя). ctx: { store, logo, name, items: [{ name, color, size, qty, price (строка), image, left }], url, off } */
+  function renderCartReminder(ctx) {
+    var subject = (ctx.name ? ctx.name + ', в' : 'В') + 'ещи из корзины всё ещё ждут вас';
+    var rows = ctx.items.slice(0, 3).map(function (i, k) {
+      var bt = k ? 'border-top:1px solid ' + K.line + ';' : '';
+      return '<tr><td width="76" valign="top" style="padding:16px 0;' + bt + '"><div style="width:64px;background:' + K.soft + ';border-radius:12px;overflow:hidden;">' + (i.image ? '<img src="' + esc(i.image) + '" width="64" alt="" style="display:block;width:64px;height:auto;border:0;">' : '<div style="height:85px;line-height:85px;font-size:0;">&nbsp;</div>') + '</div></td>' +
+        '<td valign="top" style="padding:16px 12px 16px 14px;' + bt + 'font-family:' + F + ';"><div style="font-size:15px;font-weight:500;color:' + K.ink + ';">' + esc(i.name) + '</div><div style="margin-top:6px;font-size:13px;color:' + K.dim + ';">' + esc([i.color, i.size ? 'размер ' + i.size : ''].filter(Boolean).join(' · ')) + (i.left ? ' · <span style="color:#9a5a2c;">осталось ' + i.left + ' шт.</span>' : '') + '</div></td>' +
+        '<td align="right" valign="top" style="padding:16px 0;' + bt + 'font-family:' + F + ';font-size:15px;color:' + K.ink + ';white-space:nowrap;">' + esc(i.price) + '</td></tr>';
+    }).join('');
+    var body = hero('Ваша корзина', 'Вещи всё ещё ждут вас', 'Мы сохранили корзину. Вещей в наличии немного — если что-то нравится, лучше не откладывать.') +
+      gap(26) + sec(tbl('border-top:1px solid ' + K.line + ';border-bottom:1px solid ' + K.line + ';') + rows + '</table>' + (ctx.items.length > 3 ? '<p style="margin:10px 0 0;font-family:' + F + ';font-size:13px;color:' + K.dim + ';">И ещё ' + (ctx.items.length - 3) + ' в корзине</p>' : '')) +
+      gap(28) + sec(btn('Вернуться к корзине', ctx.url)) +
+      gap(18) + sec(p('Это одно напоминание — больше писем об этой корзине не будет.', 'font-size:13px;color:' + K.dim + ';'));
+    var text = subject + '\n\n' + ctx.items.map(function (i) { return '— ' + i.name + ' (' + [i.color, i.size].filter(Boolean).join(', ') + ') ' + i.price; }).join('\n') + '\n\nКорзина: ' + ctx.url + '\n\nОтказаться от напоминаний: ' + ctx.off;
+    return { subject: subject, html: shell(ctx, { subject: subject, preheader: 'Мы сохранили вашу корзину', body: body, footer: 'Вы получили письмо, потому что включили напоминания о корзине. <a href="' + esc(ctx.off) + '" style="color:' + K.muted + ';text-decoration:underline;">Отключить напоминания</a>' }), text: text };
+  }
+  /* Подарочный сертификат получателю. ctx: { store, logo, code, amount (строка «10 000 ₽»), toName, fromName, message, expires (строка), url } */
+  function renderGift(ctx) {
+    var fromShop = ctx.fromName && ctx.fromName === ctx.store;
+    var subject = fromShop ? 'Подарок от ' + ctx.store + ': сертификат на ' + ctx.amount : (ctx.fromName ? ctx.fromName + ' дарит вам' : 'Вам подарили') + ' сертификат ' + ctx.store + ' на ' + ctx.amount;
+    var card = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;"><tr><td bgcolor="#16181C" style="background:#16181C;background-image:radial-gradient(120% 120% at 10% 0%,#3d424b 0%,#1d2026 45%,#0d0e10 100%);border-radius:22px;padding:26px 28px;">' +
+      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="font-family:' + F + ';font-size:13px;letter-spacing:6px;color:#FFFFFF;">' + esc(String(ctx.store || '').toUpperCase()) + '</td><td align="right" style="font-family:' + F + ';font-size:11px;color:#9AA0A8;">Подарочный сертификат</td></tr>' +
+      '<tr><td colspan="2" style="padding:34px 0 30px;font-family:' + F + ';font-size:52px;font-weight:300;letter-spacing:-1.5px;line-height:1;color:#FFFFFF;">' + esc(ctx.amount) + '</td></tr>' +
+      '<tr><td style="font-family:' + F + ';font-size:12px;color:#C9CDD3;">' + esc([ctx.toName ? 'Для ' + ctx.toName : '', ctx.fromName ? 'от ' + ctx.fromName : ''].filter(Boolean).join(' · ')) + '</td><td align="right" style="font-family:' + F + ';font-size:13px;letter-spacing:2px;color:#FFFFFF;">' + esc(ctx.code) + '</td></tr></table></td></tr></table>';
+    var body = hero('Подарок для вас', ctx.toName ? ctx.toName + ', это вам' : 'Это вам', 'Сертификат можно потратить на любые вещи ' + esc(ctx.store) + ' — целиком или частями.') +
+      gap(28) + sec(card) +
+      (ctx.message ? gap(22) + sec('<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;"><tr><td style="padding:18px 22px;border-radius:18px;background:' + K.soft + ';border:1px solid ' + K.line + ';font-family:' + F + ';font-size:15px;line-height:1.65;color:' + K.text + ';font-style:italic;">«' + esc(ctx.message) + '»' + (ctx.fromName ? '<div style="margin-top:8px;font-style:normal;font-size:13px;color:' + K.dim + ';">— ' + esc(ctx.fromName) + '</div>' : '') + '</td></tr></table>') : '') +
+      gap(26) + sec(steps(['Выберите вещи на сайте и перейдите к оформлению', 'Введите код <b style="letter-spacing:1px;">' + esc(ctx.code) + '</b> в поле «Подарочный сертификат»', 'Если заказ дороже — доплатите разницу; если дешевле — остаток сохранится'])) +
+      gap(28) + sec(btn('Выбрать подарок', ctx.url)) +
+      gap(18) + sec(p('Действует до ' + esc(ctx.expires) + '.', 'font-size:13px;color:' + K.dim + ';'));
+    var text = subject + '\n\nКод: ' + ctx.code + '\nСумма: ' + ctx.amount + (ctx.message ? '\n\n«' + ctx.message + '»' : '') + '\n\nВведите код при оформлении заказа на ' + ctx.url + '\nДействует до ' + ctx.expires + '.';
+    return { subject: subject, html: shell(ctx, { subject: subject, preheader: 'Код ' + ctx.code + ' на ' + ctx.amount, body: body, footer: 'Это письмо отправлено по просьбе покупателя — подарок для вас. Рассылок не будет.' }), text: text };
+  }
   function renderWelcome(ctx) {
     var subject = 'Добро пожаловать в ' + ctx.store;
     var perks = [];
@@ -321,7 +354,7 @@
     return { subject: subject, html: shell(ctx, { subject: subject, preheader: 'Номер СДЭК для возврата: ' + ctx.track, body: body, footer: footer }), text: text };
   }
 
-  var api = { DEFAULTS: DEFAULTS, renderReturnShip: renderReturnShip, renderRefund: renderRefund, renderTracking: renderTracking, renderSupport: renderSupport, DEFAULT_NOTIFY: DEFAULT_NOTIFY, PLACEHOLDERS: PLACEHOLDERS, tplOf: tplOf, readyRequests: readyRequests, render: render, renderOrder: renderOrder, renderCode: renderCode, renderWelcome: renderWelcome };
+  var api = { DEFAULTS: DEFAULTS, renderGift: renderGift, renderCartReminder: renderCartReminder, renderReturnShip: renderReturnShip, renderRefund: renderRefund, renderTracking: renderTracking, renderSupport: renderSupport, DEFAULT_NOTIFY: DEFAULT_NOTIFY, PLACEHOLDERS: PLACEHOLDERS, tplOf: tplOf, readyRequests: readyRequests, render: render, renderOrder: renderOrder, renderCode: renderCode, renderWelcome: renderWelcome };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Mail = api;
 })(this);

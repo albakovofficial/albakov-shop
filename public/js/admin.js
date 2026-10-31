@@ -684,8 +684,8 @@
           { k: 'pack', label: 'Упаковка', type: 'select', options: [['', 'По умолчанию из настроек СДЭК']].concat(Pricing.cdekPacks((DATA.settings && DATA.settings.cdek) || {}).map(function (x) { return [x.id, x.name + ' · ' + x.length + '×' + x.width + '×' + x.height + ' см']; })) },
           { section: 'Описание' },
           { k: 'description', label: 'Описание', type: 'textarea' },
-          { k: 'composition', label: 'Состав', type: 'textarea', rows: 2 },
-          { k: 'care', label: 'Уход', type: 'textarea', rows: 2 },
+          { k: 'composition', label: 'Состав — свой текст', type: 'textarea', rows: 2, hint: 'Нужен, только если состава нет среди вариантов в «Характеристиках» ниже' },
+          { k: 'care', label: 'Уход — дополнительно', type: 'textarea', rows: 2, hint: 'Основное отмечается значками в «Характеристиках». Сюда — то, чего там нет' },
           { section: 'Служебное' },
           { k: 'slug', label: 'Адрес страницы', hint: 'Латиницей. Заполнится сам из названия, если оставить пустым.' },
           { k: 'createdAt', label: 'Дата поступления', type: 'date', hint: 'Для сортировки «Сначала новые»' }
@@ -693,7 +693,7 @@
       },
       extra: function (p) {
         colorsState = clone(Pricing.colorsOf(p));
-        return waitingForProduct(p) + '<div class="adm-colors"><h4 class="adm-sub">Цвета, фото и остатки</h4><p class="muted" style="font-size:14px;margin-bottom:14px;max-width:70ch">Все цвета — в одной карточке товара. У каждого цвета свои фото и остатки по размерам. Покупатель сначала выбирает цвет, потом размер. Первый цвет показывается в каталоге первым.</p><div id="colorBlocks"></div><button type="button" class="btn ghost sm" id="colorAdd">+ Добавить цвет</button></div>' + fitEditorHtml(p);
+        return waitingForProduct(p) + specsEditorHtml(p) + '<div class="adm-colors"><h4 class="adm-sub">Цвета, фото и остатки</h4><p class="muted" style="font-size:14px;margin-bottom:14px;max-width:70ch">Все цвета — в одной карточке товара. У каждого цвета свои фото и остатки по размерам. Покупатель сначала выбирает цвет, потом размер. Первый цвет показывается в каталоге первым.</p><div id="colorBlocks"></div><button type="button" class="btn ghost sm" id="colorAdd">+ Добавить цвет</button></div>' + fitEditorHtml(p);
       },
       mount: function (box, item) {
         var p0Fit = function () { return (item && item.fit) || {}; };
@@ -763,10 +763,18 @@
         });
         box._syncColors = function () { sync(); return colorsState; };
         if (fitBox) bindFitEditor(fitBox, p0Fit(), box._syncColors);
+        var specBox = $('.adm-specs', box);
+        if (specBox) {
+          // после «Описания», перед «Служебным»
+          var svc = $$('.adm-form > .adm-sub', box).find(function (h) { return /Служебное/.test(h.textContent); });
+          if (svc) svc.parentNode.insertBefore(specBox, svc);
+          bindSpecsEditor(specBox);
+        }
       },
       read: function (box, p) {
         p.colors = clone(box._syncColors());
         var fb = $('.adm-fit', box); if (fb) { var f = readFitEditor(fb); if (f) p.fit = f; else delete p.fit; }
+        var sb = $('.adm-specs', box); if (sb) { var sp = readSpecsEditor(sb); if (Object.keys(sp).length) p.specs = sp; else delete p.specs; }
         delete p.color; delete p.images; delete p.sizes; delete p.art;
         if (!p.slug) p.slug = translit(p.name);
         p.slug = translit(p.slug);
@@ -791,6 +799,48 @@
       duplicate: function (p) { p.id = uid('p'); p.name += ' (копия)'; p.slug = translit(p.name) + '-' + Math.random().toString(36).slice(2, 5); p.active = false; return p; }
     });
   }
+  /* Характеристики: варианты отмечаются нажатием (js/specs.js), в карточке — блок «Характеристики» */
+  function specsEditorHtml(p) {
+    var s = p.specs || {};
+    var chip = function (k, v, label, on) { return '<button type="button" class="chip spec-chip' + (on ? ' on' : '') + '" data-spec="' + k + '" data-v="' + esc(v) + '" aria-pressed="' + (on ? 'true' : 'false') + '">' + esc(label) + '</button>'; };
+    var row = function (it) {
+      var v = s[it.k], cur = it.multi ? (Array.isArray(v) ? v : []) : v;
+      var isCustom = !it.multi && typeof cur === 'string' && cur.indexOf('custom:') === 0;
+      return '<div class="spec-row" data-spec-row="' + it.k + '"' + (it.multi ? ' data-multi="1"' : '') + '><span class="spec-label">' + esc(it.label) + (it.multi ? ' <small>можно несколько</small>' : '') + '</span><div class="spec-chips">' +
+        it.options.map(function (o) { return chip(it.k, o[0], o[1], it.multi ? cur.indexOf(o[0]) !== -1 : cur === o[0]); }).join('') +
+        (it.custom ? '<input class="input spec-custom" data-spec-custom="' + it.k + '" placeholder="' + esc(it.custom) + '" value="' + esc(isCustom ? cur.slice(7) : '') + '">' : '') + '</div></div>';
+    };
+    var care = s.care || [];
+    return '<div class="adm-specs"><h4 class="adm-sub">Характеристики</h4><p class="muted" style="font-size:14px;margin-bottom:16px;max-width:72ch">Отметьте подходящее — в карточке товара появится аккуратный блок «Характеристики», а поисковики получат их в описании товара. Повторное нажатие снимает отметку.</p>' +
+      Specs.GROUPS.map(function (g) { return '<div class="spec-group"><h5>' + esc(g.title) + '</h5>' + g.items.map(row).join('') + '</div>'; }).join('') +
+      '<div class="spec-group"><h5>Уход</h5><div class="spec-row" data-spec-row="care" data-multi="1"><span class="spec-label">Значки на этикетке <small>можно несколько</small></span><div class="spec-chips">' +
+        Specs.CARE.map(function (c) { return '<button type="button" class="chip spec-chip spec-care' + (care.indexOf(c[0]) !== -1 ? ' on' : '') + '" data-spec="care" data-v="' + c[0] + '" aria-pressed="' + (care.indexOf(c[0]) !== -1) + '">' + careIcon(c[0]) + esc(c[1]) + '</button>'; }).join('') + '</div></div></div>' +
+    '</div>';
+  }
+  function careIcon(k) { return window.App && App.careIcon ? App.careIcon(k) : ''; }
+  function bindSpecsEditor(el) {
+    el.addEventListener('click', function (e) {
+      var b = e.target.closest('.spec-chip'); if (!b) return;
+      var row = b.closest('[data-spec-row]'), multi = row.hasAttribute('data-multi'), on = !b.classList.contains('on');
+      if (!multi) { $$('.spec-chip', row).forEach(function (x) { x.classList.remove('on'); x.setAttribute('aria-pressed', 'false'); }); var ci = $('.spec-custom', row); if (ci && on) ci.value = ''; }
+      b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    el.addEventListener('input', function (e) {
+      var ci = e.target.closest('.spec-custom'); if (!ci || !ci.value.trim()) return;
+      $$('.spec-chip', ci.closest('[data-spec-row]')).forEach(function (x) { x.classList.remove('on'); x.setAttribute('aria-pressed', 'false'); });
+    });
+  }
+  function readSpecsEditor(el) {
+    var out = {};
+    $$('[data-spec-row]', el).forEach(function (row) {
+      var k = row.getAttribute('data-spec-row'), on = $$('.spec-chip.on', row).map(function (b) { return b.getAttribute('data-v'); });
+      if (row.hasAttribute('data-multi')) { if (on.length) out[k] = on; return; }
+      var ci = $('.spec-custom', row);
+      if (on[0]) out[k] = on[0]; else if (ci && ci.value.trim()) out[k] = 'custom:' + ci.value.trim();
+    });
+    return Specs.clean(out);
+  }
+
   /* Мерки изделия и подбор размера: ширина, длина, рукав и на какой рост/вес рассчитан каждый размер */
   var FIT_TYPICAL = { XS: [150, 165, 45, 58], S: [160, 172, 52, 66], M: [170, 180, 62, 76], L: [176, 186, 72, 86], XL: [182, 192, 82, 96], '2XL': [186, 198, 92, 110], XXL: [186, 198, 92, 110], '3XL': [190, 205, 105, 125] };
   var FIT_COLS = [['w', 'Ширина'], ['l', 'Длина'], ['sl', 'Рукав'], ['hMin', 'Рост от'], ['hMax', 'Рост до'], ['kMin', 'Вес от'], ['kMax', 'Вес до']];

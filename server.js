@@ -7,6 +7,7 @@ const path = require('path');
 const crypto = require('crypto');
 const Pricing = require('./public/js/pricing.js');
 const SEED = require('./public/js/seed.js');
+const Specs = require('./public/js/specs.js'); // характеристики одежды — общий список для панели, витрины и поиска
 const Mail = require('./public/js/mail.js');
 const smtp = require('./lib/smtp.js');
 const Store = require('./lib/db.js');
@@ -1466,7 +1467,7 @@ async function api(req, res, url, body) {
       if (!p[2] && M === 'PUT') { if (!Array.isArray(body.value)) fail(400, 'Нужен список'); if (p[1] === 'products') body.value.forEach(Pricing.migrateProduct); db[p[1]] = body.value; save(); return p[1] === 'products' ? { notify: await processWaitlist() } : {}; }
       if (p[2] && M === 'PUT') {
         const item = body.value; if (!item || item.id !== p[2]) fail(400, 'Неверные данные');
-        if (p[1] === 'products') Pricing.migrateProduct(item);
+        if (p[1] === 'products') { Pricing.migrateProduct(item); if (item.specs) { item.specs = Specs.clean(item.specs); if (!Object.keys(item.specs).length) delete item.specs; } }
         const i = arr.findIndex((x) => x.id === item.id);
         if (i === -1) arr.push(item); else arr[i] = item;
         save(); return p[1] === 'products' ? { notify: await processWaitlist() } : {};

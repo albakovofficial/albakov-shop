@@ -826,7 +826,7 @@
 
     v.innerHTML = '<div class="wrap"><div class="page-head" style="padding-bottom:20px"><div class="crumbs"><a href="#/">Главная</a><span>/</span><a href="#/catalog">Каталог</a>' + (cat ? '<span>/</span><a href="#/catalog?cat=' + esc(cat.slug) + '">' + esc(cat.name) + '</a>' : '') + '</div></div>' +
       '<div class="product"><div id="galleryBox"></div>' +
-      '<div class="pinfo"><div style="display:grid;gap:14px">' + (function () { var b = badgeHtml(p, pr); return b.length ? '<div class="badges-row">' + b.join('') + '</div>' : ''; })() + '<h1>' + esc(p.name) + '</h1>' + priceHtml(pr) +
+      '<div class="pinfo"><div style="display:grid;gap:14px">' + (function () { var b = badgeHtml(p, pr); return b.length ? '<div class="badges-row">' + b.join('') + '</div>' : ''; })() + '<h1>' + esc(p.name) + '</h1>' + specsSummaryHtml(p) + priceHtml(pr) +
         (Pricing.bonusFor(pr.price, D.settings) > 0 ? '<div class="p-bonus">' + bonusLine(pr.price, 'p-bonus-n') + '<span class="muted">за покупку · 1 бонус = 1 ₽. Начислим на бонусный счёт ' + (bonusCfg().creditOn === 'done' ? 'после получения заказа' : 'после оплаты') + ', потратить можно на следующие покупки — хоть все сразу' + (API.user ? '' : '. Нужен <a class="link" href="#/account">личный кабинет</a>') + '</span></div>' : '') +
         (pr.promotion ? '<span class="promo-note">Акция «' + esc(pr.promotion.title) + '»' + (pr.promotion.endsAt ? ' до ' + esc(fmtDate(pr.promotion.endsAt)) : '') + '</span>' : '') + '</div>' +
       '<div><div class="opt-head"><span>Цвет: <b class="color-name" id="colorName"></b></span>' + (colors.length > 1 ? '<span class="muted" style="font-size:13px">' + colors.length + ' ' + plural(colors.length, 'цвет', 'цвета', 'цветов') + '</span>' : '') + '</div>' +
@@ -840,7 +840,7 @@
       fitGuaranteeHtml() +
       '<div class="acc">' +
         (p.description ? '<details open><summary>Описание</summary><div class="body">' + esc(p.description) + '</div></details>' : '') +
-        (p.composition || p.care ? '<details><summary>Состав и уход</summary><div class="body">' + esc([p.composition, p.care].filter(Boolean).join('\n\n')) + '</div></details>' : '') +
+        specsHtml(p) +
         (delivPage ? '<details><summary>Доставка и возврат</summary><div class="body prose" style="padding:0 0 20px;font-size:14px">' + md(delivPage.body) + '</div></details>' : '') +
       '</div></div></div>' +
       (related.length ? '<section class="section" style="border-top:1px solid var(--line)"><div class="section-head"><h2>Вам может понравиться</h2></div><div class="grid">' + related.map(card).join('') + '</div></section>' : '') + '</div>';
@@ -931,6 +931,44 @@
     var ff = $('#fitFind'); if (ff) ff.addEventListener('click', function () { openFitFinder(p, col, pickSize); });
     if (q.fit === '1' && fitCanPick(p)) setTimeout(function () { openFitFinder(p, col, pickSize); }, 120);
     var fc = $('#fitCompare'); if (fc) fc.addEventListener('click', function () { openFitCompare(p, col, pickSize); });
+  }
+
+  /* ---------- Характеристики товара (js/specs.js): таблица, особенности и значки ухода ---------- */
+  // Значки ухода — упрощённые символы с этикетки одежды
+  function careIcon(k) {
+    var tub = '<path d="M3 8l2 11h14l2-11"/><path d="M3 8c2 1.5 4 1.5 6 0s4-1.5 6 0 4 1.5 6 0"/>';
+    var x = '<path d="M4 4l16 16M20 4L4 20"/>';
+    var iron = '<path d="M4 18h16l-2-8H9c-3 0-5 3-5 8z"/><path d="M9 10V7h6"/>';
+    var I = {
+      w30: tub + '<text x="12" y="17.5" text-anchor="middle" font-size="6.5" font-family="Arial" fill="currentColor" stroke="none">30</text>',
+      w40: tub + '<text x="12" y="17.5" text-anchor="middle" font-size="6.5" font-family="Arial" fill="currentColor" stroke="none">40</text>',
+      delicate: tub + '<path d="M6 22h12M7 24h10" transform="translate(0,-2.5)"/>',
+      inside: '<path d="M8 3l-4 3 2 3 2-1v12h8V8l2 1 2-3-4-3c-1 1.5-2.5 2-4 2s-3-.5-4-2z"/><path d="M10 13h4M12 11v4"/>',
+      nobleach: '<path d="M12 4l9 16H3z"/>' + x,
+      iron2: iron + '<circle cx="11" cy="14.5" r=".9" fill="currentColor"/><circle cx="14" cy="14.5" r=".9" fill="currentColor"/>',
+      noironprint: iron + '<path d="M3 21L21 5"/>',
+      nodryer: '<rect x="4" y="4" width="16" height="16" rx="1"/><circle cx="12" cy="12" r="5"/>' + x,
+      flat: '<rect x="4" y="4" width="16" height="16" rx="1"/><path d="M7 12h10"/>',
+      nodryclean: '<circle cx="12" cy="12" r="8"/>' + x
+    };
+    return '<svg class="care-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (I[k] || '') + '</svg>';
+  }
+  // Короткая выжимка под ценой: «100% хлопок · 240 г/м² · Оверсайз»
+  function specsSummaryHtml(p) {
+    if (!window.Specs) return '';
+    var s = Specs.summary(p); return s.length ? '<div class="spec-sum">' + s.map(function (x) { return '<span>' + esc(x) + '</span>'; }).join('') + '</div>' : '';
+  }
+  function specsHtml(p) {
+    if (!window.Specs) return p.composition || p.care ? '<details><summary>Состав и уход</summary><div class="body">' + esc([p.composition, p.care].filter(Boolean).join('\n\n')) + '</div></details>' : '';
+    var rows = Specs.list(p), care = Specs.care(p);
+    var feat = rows.filter(function (r) { return r.k === 'features'; }), main = rows.filter(function (r) { return r.k !== 'features'; });
+    if (!main.length && !feat.length && !care.length && !p.care) return '';
+    var featTags = feat.length ? feat[0].value.split(', ') : [];
+    return '<details open><summary>Характеристики</summary><div class="body specs">' +
+      (main.length ? '<dl class="spec-list">' + main.map(function (r) { return '<div><dt>' + esc(r.label) + '</dt><dd>' + esc(r.value) + '</dd></div>'; }).join('') + '</dl>' : '') +
+      (featTags.length ? '<ul class="spec-tags">' + featTags.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul>' : '') +
+      (care.length || p.care ? '<div class="spec-care"><h4>Уход</h4>' + (care.length ? '<ul>' + care.map(function (c) { return '<li>' + careIcon(c[0]) + '<span>' + esc(c[1]) + '</span></li>'; }).join('') + '</ul>' : '') + (p.care ? '<p class="muted">' + esc(p.care) + '</p>' : '') + '</div>' : '') +
+    '</div></details>';
   }
 
   /* ---------- Подбор размера ----------
@@ -2328,7 +2366,7 @@
       return;
     }
     API = c.api; D = c.data;
-    window.App = { API: API, D: D, plural: plural, slideHtml: slideHtml, slidePromo: slidePromo, slideVisible: slideVisible, hashPath: hashPath, brandHtml: brandHtml, brandMode: brandMode, esc: esc, fmt: fmt, md: md, toast: toast, errMsg: errMsg, imgOf: imgOf, refresh: refresh, go: go, openModal: openModal, closePanels: closePanels, fmtPhone: fmtPhone, fmtDate: fmtDate, STATUS: STATUS, PAY: PAY, chartTable: chartTable };
+    window.App = { careIcon: careIcon, API: API, D: D, plural: plural, slideHtml: slideHtml, slidePromo: slidePromo, slideVisible: slideVisible, hashPath: hashPath, brandHtml: brandHtml, brandMode: brandMode, esc: esc, fmt: fmt, md: md, toast: toast, errMsg: errMsg, imgOf: imgOf, refresh: refresh, go: go, openModal: openModal, closePanels: closePanels, fmtPhone: fmtPhone, fmtDate: fmtDate, STATUS: STATUS, PAY: PAY, chartTable: chartTable };
     renderShell();
     document.addEventListener('click', function (e) {
       var a = e.target.closest('[data-act]'); if (a) {

@@ -2285,3 +2285,34 @@ input:focus-visible + .pm-track { outline: 2px solid var(--accent); outline-offs
 .adm-req-stat { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
 .req-modal #reqBody { display: grid; gap: 18px; }
 .adm-req-item, .adm-req-item > * { min-width: 0; } .adm-req-act .btn { white-space: normal; text-align: left; height: auto; min-height: 40px; padding-top: 8px; padding-bottom: 8px; line-height: 1.35; }
+
+/* ---------- Характеристики товара (js/specs.js) ---------- */
+.spec-sum { display: flex; flex-wrap: wrap; gap: 6px; margin-top: -4px; }
+.spec-sum span { font-size: 13px; letter-spacing: .02em; color: var(--muted); padding: 5px 11px; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); }
+.specs { display: grid; gap: 22px; white-space: normal; }
+.spec-list { margin: 0; display: grid; }
+.spec-list > div { display: grid; grid-template-columns: minmax(110px, 38%) minmax(0, 1fr); gap: 16px; padding: 11px 0; border-bottom: 1px dashed var(--line); }
+.spec-list > div:first-child { padding-top: 2px; }
+.spec-list dt { color: var(--muted); font-size: 14px; }
+.spec-list dd { margin: 0; color: var(--text); font-size: 14px; font-weight: 500; }
+.spec-tags { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.spec-tags li { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); padding: 7px 12px; background: var(--surface); border-radius: 999px; }
+.spec-tags li::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--text); opacity: .55; }
+.spec-care h4 { font-family: var(--sans); font-size: 13px; font-weight: 600; letter-spacing: .04em; color: var(--text); margin: 0 0 10px; }
+.spec-care ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 190px), 1fr)); gap: 8px; }
+.spec-care li { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 10px; align-items: center; font-size: 13px; line-height: 1.35; color: var(--muted); }
+.care-ic { width: 34px; height: 34px; padding: 5px; border: 1px solid var(--line); border-radius: 8px; color: var(--text); background: var(--paper); }
+.spec-care p { margin-top: 10px; font-size: 13px; }
+/* Панель: характеристики товара */
+.adm-specs { grid-column: 1 / -1; margin-top: 8px; }
+.spec-group { border: 1px solid var(--line); background: var(--paper); padding: 16px 18px 6px; margin-bottom: 12px; }
+.spec-group h5 { font-family: var(--sans); font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0 0 12px; }
+.spec-row { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 8px 16px; align-items: start; padding-bottom: 12px; }
+.spec-label { font-size: 14px; padding-top: 8px; }
+.spec-label small { display: block; font-size: 12px; color: var(--muted); }
+.spec-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.spec-chip { height: 36px; font-size: 13px; padding: 0 12px; border-radius: 999px; gap: 6px; display: inline-flex; align-items: center; }
+.spec-chip.on { background: var(--text); color: var(--bg); border-color: var(--text); box-shadow: none; }
+.spec-chip .care-ic { width: 22px; height: 22px; padding: 2px; border: 0; background: none; color: inherit; }
+.spec-custom { min-height: 36px; padding: 6px 12px; font-size: 13px; flex: 1 1 220px; max-width: 360px; border-radius: 999px; }
+@media (max-width: 640px) { .spec-row { grid-template-columns: 1fr; } .spec-label { padding-top: 0; } }

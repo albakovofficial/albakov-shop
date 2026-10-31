@@ -2782,3 +2782,4 @@ a:hover .cat-go { background: var(--ink); color: #fff; transform: rotate(-45deg)
 .adm-steps li { border: 0; border-radius: 20px; box-shadow: var(--ring); }
 .adm-steps li::before { border: 0; color: #fff; background: var(--ink); }
 .adm-steps li:first-child::before { background: var(--acc-grad); }
+.gate-head .eyebrow { justify-self: center; align-self: center; }

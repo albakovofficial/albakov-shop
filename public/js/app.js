@@ -625,7 +625,7 @@
   function atelierBlock(h) {
     var about = (D.pages || []).some(function (p) { return p.slug === 'about'; });
     return '<section class="section atelier-sec"><div class="wrap atelier">' +
-      '<figure class="atelier-media" data-reveal><img src="' + esc(h.editorialImage || Art.make(h.editorialArt)) + '" alt="" loading="lazy"></figure>' +
+      '<figure class="atelier-media"><img src="' + esc(h.editorialImage || Art.make(h.editorialArt)) + '" alt="" decoding="async"></figure>' +
       '<div class="atelier-copy">' +
         (h.editorialEyebrow ? '<span class="eyebrow">' + esc(h.editorialEyebrow) + '</span>' : '') +
         '<h2>' + esc(h.editorialTitle) + '</h2>' +
@@ -645,7 +645,7 @@
       var io = new IntersectionObserver(function (es) {
         es.forEach(function (e) { if (e.isIntersecting) { $$('[data-reveal]', e.target).forEach(function (el) { el.classList.add('in'); }); io.unobserve(e.target); } });
       }, { threshold: .2 });
-      secs.forEach(function (s) { $$('[data-reveal]', s).forEach(function (el) { el.classList.add('pre'); }); io.observe(s); });
+      secs.forEach(function (s) { $$('[data-reveal]', s).forEach(function (el) { el.classList.add('rv-pre'); }); io.observe(s); });
     }
     clearInterval(dealTick);
     var t = $('.deal-timer', v);
@@ -2218,7 +2218,7 @@
     var els = $$('.ab-rv', v);
     if ('IntersectionObserver' in window) {
       var io = new IntersectionObserver(function (es) { es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }); }, { threshold: .15 });
-      els.forEach(function (el) { el.classList.add('pre'); io.observe(el); });
+      els.forEach(function (el) { el.classList.add('rv-pre'); io.observe(el); });
     }
   }
 

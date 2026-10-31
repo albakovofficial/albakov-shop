@@ -2728,3 +2728,57 @@ a:hover .cat-go { background: var(--ink); color: #fff; transform: rotate(-45deg)
   .crumbs::-webkit-scrollbar { display: none; }
   .crumbs a, .crumbs span { flex: none; white-space: nowrap; padding: 4px 9px; }
 }
+
+/* =====================================================================
+   ПАНЕЛЬ УПРАВЛЕНИЯ в общем дизайне (13.40)
+   ===================================================================== */
+.adm { border-bottom: 0; background: linear-gradient(180deg, #fafafa, var(--bg) 240px); }
+.adm-side { border-right: 0; padding: 24px 12px; background: radial-gradient(80% 30% at 0% 0%, rgba(255, 154, 92, .14), transparent 70%), linear-gradient(180deg, #f7f7f6, #eff0f2); box-shadow: inset -1px 0 0 rgba(18, 20, 23, .05); }
+.adm-brand { padding: 0 12px; gap: 10px; }
+.adm-brand b { font-weight: 300; letter-spacing: .18em; }
+.adm-side nav { gap: 2px; }
+.adm-side nav a { padding: 9px 14px; border-left: 0; border-radius: 12px; transition: background .2s, color .2s; }
+.adm-side nav a:hover { background: rgba(255, 255, 255, .8); box-shadow: var(--ring); }
+.adm-side nav a.on { background: var(--ink); color: #fff; box-shadow: 0 10px 22px -14px rgba(13, 14, 16, .8); }
+.adm-side nav a.on .adm-badge { background: #fff; color: var(--ink); }
+.adm-badge { background: var(--acc-grad); color: #fff; border-radius: 999px; padding: 1px 8px; }
+.adm-side-foot { padding: 0 12px; }
+.adm-head h1 { font-weight: 200; letter-spacing: -.035em; }
+.adm-head h1::after { content: ""; display: inline-block; width: .14em; height: .14em; margin-left: .08em; border-radius: 50%; background: var(--acc-grad); }
+.adm-card { border: 0; border-radius: var(--r-lg); box-shadow: var(--ring), 0 18px 40px -34px rgba(18, 20, 23, .35); }
+.adm-h3 { font-family: var(--sans); font-size: 12px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); margin-bottom: 10px; }
+.adm-sub { font-weight: 300; letter-spacing: -.02em; border-top-color: var(--line); }
+.adm-stats { gap: 10px; }
+.adm-stat { border: 0; border-radius: 20px; background: #fff; box-shadow: var(--ring); transition: transform .4s var(--ease), box-shadow .4s; }
+.adm-stat:hover { transform: translateY(-3px); box-shadow: var(--ring), var(--lift); }
+.adm-stat .eyebrow, .adm-sl-pvhead .eyebrow, .adm-logo-opts .eyebrow, .adm-logo-preview .eyebrow, .adm-preview-head .eyebrow { padding: 0; background: none; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; font-size: 11px; letter-spacing: .08em; color: var(--dim); gap: 8px; width: auto; white-space: normal; }
+.adm-stat .eyebrow::before { width: 6px; height: 6px; }
+.adm-stat b { font-weight: 300; letter-spacing: -.03em; }
+.adm-alert { border-radius: var(--r-md); border: 0; box-shadow: inset 0 0 0 1px rgba(255, 90, 60, .35); background: linear-gradient(135deg, rgba(255, 154, 92, .1), rgba(255, 90, 60, .06)); }
+.adm-table .table-wrap, .adm .table-wrap { border: 0; border-radius: var(--r-lg); box-shadow: var(--ring); background: #fff; overflow: auto; }
+.adm table.sizes th { background: #f6f7f8; font-family: var(--sans); font-size: 11px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
+.adm table.sizes tr:hover td { background: #fafafa; }
+.adm-thumb { border-radius: 8px; }
+.adm-filter .chip { height: 36px; }
+.adm-img { border: 0; border-radius: 14px; box-shadow: var(--ring); }
+.adm-img.add { border: 1.5px dashed rgba(18, 20, 23, .18); box-shadow: none; }
+.adm-img.add:hover { border-color: var(--acc); color: var(--text); }
+.adm-img-tools button { border-radius: 50%; background: rgba(13, 14, 16, .72); backdrop-filter: blur(6px); }
+.adm-img-main { background: rgba(13, 14, 16, .7); backdrop-filter: blur(6px); }
+.adm-row-tools button, .adm-x { border-color: transparent; background: var(--surface); box-shadow: var(--ring); }
+.adm-row-tools button:hover, .adm-x:hover { background: var(--ink); color: #fff; }
+.adm-bar { margin-top: 8px; padding-inline: 14px; border-radius: 22px 22px 0 0; background: rgba(255, 255, 255, .82); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: 0 -10px 30px -20px rgba(18, 20, 23, .35), var(--ring); }
+.adm-preview, .adm-letter, .adm-test, .adm-sl-row, .adm-tpl-item, .adm-logo-slot, .adm-logo-tile, .adm-bonus, .adm-pick, .adm-bulk-bar, .adm-thread, .adm-req-item, .adm-fit, .adm-specs, .adm-sl-edit, .adm-sl-preview, .adm-badge-row, .adm-color { border-radius: var(--r-md); }
+.adm-sl-thumb { border-radius: 10px; overflow: hidden; }
+.adm-bulk-bar { background: var(--ink); color: #fff; }
+.adm-tabs, .adm-sl-pvhead .tabs { border-radius: 999px; }
+.adm-switch span { border-radius: 999px; }
+@media (max-width: 860px) {
+  .adm-side { padding: 14px 10px 10px; box-shadow: inset 0 -1px 0 rgba(18, 20, 23, .05); border-bottom: 0; }
+  .adm-side nav a { white-space: nowrap; }
+}
+.adm-sl-pills em { border: 0; border-radius: 999px; padding: 3px 10px; background: var(--surface); box-shadow: var(--ring); }
+.adm-steps { gap: 10px; }
+.adm-steps li { border: 0; border-radius: 20px; box-shadow: var(--ring); }
+.adm-steps li::before { border: 0; color: #fff; background: var(--ink); }
+.adm-steps li:first-child::before { background: var(--acc-grad); }

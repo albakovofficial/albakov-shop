@@ -994,14 +994,14 @@ function htmlPage(title, text) {
 // новый код — не чаще раза в минуту и не больше 5 раз. Если почта магазина не настроена,
 // регистрация работает как раньше — сразу, без кода.
 const VERIFY_MIN = 15, VERIFY_TRIES = 5, VERIFY_RESEND_SEC = 60, VERIFY_SENDS = 5;
-const pendingRegs = new Map();
+const pendingRegs = new Map(), pendingResets = new Map();
 const codeHash = (id, code) => crypto.createHash('sha256').update(id + ':' + code).digest('hex');
-function sweepPending() { const now = Date.now(); for (const [k, r] of pendingRegs) if (r.exp < now) pendingRegs.delete(k); }
+function sweepPending() { const now = Date.now(); for (const m of [pendingRegs, pendingResets]) for (const [k, r] of m) if (r.exp < now) m.delete(k); }
 const maskEmail = (e) => { const [n, d] = String(e).split('@'); return (n.length <= 2 ? n[0] + '*' : n.slice(0, 2) + '*'.repeat(Math.min(6, n.length - 2))) + '@' + d; };
-async function sendCode(r) {
+async function sendCode(r, purpose) {
   const code = String(crypto.randomInt(0, 1e6)).padStart(6, '0');
   r.code = codeHash(r.id, code); r.tries = 0; r.sentAt = Date.now(); r.sends = (r.sends || 0) + 1; r.exp = Date.now() + VERIFY_MIN * 60e3;
-  const m = Mail.renderCode({ store: db.settings.storeName, logo: brandLogo(), code, minutes: VERIFY_MIN, name: r.f.firstName });
+  const m = Mail.renderCode({ store: db.settings.storeName, logo: brandLogo(), code, minutes: VERIFY_MIN, name: r.f.firstName, purpose });
   try { await sendMail({ to: r.f.email, subject: m.subject, html: m.html, text: m.text }); }
   catch (e) { console.error('Письмо с кодом не отправлено:', e && e.message); fail(502, 'Не удалось отправить письмо с кодом. Проверьте адрес почты или попробуйте ещё раз чуть позже'); }
 }
@@ -1094,6 +1094,40 @@ async function api(req, res, url, body) {
       const u = db.users.find((x) => x.email === l || (ph.length === 11 && x.phone === ph));
       if (!u || !pwOk(body.password) || !checkPassword(body.password, u.hash)) fail(401, 'Неверный логин или пароль');
       throttleOk(tk); createSession(res, 'user', u.id);
+      return { user: publicUser(u) };
+    }
+    // Восстановление пароля: код на почту аккаунта, потом новый пароль. Есть ли такой аккаунт — не сообщаем
+    if (p[1] === 'forgot' && M === 'POST') {
+      throttle(req, 'forgot', 8);
+      if (!mailReady()) fail(503, 'Восстановление пароля временно недоступно. Напишите нам — поможем войти');
+      sweepPending();
+      const l = String(body.login || '').trim().toLowerCase(), ph = normPhone(l);
+      const u = db.users.find((x) => x.email === l || (ph.length === 11 && x.phone === ph));
+      const id = crypto.randomBytes(16).toString('hex');
+      if (u) {
+        for (const [k, r] of pendingResets) if (r.userId === u.id) pendingResets.delete(k);
+        const r = { id, userId: u.id, f: { email: u.email, firstName: u.firstName } };
+        await sendCode(r, 'reset'); pendingResets.set(id, r);
+      }
+      return { id, email: u ? maskEmail(u.email) : (validEmail(l) ? maskEmail(l) : ''), resendIn: VERIFY_RESEND_SEC };
+    }
+    if (p[1] === 'reset' && M === 'POST') {
+      throttle(req, 'verify', 40);
+      sweepPending();
+      const r = pendingResets.get(String(body.id || ''));
+      const code = String(body.code || '').replace(/\D/g, '');
+      if (code.length !== 6) fail(400, 'Введите все 6 цифр кода');
+      if (String(body.password || '').length < 6) fail(400, 'Пароль должен быть не короче 6 символов');
+      if (!pwOk(body.password)) fail(400, 'Слишком длинный пароль');
+      if (!r) fail(400, 'Неверный или устаревший код. Запросите новый');
+      if (r.tries >= VERIFY_TRIES) fail(429, 'Слишком много неверных попыток. Запросите новый код');
+      if (!safeEqual(codeHash(r.id, code), r.code)) { r.tries++; const left = VERIFY_TRIES - r.tries; fail(400, left > 0 ? 'Неверный код. Осталось попыток: ' + left : 'Слишком много неверных попыток. Запросите новый код'); }
+      const u = db.users.find((x) => x.id === r.userId); pendingResets.delete(r.id);
+      if (!u) fail(400, 'Аккаунт не найден');
+      u.hash = hashPassword(body.password);
+      // старые входы на других устройствах закрываем — пароль мог знать посторонний
+      for (const k in db.sessions) if (db.sessions[k].kind === 'user' && db.sessions[k].userId === u.id) delete db.sessions[k];
+      createSession(res, 'user', u.id); save();
       return { user: publicUser(u) };
     }
     if (p[1] === 'logout' && M === 'POST') { const s = getSession(req, 'user'); if (s) { delete db.sessions[s.token]; save(); } setCookie(res, 'sid', '', 0); return {}; }

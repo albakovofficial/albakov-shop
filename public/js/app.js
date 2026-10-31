@@ -1938,6 +1938,34 @@
     return '<aside class="auth-aside">' + (c.earn ? '<div class="auth-card">' + loyalCardHtml(null, 0) + '</div>' : '') +
       '<ul class="auth-perks">' + perks.map(function (x) { return '<li><b>' + esc(x[0]) + '</b><span>' + esc(x[1]) + '</span></li>'; }).join('') + '</ul></aside>';
   }
+  /* Восстановление пароля: почта или телефон → код из письма → новый пароль */
+  function forgotFlow(login, back) {
+    openModal('<span class="eyebrow">Восстановление пароля</span><h3 class="serif" style="font-size:34px;margin:14px 0 8px">Новый пароль</h3>' +
+      '<p class="muted" style="margin-bottom:20px">Пришлём код на почту, указанную в аккаунте.</p>' +
+      '<form class="form" id="fgForm" novalidate><label class="field"><span>Телефон или электронная почта</span><input class="input" id="fg-login" autocomplete="username" value="' + esc(login || '') + '"></label>' +
+      '<p class="form-error" id="fgErr"></p><button class="btn block" id="fgBtn">Получить код</button></form>');
+    var form = $('#fgForm'), err = $('#fgErr');
+    setTimeout(function () { $('#fg-login').focus(); }, 50);
+    form.addEventListener('submit', async function (e) {
+      e.preventDefault(); var l = $('#fg-login').value.trim(); if (!l) { err.textContent = 'Укажите телефон или почту'; return; }
+      var btn = $('#fgBtn'); btn.disabled = true; btn.textContent = 'Отправляем…';
+      var r; try { r = await API.forgot(l); } catch (ex) { err.textContent = errMsg(ex); btn.disabled = false; btn.textContent = 'Получить код'; return; }
+      $('#modalBody').innerHTML = '<span class="eyebrow">Восстановление пароля</span><h3 class="serif" style="font-size:34px;margin:14px 0 8px">Введите код</h3>' +
+        '<p class="muted" style="margin-bottom:20px">Если аккаунт с такими данными есть, мы отправили код из 6 цифр' + (r.email ? ' на ' + esc(r.email) : '') + '. Проверьте и папку «Спам».</p>' +
+        '<form class="form" id="rsForm" novalidate><label class="field"><span>Код из письма</span><input class="input" id="rs-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000"></label>' +
+        '<label class="field"><span>Новый пароль</span><input class="input" id="rs-pass" type="password" autocomplete="new-password" placeholder="Не короче 6 символов"></label>' +
+        '<p class="form-error" id="rsErr"></p><button class="btn block" id="rsBtn">Сохранить и войти</button></form>';
+      setTimeout(function () { $('#rs-code').focus(); }, 50);
+      $('#rsForm').addEventListener('submit', async function (ev) {
+        ev.preventDefault(); var e2 = $('#rsErr'), code = $('#rs-code').value.replace(/\D/g, ''), pw = $('#rs-pass').value;
+        if (code.length !== 6) { e2.textContent = 'Введите все 6 цифр кода'; return; }
+        if (pw.length < 6) { e2.textContent = 'Пароль должен быть не короче 6 символов'; return; }
+        var b2 = $('#rsBtn'); b2.disabled = true;
+        try { await API.resetPassword(r.id, code, pw); closePanels(); toast('Пароль изменён. С возвращением, ' + API.user.firstName); go(backTo(back)); }
+        catch (ex) { e2.textContent = errMsg(ex); b2.disabled = false; }
+      });
+    });
+  }
   function authPage(v, mode, back, pre) {
     pre = pre || {};
     var backQ = back === 'checkout' || back === 'support' ? 'back=' + back : '';
@@ -1945,7 +1973,7 @@
       '<div class="tabs"><button data-m="login"' + (mode === 'login' ? ' class="on"' : '') + '>Вход</button><button data-m="register"' + (mode === 'register' ? ' class="on"' : '') + '>Регистрация</button></div>' +
       (mode === 'login' ?
         '<form class="form" id="authForm" novalidate><label class="field"><span>Телефон или электронная почта</span><input class="input" id="lg-login" autocomplete="username"></label>' +
-        '<label class="field"><span>Пароль</span><input class="input" id="lg-pass" type="password" autocomplete="current-password"></label><p class="form-error" id="authErr"></p><button class="btn block">Войти</button></form>'
+        '<label class="field"><span>Пароль</span><input class="input" id="lg-pass" type="password" autocomplete="current-password"></label><p class="form-error" id="authErr"></p><button class="btn block">Войти</button><button type="button" class="link auth-forgot" id="lgForgot">Забыли пароль?</button></form>'
       :
         '<form class="form" id="authForm" novalidate><div class="row2"><label class="field"><span>Имя</span><input class="input" id="rg-first" autocomplete="given-name" value="' + esc(pre.firstName || '') + '"></label>' +
         '<label class="field"><span>Фамилия</span><input class="input" id="rg-last" autocomplete="family-name" value="' + esc(pre.lastName || '') + '"></label></div>' +
@@ -1959,6 +1987,7 @@
       '<p class="muted auth-switch">' + (mode === 'login' ? 'Нет аккаунта? <button class="link" data-m="register">Зарегистрируйтесь</button>' : 'Уже есть аккаунт? <button class="link" data-m="login">Войдите</button>') + '</p></div></div>' + authAside() + '</div>';
     $$('[data-m]', v).forEach(function (b) { b.addEventListener('click', function () { go('#/account' + (b.getAttribute('data-m') === 'register' ? '?tab=register' + (backQ ? '&' + backQ : '') : (backQ ? '?' + backQ : ''))); }); });
     if (mode === 'register') phoneMask($('#rg-phone'));
+    if (mode === 'login') $('#lgForgot').addEventListener('click', function () { forgotFlow($('#lg-login').value.trim(), back); });
     $('#authForm').addEventListener('submit', async function (e) {
       e.preventDefault(); var err = $('#authErr');
       try {

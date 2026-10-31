@@ -2891,3 +2891,5 @@ a:hover .cat-go { background: var(--ink); color: #fff; transform: rotate(-45deg)
 .ost-i.on::after { display: none; }
 .adm-chip { border: 0; border-radius: 999px; background: var(--surface); box-shadow: var(--ring); }
 .adm-chip.on { background: var(--ink); color: #fff; box-shadow: 0 8px 18px -10px rgba(13, 14, 16, .7); }
+#sRes .sh-more { justify-self: start; width: fit-content; display: inline-flex; }
+.auth-forgot { justify-self: center; margin-top: 4px; font-size: 14px; color: var(--muted); }

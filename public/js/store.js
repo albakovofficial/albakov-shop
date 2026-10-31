@@ -46,6 +46,8 @@
     async register(f) { var r = await call('POST', 'api/auth/register', f); if (r.user) this.user = r.user; return r; },
     async verify(id, code) { var r = await call('POST', 'api/auth/verify', { id: id, code: code }); this.user = r.user; return r; },
     async resendCode(id) { return await call('POST', 'api/auth/resend', { id: id }); },
+    async forgot(l) { return await call('POST', 'api/auth/forgot', { login: l }); },
+    async resetPassword(id, code, password) { this.user = (await call('POST', 'api/auth/reset', { id: id, code: code, password: password })).user; return this.user; },
     async login(l, p) { this.user = (await call('POST', 'api/auth/login', { login: l, password: p })).user; return this.user; },
     async logout() { await call('POST', 'api/auth/logout'); this.user = null; },
     async cdekCities(q) { return (await call('GET', 'api/cdek/cities?q=' + encodeURIComponent(q))).cities; },

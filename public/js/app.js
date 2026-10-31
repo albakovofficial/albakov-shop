@@ -390,16 +390,16 @@
     var pr = slidePromo(sl);
     var eyebrow = (sl.eyebrow || '') + (pr && pr.endsAt ? (sl.eyebrow ? ' · ' : '') + 'до ' + fmtDate(pr.endsAt) : '');
     var badge = sl.badge || (pr ? (pr.type === 'percent' ? '−' + pr.value + '%' : '−' + fmt(pr.value)) : '');
-    var title = esc(sl.title || '').replace(/\*(.+?)\*/g, '<em>$1</em>');
-    var btn = function (b, cls, arrow) { return b && b.label ? '<a class="sbtn ' + cls + '" href="' + esc(safeUrl(b.link || '#/catalog')) + '">' + esc(b.label) + (arrow ? '<span class="sbtn-arrow" aria-hidden="true"></span>' : '') + '</a>' : ''; };
+    var title = esc(sl.title || '').replace(/\*(.+?)\*/g, '<em>$1</em>').replace(/^([−–-]\s?\d[\d\s]*(?:%|₽)?)/, '<span class="st-off">$1</span>');
+    var btn = function (b, cls, arrow) { return b && b.label ? '<a class="sbtn ' + cls + '" href="' + esc(safeUrl(b.link || '#/catalog')) + '"><span>' + esc(b.label) + '</span>' + (cls === 'sbtn-primary' ? '<span class="sbtn-ic" aria-hidden="true">' + ARROW + '</span>' : arrow ? '<span class="sbtn-arrow" aria-hidden="true"></span>' : '') + '</a>' : ''; };
     return '<article class="slide layout-' + (sl.layout === 'full' ? 'full' : 'split') + (active ? ' is-active' : '') + '" aria-roledescription="слайд" aria-label="' + (i + 1) + ' из ' + total + '"' + (active ? '' : ' aria-hidden="true"') + '>' +
       '<div class="slide-media"><img src="' + esc(sl.image || Art.make({ kind: 'coat', tone: '#3d3d40' })) + '" alt=""' + (i ? ' loading="lazy"' : '') + '></div>' +
       '<div class="slide-body">' +
-        (eyebrow ? '<span class="eyebrow">' + esc(eyebrow) + '</span>' : '') +
+        (eyebrow ? '<span class="eyebrow slide-eb"><i></i>' + esc(eyebrow) + '</span>' : '') +
         (badge ? '<span class="slide-badge">' + esc(badge) + '</span>' : '') +
         '<' + (i === 0 ? 'h1' : 'h2') + ' class="slide-title">' + title + '</' + (i === 0 ? 'h1' : 'h2') + '>' +
         (sl.text ? '<p class="slide-text">' + esc(sl.text) + '</p>' : '') +
-        (sl.code ? '<button class="slide-code" data-copy="' + esc(sl.code) + '" title="Скопировать промокод"><span>Промокод</span><b>' + esc(sl.code) + '</b><i>Скопировать</i></button>' : '') +
+        (sl.code ? '<button class="slide-code" data-copy="' + esc(sl.code) + '" title="Скопировать промокод"><span>Промокод</span><b>' + esc(sl.code) + '</b><i>Скопировать</i><svg class="sc-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="3"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg></button>' : '') +
         ((sl.btn1 && sl.btn1.label) || (sl.btn2 && sl.btn2.label) ? '<div class="slide-actions">' + btn(sl.btn1, 'sbtn-primary', true) + btn(sl.btn2, 'sbtn-line', true) + '</div>' : '') +
       '</div></article>';
   }
@@ -407,8 +407,8 @@
     var c = D.settings.slider || {}, n = list.length;
     return '<section class="slider" id="slider" aria-roledescription="карусель" aria-label="Главное" style="--dur:' + Math.max(3, Number(c.interval) || 7) + 's">' +
       '<div class="sl-track">' + list.map(function (sl, i) { return slideHtml(sl, i, n, i === 0); }).join('') + '</div>' +
-      (n > 1 ? '<div class="slider-ui"><span class="sl-count num"><b id="slNum">1</b> / ' + n + '</span>' +
-        '<div class="sl-dots">' + list.map(function (sl, i) { return '<button class="sl-dot' + (i === 0 ? ' on' : '') + '" data-sl="' + i + '" aria-label="Слайд ' + (i + 1) + '"><i></i></button>'; }).join('') + '</div>' +
+      (n > 1 ? '<div class="slider-ui">' +
+        '<div class="sl-dots">' + list.map(function (sl, i) { return '<button class="sl-dot' + (i === 0 ? ' on' : '') + '" data-sl="' + i + '" aria-label="Слайд ' + (i + 1) + '"><b>' + (i < 9 ? '0' : '') + (i + 1) + '</b><i></i></button>'; }).join('') + '</div>' +
         '<div class="sl-arrows"><button class="sl-arrow" data-sl-step="-1" aria-label="Предыдущий слайд"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><button class="sl-arrow" data-sl-step="1" aria-label="Следующий слайд"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button></div></div>' : '') +
       '</section>';
   }

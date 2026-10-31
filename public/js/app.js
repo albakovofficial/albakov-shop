@@ -1024,14 +1024,17 @@
   function openFitFinder(p, col, onPick) {
     var sv = fitSaved(), st = { h: sv.h || 178, kg: sv.kg || 75, pref: sv.pref || 'free' };
     openModal('<div class="fit-modal"><span class="eyebrow">' + esc(p.name) + '</span><h3 class="serif">Подбор размера</h3>' +
-      '<label class="fit-range"><span>Рост <b id="fitHv"></b></span><input type="range" id="fitH" min="145" max="210" step="1" value="' + st.h + '"></label>' +
-      '<label class="fit-range"><span>Вес <b id="fitKv"></b></span><input type="range" id="fitK" min="40" max="150" step="1" value="' + st.kg + '"></label>' +
+      // Рост и вес — ползунком или цифрами вручную
+      '<div class="fit-range"><label for="fitHn">Рост</label><span class="fit-num"><input class="fit-num-in" id="fitHn" type="number" inputmode="numeric" min="145" max="210" step="1" value="' + st.h + '" aria-label="Рост, см"><i>см</i></span><input type="range" id="fitH" min="145" max="210" step="1" value="' + st.h + '" aria-label="Рост"></div>' +
+      '<div class="fit-range"><label for="fitKn">Вес</label><span class="fit-num"><input class="fit-num-in" id="fitKn" type="number" inputmode="numeric" min="40" max="150" step="1" value="' + st.kg + '" aria-label="Вес, кг"><i>кг</i></span><input type="range" id="fitK" min="40" max="150" step="1" value="' + st.kg + '" aria-label="Вес"></div>' +
       '<div class="fit-pref" role="radiogroup" aria-label="Как любите носить"><span>Как любите носить</span><div>' + FIT_PREF.map(function (x) { return '<button type="button" class="chip" role="radio" data-pref="' + x[0] + '">' + esc(x[1]) + '</button>'; }).join('') + '</div></div>' +
       '<div class="fit-res" id="fitRes" aria-live="polite"></div>' +
       '<button class="btn block" id="fitOk"></button>' + (fitCanCompare(p) ? '<button type="button" class="link fit-alt" id="fitToCmp">Сравнить со своей футболкой</button>' : '') + '</div>');
     var res = null;
     function draw() {
-      $('#fitHv').textContent = st.h + ' см'; $('#fitKv').textContent = st.kg + ' кг';
+      if (document.activeElement !== $('#fitHn')) $('#fitHn').value = st.h;
+      if (document.activeElement !== $('#fitKn')) $('#fitKn').value = st.kg;
+      $('#fitH').value = st.h; $('#fitK').value = st.kg;
       $$('[data-pref]').forEach(function (b) { var on = b.getAttribute('data-pref') === st.pref; b.classList.toggle('on', on); b.setAttribute('aria-checked', on); });
       res = fitPick(p, st.h, st.kg, st.pref); if (!res) return;
       var r = res.row, note = { close: 'Сядет аккуратнее, ближе к телу', free: 'Сядет свободно — так, как задумано', xfree: 'Сядет очень свободно, с запасом' }[st.pref];
@@ -1046,6 +1049,14 @@
     }
     $('#fitH').addEventListener('input', function (e) { st.h = +e.target.value; draw(); });
     $('#fitK').addEventListener('input', function (e) { st.kg = +e.target.value; draw(); });
+    // Ввод цифрами: пересчитываем, как только число попадает в диапазон; при выходе из поля — подтягиваем к границам
+    function numIn(id, key, lo, hi) {
+      var el = $(id);
+      el.addEventListener('input', function () { var v = Math.round(Number(el.value)); if (v >= lo && v <= hi) { st[key] = v; draw(); } });
+      el.addEventListener('change', function () { var v = Math.round(Number(el.value)) || st[key]; st[key] = Math.max(lo, Math.min(hi, v)); el.value = st[key]; draw(); });
+      el.addEventListener('focus', function () { el.select(); });
+    }
+    numIn('#fitHn', 'h', 145, 210); numIn('#fitKn', 'kg', 40, 150);
     $('.fit-pref').addEventListener('click', function (e) { var b = e.target.closest('[data-pref]'); if (b) { st.pref = b.getAttribute('data-pref'); draw(); } });
     $('#fitOk').addEventListener('click', function () { if (res) { closePanels(); onPick(res.row.size); } });
     if ($('#fitToCmp')) $('#fitToCmp').addEventListener('click', function () { openFitCompare(p, col, onPick); });

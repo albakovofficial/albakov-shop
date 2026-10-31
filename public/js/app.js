@@ -838,10 +838,10 @@
         '<div class="chips" id="sizeChips"></div><p class="stock-note" id="stockNote" style="margin-top:10px"></p>' + fitToolsHtml(p) + '</div>' +
       '<div class="sticky-buy"><div class="buy-row"><div class="qty"><button data-q="-1" aria-label="Меньше">−</button><span id="qty">1</span><button data-q="1" aria-label="Больше">+</button></div><button class="btn" id="addBtn">Добавить в корзину</button></div></div>' +
       fitGuaranteeHtml() +
-      '<div class="acc">' +
-        (p.description ? '<details open><summary>Описание</summary><div class="body">' + esc(p.description) + '</div></details>' : '') +
+      '<div class="acc p-acc">' +
+        (p.description ? '<details open>' + accSum('text', 'Описание', '') + '<div class="body p-desc">' + esc(p.description) + '</div></details>' : '') +
         specsHtml(p) +
-        (delivPage ? '<details><summary>Доставка и возврат</summary><div class="body prose" style="padding:0 0 20px;font-size:14px">' + md(delivPage.body) + '</div></details>' : '') +
+        (delivPage ? '<details>' + accSum('box', 'Доставка и возврат', 'СДЭК по России · возврат 14 дней') + '<div class="body prose p-deliv">' + md(delivPage.body) + '</div></details>' : '') +
       '</div></div></div>' +
       (related.length ? '<section class="section" style="border-top:1px solid var(--line)"><div class="section-head"><h2>Вам может понравиться</h2></div><div class="grid">' + related.map(card).join('') + '</div></section>' : '') + '</div>';
 
@@ -958,13 +958,29 @@
     if (!window.Specs) return '';
     var s = Specs.summary(p); return s.length ? '<div class="spec-sum">' + s.map(function (x) { return '<span>' + esc(x) + '</span>'; }).join('') + '</div>' : '';
   }
+  // Заголовок раздела в карточке: значок, название, короткая подсказка и круглая кнопка «+»
+  var ACC_IC = {
+    text: '<path d="M5 7h14M5 12h14M5 17h9"/>',
+    spec: '<path d="M4 5h9l7 7-8 8-8-8z"/><circle cx="8.5" cy="9.5" r="1.4"/>',
+    box: '<path d="M3.5 7.5L12 3l8.5 4.5v9L12 21l-8.5-4.5z"/><path d="M3.5 7.5L12 12l8.5-4.5M12 12v9"/>'
+  };
+  function accSum(ic, title, hint) {
+    return '<summary><span class="acc-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">' + ACC_IC[ic] + '</svg></span>' +
+      '<span class="acc-t">' + esc(title) + (hint ? '<small>' + esc(hint) + '</small>' : '') + '</span><span class="acc-pm" aria-hidden="true"></span></summary>';
+  }
   function specsHtml(p) {
-    if (!window.Specs) return p.composition || p.care ? '<details><summary>Состав и уход</summary><div class="body">' + esc([p.composition, p.care].filter(Boolean).join('\n\n')) + '</div></details>' : '';
+    if (!window.Specs) return p.composition || p.care ? '<details>' + accSum('spec', 'Состав и уход', '') + '<div class="body">' + esc([p.composition, p.care].filter(Boolean).join('\n\n')) + '</div></details>' : '';
     var rows = Specs.list(p), care = Specs.care(p);
-    var feat = rows.filter(function (r) { return r.k === 'features'; }), main = rows.filter(function (r) { return r.k !== 'features'; });
-    if (!main.length && !feat.length && !care.length && !p.care) return '';
+    var feat = rows.filter(function (r) { return r.k === 'features'; }), rest = rows.filter(function (r) { return r.k !== 'features'; });
+    if (!rest.length && !feat.length && !care.length && !p.care) return '';
     var featTags = feat.length ? feat[0].value.split(', ') : [];
-    return '<details open><summary>Характеристики</summary><div class="body specs">' +
+    // Главное о ткани и крое — крупными плитками, остальное — строками
+    var HERO = ['composition', 'density', 'fabric', 'fit'];
+    var hero = HERO.map(function (k) { return rest.find(function (r) { return r.k === k; }); }).filter(Boolean);
+    var main = rest.filter(function (r) { return hero.indexOf(r) === -1; });
+    var hint = Specs.summary(p).join(' · ');
+    return '<details open>' + accSum('spec', 'Характеристики', hint) + '<div class="body specs">' +
+      (hero.length ? '<div class="spec-hero">' + hero.map(function (r) { return '<div class="spec-tile"><span>' + esc(r.label) + '</span><b>' + esc(r.value) + '</b></div>'; }).join('') + '</div>' : '') +
       (main.length ? '<dl class="spec-list">' + main.map(function (r) { return '<div><dt>' + esc(r.label) + '</dt><dd>' + esc(r.value) + '</dd></div>'; }).join('') + '</dl>' : '') +
       (featTags.length ? '<ul class="spec-tags">' + featTags.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul>' : '') +
       (care.length || p.care ? '<div class="spec-care"><h4>Уход</h4>' + (care.length ? '<ul>' + care.map(function (c) { return '<li>' + careIcon(c[0]) + '<span>' + esc(c[1]) + '</span></li>'; }).join('') + '</ul>' : '') + (p.care ? '<p class="muted">' + esc(p.care) + '</p>' : '') + '</div>' : '') +
@@ -1205,7 +1221,7 @@
     };
     cartPageDraw = draw; draw();
   }
-  var cartPageDraw = null;
+  var cartPageDraw = null, checkoutRedraw = null; // перерисовать сумму на оформлении, когда меняется корзина
 
   /* ---------- Оформление заказа ---------- */
   function pvzHtml() {
@@ -1295,6 +1311,7 @@
       var payOk = !!$('#payOpts input:checked') || !$('#payOpts').children.length || $('#payOpts').hidden;
       [['buyer', buyer], ['deliv', deliv], ['pay', payOk && $('#payOpts').children.length]].forEach(function (x) { $('#cs-' + x[0]).classList.toggle('done', !!x[1]); });
     }
+    checkoutRedraw = function () { drawSum(); };
     async function drawSum() {
       var contact = { email: $('#co-email').value, phone: $('#co-phone').value }, my = ++st.sumSeq;
       // цена СДЭК считается по городу выбранного пункта
@@ -1303,7 +1320,13 @@
       var q = await cartQuote(st.code, st.deliveryId, contact, st.useBonus, extra);
       if (my !== st.sumSeq) return q;
       st.q = q;
-      $('#coSum').innerHTML = '<div class="mini-lines">' + q.lines.map(function (l) { return '<div class="mini-line"><img src="' + esc(l.image || Art.make(l.art)) + '" alt=""><div><div>' + esc(l.name) + '</div><div class="sub">' + (l.color ? esc(l.color) + ' · ' : '') + esc(l.size) + ' · ' + l.qty + ' шт.' + (l.problem ? ' · <span style="color:var(--danger)">' + esc(l.problem) + '</span>' : '') + '</div></div><span class="num">' + fmt(l.total) + '</span></div>'; }).join('') + '</div>';
+      // Товары в заказе: количество и «Убрать» прямо здесь, без возврата в корзину
+      $('#coSum').innerHTML = '<div class="mini-lines co-lines">' + q.lines.map(function (l) {
+        var key = esc(l.productId + '|' + (l.colorId || '') + '|' + l.size);
+        return '<div class="mini-line co-line"><img src="' + esc(l.image || Art.make(l.art)) + '" alt=""><div><div>' + esc(l.name) + '</div><div class="sub">' + (l.color ? esc(l.color) + ' · ' : '') + 'размер ' + esc(l.size) + (l.problem ? ' · <span style="color:var(--danger)">' + esc(l.problem) + '</span>' : '') + '</div>' +
+          '<div class="co-line-acts"><span class="co-qty"><button type="button" data-co-q="-1" data-co-key="' + key + '" aria-label="Меньше"' + (l.qty <= 1 ? ' disabled' : '') + '>−</button><b>' + l.qty + '</b><button type="button" data-co-q="1" data-co-key="' + key + '" aria-label="Больше">+</button></span>' +
+          '<button type="button" class="co-rm" data-co-rm="' + key + '">Убрать</button></div></div><span class="num">' + fmt(l.total) + '</span></div>';
+      }).join('') + '</div>';
       methods.forEach(function (m) {
         var el = $('[data-dp="' + m.id + '"]'); if (!el) return;
         var after = q.subtotal - q.promoDiscount, free = (m.freeFrom && after >= m.freeFrom) || (q.promo && q.promo.ok && q.promo.type === 'shipping');
@@ -2413,7 +2436,23 @@
       }
     });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closePanels(); });
-    document.addEventListener('cart:change', function () { updateCartCount(); if ($('#cartDrawer.open')) renderCartDrawer(); if (cartPageDraw && parseHash().parts[0] === 'cart') cartPageDraw(); });
+    // Оформление: изменить количество или убрать товар прямо в блоке «Ваш заказ»
+    document.addEventListener('click', function (e) {
+      var rm = e.target.closest('[data-co-rm]'), qb = e.target.closest('[data-co-q]');
+      if (!rm && !qb) return;
+      var k = (rm || qb).getAttribute(rm ? 'data-co-rm' : 'data-co-key').split('|');
+      var cur = Cart.find(k[0], k[1] || undefined, k[2]) || Cart.get().find(function (x) { return x.productId === k[0] && x.size === k[2]; });
+      if (!cur) return;
+      if (rm) {
+        var line = rm.closest('.co-line'); if (line) line.classList.add('leaving');
+        setTimeout(function () { Cart.update(cur.productId, cur.colorId, cur.size, 0); toast('Товар убран из заказа'); if (!Cart.count()) route(); }, 220);
+        return;
+      }
+      var next = cur.qty + Number(qb.getAttribute('data-co-q'));
+      if (next < 1) return;
+      Cart.update(cur.productId, cur.colorId, cur.size, next);
+    });
+    document.addEventListener('cart:change', function () { updateCartCount(); if ($('#cartDrawer.open')) renderCartDrawer(); if (cartPageDraw && parseHash().parts[0] === 'cart') cartPageDraw(); if (checkoutRedraw && parseHash().parts[0] === 'checkout' && Cart.count() && $('#coSum')) checkoutRedraw(); });
     bindLines(document);
     // Шапка сжимается при прокрутке
     var ticking = false;

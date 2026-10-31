@@ -2336,3 +2336,50 @@ input:focus-visible + .pm-track { outline: 2px solid var(--accent); outline-offs
 .sz::after, .chip.on::after { display: none; }
 .sz.on { background: var(--text); color: var(--bg); border-color: var(--text); }
 .chip.out.on { background: transparent; color: var(--text); }
+
+/* ---------- Карточка товара: разделы «Описание», «Характеристики», «Доставка» — премиальный вид ---------- */
+.pinfo .p-acc { border-top: 0; display: grid; gap: 10px; margin-top: 6px; }
+.pinfo .p-acc details { border: 1px solid var(--line); border-radius: 18px; background: var(--paper); transition: border-color .25s, box-shadow .25s; overflow: hidden; }
+.pinfo .p-acc details[open] { border-color: color-mix(in srgb, var(--text) 14%, var(--line)); box-shadow: 0 18px 40px -28px rgba(20, 20, 22, .35); }
+.pinfo .p-acc summary { display: grid; grid-template-columns: 40px minmax(0, 1fr) 34px; align-items: center; gap: 14px; padding: 16px 16px 16px 16px; font-size: 16px; letter-spacing: .01em; border-radius: 18px; }
+.pinfo .p-acc summary::after { display: none; }
+.pinfo .p-acc summary:focus-visible { outline: 2px solid var(--text); outline-offset: -2px; }
+.acc-ic { width: 40px; height: 40px; border-radius: 12px; background: var(--surface); display: grid; place-items: center; color: var(--text); }
+.acc-ic svg { width: 20px; height: 20px; }
+.acc-t { display: grid; gap: 2px; min-width: 0; font-weight: 500; }
+.acc-t small { font-size: 13px; font-weight: 400; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: .01em; }
+.acc-pm { position: relative; width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line-strong); transition: transform .45s var(--ease), background .25s, border-color .25s; }
+.acc-pm::before, .acc-pm::after { content: ""; position: absolute; left: 50%; top: 50%; width: 12px; height: 1.5px; margin: -.75px 0 0 -6px; background: var(--text); border-radius: 2px; transition: transform .45s var(--ease), background .25s; }
+.acc-pm::after { transform: rotate(90deg); }
+.p-acc details[open] .acc-pm { transform: rotate(180deg); background: var(--text); border-color: var(--text); }
+.p-acc details[open] .acc-pm::before, .p-acc details[open] .acc-pm::after { background: var(--bg); }
+.p-acc details[open] .acc-pm::after { transform: rotate(0); }
+@media (hover: hover) { .pinfo .p-acc details:not([open]):hover { border-color: var(--line-strong); } .pinfo .p-acc summary:hover .acc-pm { border-color: var(--text); } }
+.pinfo .p-acc .body { padding: 2px 20px 22px; animation: accIn .35s var(--ease); }
+@keyframes accIn { from { opacity: 0; transform: translateY(-4px); } }
+.p-desc { color: var(--text); font-size: 15px; line-height: 1.75; max-width: 62ch; }
+.p-deliv { font-size: 14px; }
+/* Характеристики: главное плитками */
+.spec-hero { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.spec-tile { display: grid; gap: 6px; align-content: start; padding: 14px 16px 16px; border-radius: 14px; background: var(--surface); }
+.spec-tile span { font-size: 12px; letter-spacing: .04em; color: var(--muted); }
+.spec-tile b { font-size: 17px; font-weight: 500; line-height: 1.25; color: var(--text); }
+.pinfo .spec-list > div { border-bottom: 1px solid var(--line); padding: 12px 2px; }
+.pinfo .spec-list > div:last-child { border-bottom: 0; }
+.pinfo .spec-tags li { background: var(--paper); border: 1px solid var(--line); }
+.pinfo .spec-care { padding: 16px; border-radius: 14px; background: var(--surface); }
+.pinfo .care-ic { border-color: transparent; }
+@media (max-width: 400px) { .spec-tile b { font-size: 15px; } .pinfo .p-acc summary { grid-template-columns: 36px minmax(0, 1fr) 30px; gap: 12px; padding: 14px; } .acc-ic { width: 36px; height: 36px; } .acc-pm { width: 30px; height: 30px; } }
+
+/* ---------- Оформление: количество и «Убрать» в блоке заказа ---------- */
+.co-lines { max-height: none; }
+.co-line { align-items: start; transition: opacity .22s, transform .22s; }
+.co-line.leaving { opacity: 0; transform: translateX(14px); }
+.co-line-acts { display: flex; align-items: center; gap: 14px; margin-top: 8px; }
+.co-qty { display: inline-flex; align-items: center; height: 30px; border: 1px solid var(--line-strong); border-radius: 999px; }
+.co-qty button { width: 30px; height: 100%; font-size: 15px; color: var(--muted); border-radius: 999px; }
+.co-qty button:hover:not([disabled]) { color: var(--text); }
+.co-qty button[disabled] { opacity: .35; cursor: default; }
+.co-qty b { min-width: 18px; text-align: center; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.co-rm { font-size: 13px; color: var(--muted); border-bottom: 1px solid var(--line-strong); padding-bottom: 1px; }
+.co-rm:hover { color: var(--danger); border-color: var(--danger); }

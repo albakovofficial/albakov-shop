@@ -50,6 +50,7 @@ Pricing.migrateData(db, SEED); // цвета товаров, логотип — 
 db.secrets = db.secrets || {};
 db.waitlist = db.waitlist || [];
 db.tickets = db.tickets || [];
+db.giftcards = db.giftcards || [];
 if (!db.secrets.adminHash) {
   const pw = process.env.ADMIN_PASSWORD || crypto.randomBytes(6).toString('base64url');
   db.secrets.adminHash = hashPassword(pw);
@@ -95,7 +96,7 @@ const validEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(s || '').t
 const publicUser = (u) => u && { id: u.id, firstName: u.firstName, lastName: u.lastName, phone: u.phone, email: u.email, createdAt: u.createdAt, bonus: u.bonus || 0,
   supportUnread: db.tickets.filter((t) => t.userId === u.id && t.unreadUser).length,
   bonusNews: (u.bonusLog || []).filter((e) => !e.seen).slice(0, 5).map((e) => ({ id: e.id, amount: e.amount, type: e.type, orderNumber: e.orderNumber || '', note: e.note || '' })),
-  favorites: u.favorites || [], addresses: u.addresses || [] };
+  favorites: u.favorites || [], addresses: u.addresses || [], cartRemind: u.cartRemind === true ? true : u.cartRemind === false ? false : null, cart: (u.cart && u.cart.lines) || [] };
 /* Избранное и адреса покупателя: проверяем и обрезаем всё, что пришло из браузера */
 const ADDR_KINDS = ['home', 'work', 'other'];
 function cleanFavorites(list) {
@@ -279,6 +280,7 @@ function publicState() {
   return {
     hits: hitIds(),
     payReady: payReady(),
+    giftCfg: (({ enabled, nominals, min, max, months }) => ({ enabled, nominals, min, max, months }))(giftCfg()),
     mailReady: mailReady(),
     cdekReady: cdek.ready(),
     // ключ СДЭК и пункт отгрузки покупателям не нужны — наружу только услуги
@@ -369,9 +371,10 @@ const rub = (kop) => (kop / 100).toFixed(2);
 /* Сколько реально оплачено деньгами за каждую позицию и доставку (в копейках):
    скидка по промокоду и бонусы распределяются по товарам, остаток бонусов уменьшает доставку */
 function netLines(order) {
-  const lines = order.items.map((i, idx) => ({ idx, name: `${i.name}${i.color ? ', ' + i.color : ''}, размер ${i.size}`.slice(0, 128), qty: i.qty, totalK: i.price * i.qty * 100 }));
+  const lines = order.items.map((i, idx) => ({ idx, gift: !!i.gift, name: (i.gift ? i.name : `${i.name}${i.color ? ', ' + i.color : ''}, размер ${i.size}`).slice(0, 128), qty: i.qty, totalK: i.price * i.qty * 100 }));
   const subK = lines.reduce((s, l) => s + l.totalK, 0);
-  const bonusK = (order.bonusUsed || 0) * 100, goodsBonusK = Math.min(bonusK, Math.max(0, subK - order.promoDiscount * 100));
+  // бонусы и оплата сертификатом уменьшают сумму позиций в чеке (сначала товары, остаток — доставка)
+  const bonusK = ((order.bonusUsed || 0) + (order.giftUsed || 0)) * 100, goodsBonusK = Math.min(bonusK, Math.max(0, subK - order.promoDiscount * 100));
   let discK = order.promoDiscount * 100 + goodsBonusK, left = discK;
   lines.forEach((l, idx) => {
     const share = idx === lines.length - 1 ? left : Math.min(left, Math.round(discK * l.totalK / (subK || 1)));
@@ -381,8 +384,8 @@ function netLines(order) {
   return { lines, delivK, deliveryName: order.delivery ? order.delivery.name : '' };
 }
 // Позиция чека: если сумма не делится на количество без остатка — одна штука уходит отдельной строкой
-function pushReceipt(out, name, qty, totalK, subject, vatCode) {
-  const push = (q, unitK) => out.push({ description: name, quantity: q.toFixed(2), amount: { value: rub(unitK), currency: 'RUB' }, vat_code: vatCode, payment_mode: 'full_payment', payment_subject: subject });
+function pushReceipt(out, name, qty, totalK, subject, vatCode, mode) {
+  const push = (q, unitK) => out.push({ description: name, quantity: q.toFixed(2), amount: { value: rub(unitK), currency: 'RUB' }, vat_code: vatCode, payment_mode: mode || 'full_payment', payment_subject: subject });
   const unit = Math.floor(totalK / qty), rest = totalK - unit * qty;
   if (rest === 0) push(qty, unit);
   else { if (qty > 1) push(qty - 1, unit); push(1, unit + rest); }
@@ -390,7 +393,8 @@ function pushReceipt(out, name, qty, totalK, subject, vatCode) {
 /* Позиции чека: сумма позиций = сумма платежа */
 function receiptItems(order, vatCode) {
   const n = netLines(order), out = [];
-  n.lines.forEach((l) => { if (l.totalK > 0) pushReceipt(out, l.name, l.qty, l.totalK, 'commodity', vatCode); });
+  // продажа подарочного сертификата — аванс (признак расчёта «аванс», предмет «платёж»)
+  n.lines.forEach((l) => { if (l.totalK > 0) pushReceipt(out, l.name, l.qty, l.totalK, l.gift ? 'payment' : 'commodity', vatCode, l.gift ? 'advance' : 'full_payment'); });
   if (n.delivK > 0) pushReceipt(out, 'Доставка: ' + n.deliveryName, 1, n.delivK, 'service', vatCode);
   return out.filter((x) => Number(x.amount.value) > 0);
 }
@@ -492,7 +496,10 @@ async function createPayment(order) {
     description: `Заказ № ${order.number}`,
     metadata: { orderId: order.id }
   };
-  if (cfg.sendReceipt) {
+  // «Плати частями» (Сбер, через ЮKassa): 4 платежа за 2 месяца. Чеки по этому способу ЮKassa не отправляет — их пробивает своя касса
+  const parts = order.payment.variant === 'parts';
+  if (parts) body.payment_method_data = { type: 'sber_bnpl' };
+  if (cfg.sendReceipt && !parts) {
     body.receipt = {
       customer: receiptCustomer(order),
       items: receiptItems(order, Number(cfg.vatCode) || 1),
@@ -507,11 +514,12 @@ async function createPayment(order) {
 function applyPayment(order, p) {
   if (!order || !p) return;
   if (p.test) order.test = true;
-  if (p.status === 'succeeded' && p.paid) { if (order.payment.status !== 'paid') { order.payment.status = 'paid'; sendOrderMails(order); } }
+  if (p.status === 'succeeded' && p.paid) { if (order.payment.status !== 'paid') { order.payment.status = 'paid'; sendOrderMails(order); tgPaid(order); giftActivate(order); } }
   else if (p.status === 'canceled') {
     // оплата не прошла: возвращаем товар и промокод, если заказ ещё не был отменён вручную
     if (order.status !== 'canceled') {
-      restock(order);
+      restock(order); giftReturn(order);
+      if (order.kind === 'gift') { const g = db.giftcards.find((x) => x.id === order.giftId); if (g && g.status === 'pending') g.status = 'canceled'; }
       const pc = order.promoCode && db.promocodes.find((x) => x.code === order.promoCode);
       if (pc) pc.used = Math.max(0, (pc.used || 0) - 1);
       processWaitlist().catch(() => {});
@@ -532,8 +540,16 @@ function sizeEntry(productId, colorId, size) {
 }
 function restock(order) {
   order.items.forEach((i) => {
+    if (i.preorder) { const p = db.products.find((x) => x.id === i.productId); if (p) p.preorderSold = Math.max(0, (p.preorderSold || 0) - i.qty); return; }
     const s = sizeEntry(i.productId, i.colorId, i.size);
     if (s) s.stock += i.qty;
+  });
+}
+// Обратно к restock: заказ снова в работе — списываем остаток или место в партии
+function unrestock(order) {
+  order.items.forEach((i) => {
+    if (i.preorder) { const p = db.products.find((x) => x.id === i.productId); if (p) p.preorderSold = (p.preorderSold || 0) + i.qty; return; }
+    const s = sizeEntry(i.productId, i.colorId, i.size); if (s) s.stock = Math.max(0, s.stock - i.qty);
   });
 }
 
@@ -585,6 +601,19 @@ async function quoteFull(req, b, strict) {
   return q;
 }
 function quote(req, b, extra) {
+  const q = quoteBase(req, b, extra);
+  if (b.gift) {
+    const g = findGift(b.gift), st = giftState(g);
+    if (st !== 'active') q.gift = { code: String(b.gift).slice(0, 30), ok: false, message: GIFT_MSG[st] };
+    else {
+      const used = Math.min(g.balance, q.total);
+      q.giftUsed = used; q.total -= used;
+      q.gift = { code: g.code, ok: true, balance: g.balance, left: g.balance - used, expiresAt: g.expiresAt, message: used < g.balance ? 'Останется ' + Pricing.format(g.balance - used) + ' на следующие покупки' : 'Сертификат будет использован полностью' };
+    }
+  }
+  return q;
+}
+function quoteBase(req, b, extra) {
   const user = currentUser(req), c = b.contact || {};
   const email = String(c.email || '').trim().toLowerCase(), phone = normPhone(c.phone);
   return Pricing.calcCart(Array.isArray(b.lines) ? b.lines.slice(0, 100) : [], db, {
@@ -615,11 +644,12 @@ async function placeOrder(req, b) {
   if ((method === 'online' && !pay.online) || (method === 'cod' && !pay.cod)) fail(400, 'Этот способ оплаты недоступен');
   // Без подключённой ЮKassa заказ «с онлайн-оплатой» повис бы неоплаченным — не принимаем такой
   if (method === 'online' && !payReady()) fail(400, 'Онлайн-оплата пока не подключена. Выберите оплату при получении.');
-  const q = await quoteFull(req, { lines: b.lines, code: b.code, deliveryId: b.deliveryId, contact: customer, useBonus: b.useBonus, cityCode: b.cityCode, pvzType: b.pvzType, payment: method }, true);
+  const q = await quoteFull(req, { gift: b.gift, lines: b.lines, code: b.code, deliveryId: b.deliveryId, contact: customer, useBonus: b.useBonus, cityCode: b.cityCode, pvzType: b.pvzType, payment: method }, true);
   if (!q.lines.length) fail(400, 'Корзина пуста');
   if (!q.delivery) fail(400, 'Выберите способ доставки');
   const bad = q.lines.find((l) => l.problem); if (bad) fail(409, `${bad.name}: ${bad.problem.toLowerCase()}`);
   if (b.code && !(q.promo && q.promo.ok)) fail(400, q.promo ? q.promo.message : 'Промокод не применён');
+  if (b.gift && !(q.gift && q.gift.ok)) fail(400, q.gift ? q.gift.message : 'Сертификат не применён');
   const m = db.settings.delivery.methods.find((x) => x.id === b.deliveryId);
   // Пункт выдачи СДЭК выбирают из списка: адрес и населённый пункт берём из данных СДЭК, а не из того, что набрал покупатель
   let pvz = null, door = null;
@@ -642,13 +672,16 @@ async function placeOrder(req, b) {
     door = Object.assign({}, city, { address: addr });
   } else if (m && m.needsAddress !== false && (!String(b.city || '').trim() || !String(b.address || '').trim())) fail(400, 'Укажите город и адрес доставки');
 
-  q.lines.forEach((l) => { sizeEntry(l.productId, l.colorId, l.size).stock -= l.qty; });
+  q.lines.forEach((l) => {
+    if (l.preorder) { const pp = db.products.find((x) => x.id === l.productId); pp.preorderSold = (pp.preorderSold || 0) + l.qty; return; }
+    sizeEntry(l.productId, l.colorId, l.size).stock -= l.qty;
+  });
   if (q.promo && q.promo.ok) { const pc = db.promocodes.find((x) => x.code === q.promo.code); if (pc) pc.used = (pc.used || 0) + 1; }
   db.orderSeq = Number(db.orderSeq) || 0;
   do { db.orderSeq++; } while (db.orders.some((o) => o.number === String(db.orderSeq)));
   const order = {
     id: uid('o'), number: String(db.orderSeq), token: crypto.randomBytes(16).toString('hex'), createdAt: new Date().toISOString(), userId: user ? user.id : null, customer, consentAt: new Date().toISOString(),
-    items: q.lines.map((l) => ({ productId: l.productId, slug: l.slug, name: l.name, colorId: l.colorId, color: l.color, size: l.size, qty: l.qty, price: l.price, oldPrice: l.oldPrice, image: l.image, art: l.art })),
+    items: q.lines.map((l) => ({ productId: l.productId, slug: l.slug, name: l.name, colorId: l.colorId, color: l.color, size: l.size, qty: l.qty, price: l.price, oldPrice: l.oldPrice, image: l.image, art: l.art, preorder: l.preorder || undefined, shipDate: l.preorder ? l.shipDate : undefined })),
     subtotal: q.subtotal, saleDiscount: q.saleDiscount, promoCode: q.promo && q.promo.ok ? q.promo.code : '', promoDiscount: q.promoDiscount,
     delivery: Object.assign({}, q.delivery, pvz
       ? { city: pvz.city + (pvz.region ? ' (' + pvz.region + ')' : ''), address: (pvz.type === 'postamat' ? 'Постамат СДЭК ' : 'ПВЗ СДЭК ') + pvz.code + ': ' + pvz.address, pvz: { code: pvz.code, type: pvz.type, cityCode: pvz.cityCode, city: pvz.city, region: pvz.region, address: pvz.address, full: pvz.full, hours: pvz.hours, cod: !!pvz.cod } }
@@ -656,17 +689,24 @@ async function placeOrder(req, b) {
       : { city: String(b.city || '').slice(0, 100), address: String(b.address || '').slice(0, 300) }), comment: String(b.comment || '').slice(0, 1000),
     total: q.total, payment: { method, status: 'pending', provider: method === 'online' ? pay.provider : null }, status: 'new',
     test: method === 'online' && pay.provider !== 'yookassa' ? true : undefined,
-    bonusUsed: q.bonusUsed, bonusEarn: user ? q.bonusEarn : 0
+    bonusUsed: q.bonusUsed, bonusEarn: user ? q.bonusEarn : 0,
+    giftCode: q.giftUsed ? q.gift.code : undefined, giftUsed: q.giftUsed || undefined
   };
+  if (q.giftUsed) { const g = findGift(q.gift.code); g.balance -= q.giftUsed; (g.log = g.log || []).push({ at: order.createdAt, orderId: order.id, number: order.number, amount: -q.giftUsed, type: 'spend' }); }
   // Весь заказ оплачен бонусами — платить деньгами нечего
-  if (order.total === 0) order.payment = { method: 'bonus', status: 'paid', provider: null };
+  if (order.total === 0) order.payment = { method: order.giftUsed ? 'gift' : 'bonus', status: 'paid', provider: null };
+  else if (method === 'online' && b.parts) {
+    if (!(pay.parts && pay.parts.enabled)) fail(400, 'Оплата частями сейчас недоступна');
+    if (order.total < 1000 || order.total > 50000) fail(400, 'Частями можно оплатить заказ от 1 000 до 50 000 ₽');
+    order.payment.variant = 'parts';
+  }
   db.orders.push(order);
   const spent = q.bonusUsed ? Pricing.bonusMove(user, -q.bonusUsed, 'spend', order, uid) : null;
   let payUrl = null;
   if (order.payment.method === 'online' && pay.provider === 'yookassa') {
     try { payUrl = await createPayment(order); }
     catch (e) {
-      restock(order); db.orders = db.orders.filter((o) => o.id !== order.id);
+      restock(order); giftReturn(order); db.orders = db.orders.filter((o) => o.id !== order.id);
       if (order.promoCode) { const pc = db.promocodes.find((x) => x.code === order.promoCode); if (pc) pc.used--; }
       if (spent) { user.bonus += q.bonusUsed; user.bonusLog = user.bonusLog.filter((x) => x !== spent); }
       save(); throw e;
@@ -681,7 +721,9 @@ async function placeOrder(req, b) {
     if (!same && list.length < 10) user.addresses = cleanAddresses(list.concat([{ kind: 'home', label: '', city: raw, address: d.address, isDefault: !list.length, cdekCity: d.door ? { code: d.door.cityCode, city: d.door.city, region: d.door.region } : null }]));
   }
   save();
-  if (order.payment.method !== 'online') sendOrderMails(order); // при онлайн-оплате письмо уйдёт после оплаты
+  if (order.payment.method !== 'online') { sendOrderMails(order); tgOrder(order); } // при онлайн-оплате письмо уйдёт после оплаты
+  else tgOrder(order);
+  tgLowStock(q.lines);
   console.log(`Новый заказ № ${order.number} на ${order.total} ₽`);
   return { order: orderView(order), token: order.token, payUrl, user: publicUser(user) };
 }
@@ -730,6 +772,133 @@ function sendOrderMails(order) {
     jobs.push(sendMail({ to: shopTo, subject: ms.subject, html: ms.html, text: ms.text }));
   }
   Promise.allSettled(jobs).then((r) => r.forEach((x) => { if (x.status === 'rejected') console.error('Письмо о заказе не отправлено:', x.reason && x.reason.message); }));
+}
+
+/* ---------------- Подарочные сертификаты ----------------
+   Покупатель оплачивает сертификат онлайн → код уходит получателю на почту (сразу или в выбранный день).
+   Код вводят при оформлении: сумма сертификата идёт в оплату заказа, остаток сохраняется. */
+const GIFT_DEF = { enabled: true, nominals: [5000, 10000, 20000, 30000], min: 3000, max: 100000, months: 12 };
+function giftCfg() { return Object.assign({}, GIFT_DEF, db.settings.gifts || {}); }
+function giftCode() {
+  const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let c;
+  do { c = 'GIFT-' + [0, 1].map(() => Array.from(crypto.randomBytes(4), (x) => A[x % A.length]).join('')).join('-'); } while (db.giftcards.some((g) => g.code === c));
+  return c;
+}
+const normGift = (c) => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '').replace(/^GIFT/, '');
+function findGift(code) { const n = normGift(code); return n.length >= 8 ? db.giftcards.find((g) => normGift(g.code) === n) : null; }
+function giftState(g) {
+  if (!g) return 'none'; if (g.status === 'canceled') return 'canceled'; if (g.status === 'pending') return 'pending';
+  if (g.expiresAt && new Date(g.expiresAt) < new Date()) return 'expired'; return g.balance > 0 ? 'active' : 'used';
+}
+const GIFT_MSG = { none: 'Сертификат не найден — проверьте код', canceled: 'Этот сертификат отменён', pending: 'Сертификат ещё не оплачен', expired: 'Срок действия сертификата закончился', used: 'Сертификат уже полностью использован' };
+const ruDate = (iso) => new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Moscow' }).replace(' г.', '');
+function giftView(g) { return { code: g.code, amount: g.amount, balance: g.balance, expiresAt: g.expiresAt, state: giftState(g) }; }
+function giftSendDue(g) { if (!g.sendAt) return true; const today = new Date(Date.now() + 3 * 36e5).toISOString().slice(0, 10), hour = new Date(Date.now() + 3 * 36e5).getUTCHours(); return g.sendAt < today || (g.sendAt === today && hour >= 10); }
+async function sendGift(g) {
+  if (!mailReady() || !g.to || !g.to.email) return false;
+  const m = Mail.renderGift({ store: db.settings.storeName, logo: brandLogo(), code: g.code, amount: Pricing.format(g.amount), toName: g.to.name, fromName: g.fromName, message: g.message, expires: ruDate(g.expiresAt), url: PUBLIC_URL + '/catalog', siteUrl: PUBLIC_URL });
+  try { await sendMail({ to: g.to.email, subject: m.subject, html: m.html, text: m.text }); g.sentAt = new Date().toISOString(); save(); return true; }
+  catch (e) { console.error('Письмо с сертификатом не отправлено:', e.message); return false; }
+}
+function giftActivate(order) {
+  if (order.kind !== 'gift' || order.payment.status !== 'paid') return;
+  const g = db.giftcards.find((x) => x.id === order.giftId); if (!g || g.status !== 'pending') return;
+  g.status = 'active'; g.activatedAt = new Date().toISOString(); g.expiresAt = new Date(Date.now() + giftCfg().months * 30.5 * 864e5).toISOString();
+  if (order.status === 'new') order.status = 'done';
+  save(); if (giftSendDue(g)) sendGift(g);
+}
+// Отменили заказ, оплаченный сертификатом, — возвращаем сумму на сертификат; вернули в работу — списываем снова
+function giftReturn(order) {
+  if (!order.giftUsed || order.giftReturned) return;
+  const g = findGift(order.giftCode); if (!g) return;
+  g.balance += order.giftUsed; (g.log = g.log || []).push({ at: new Date().toISOString(), orderId: order.id, number: order.number, amount: order.giftUsed, type: 'return' });
+  order.giftReturned = true;
+}
+function giftReapply(order) {
+  if (!order.giftUsed || !order.giftReturned) return;
+  const g = findGift(order.giftCode); if (!g) return;
+  g.balance = Math.max(0, g.balance - order.giftUsed); g.log.push({ at: new Date().toISOString(), orderId: order.id, number: order.number, amount: -order.giftUsed, type: 'spend' });
+  order.giftReturned = false;
+}
+// отложенная отправка (в выбранный день, с 10:00 по Москве)
+setInterval(() => { db.giftcards.filter((g) => g.status === 'active' && !g.sentAt && g.to && g.to.email && giftSendDue(g)).forEach((g) => sendGift(g)); }, 10 * 60e3).unref();
+
+/* ---------------- Напоминание о брошенной корзине ----------------
+   Только для вошедших покупателей, которые сами включили напоминания. Одно письмо на корзину:
+   через 3 часа после последнего изменения, если заказ так и не оформлен. Отписка — в один клик из письма. */
+function linkKey() { if (!db.secrets.linkKey) { db.secrets.linkKey = crypto.randomBytes(24).toString('hex'); save(); } return db.secrets.linkKey; }
+const cartOffSig = (id) => crypto.createHmac('sha256', linkKey()).update('cart-off:' + id).digest('hex').slice(0, 32);
+function cleanCartLines(list) {
+  return (Array.isArray(list) ? list : []).slice(0, 50).map((l) => ({ productId: String(l && l.productId || '').slice(0, 40), colorId: String(l && l.colorId || '').slice(0, 40), size: String(l && l.size || '').slice(0, 20), qty: Math.max(1, Math.min(99, Math.floor(Number(l && l.qty) || 1))) }))
+    .filter((l) => db.products.some((p) => p.id === l.productId));
+}
+async function cartReminders() {
+  if (!mailReady()) return;
+  const now = Date.now();
+  for (const u of db.users) {
+    const c = u.cart; if (!u.cartRemind || !c || !c.lines || !c.lines.length || c.reminded) continue;
+    const age = now - Date.parse(c.updatedAt || 0); if (age < REMIND_AFTER || age > 72 * 36e5) continue;
+    if (db.orders.some((o) => o.userId === u.id && Date.parse(o.createdAt) > Date.parse(c.updatedAt))) { c.reminded = true; continue; }
+    const items = c.lines.map((l) => {
+      const p = db.products.find((x) => x.id === l.productId && x.active !== false); if (!p) return null;
+      const col = Pricing.colorOf(p, l.colorId), sz = (col.sizes || []).find((x) => x.size === l.size); if (!sz || sz.stock <= 0) return null;
+      return { name: p.name, color: col.name, size: l.size, qty: l.qty, price: Pricing.format(Pricing.productPrice(p, db.promotions).price * l.qty), image: absUrl(col.images && col.images[0]), left: sz.stock <= 2 ? sz.stock : 0 };
+    }).filter(Boolean);
+    c.reminded = true;
+    if (!items.length) continue;
+    const m = Mail.renderCartReminder({ store: db.settings.storeName, logo: brandLogo(), name: u.firstName, items, url: PUBLIC_URL + '/cart', off: PUBLIC_URL + '/api/cart-remind/off?u=' + u.id + '&t=' + cartOffSig(u.id) });
+    try { await sendMail({ to: u.email, subject: m.subject, html: m.html, text: m.text }); c.remindedAt = new Date().toISOString(); } catch (e) { console.error('Напоминание о корзине не отправлено:', e.message); }
+  }
+  save();
+}
+const REMIND_AFTER = Number(process.env.CART_REMIND_AFTER_MIN || 180) * 60e3; // через сколько после последнего изменения корзины
+setInterval(() => { cartReminders().catch((e) => console.error(e)); }, Number(process.env.CART_REMIND_EVERY_SEC || 900) * 1000).unref();
+
+let statDirty = false;
+setInterval(() => { if (statDirty) { statDirty = false; save(); } }, 60e3).unref();
+
+/* ---------------- Уведомления владельцу в Telegram ----------------
+   Бот магазина пишет в личный чат владельца: новые и оплаченные заказы, вопросы в поддержку, заканчивающиеся размеры.
+   Токен бота хранится в секретах, номер чата — в настройках. Ошибки Telegram не мешают работе магазина. */
+const tgEsc = (s) => String(s == null ? '' : s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+function tgCfg() { const t = (db.settings.telegram || {}); return { token: (db.secrets.telegram || {}).token || '', chatId: t.chatId || '', enabled: t.enabled !== false, events: Object.assign({ order: true, paid: true, support: true, stock: true }, t.events || {}) }; }
+async function tgApi(method, body, token) {
+  const tk = token || tgCfg().token; if (!tk) throw new Error('Бот не подключён');
+  const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), 10000);
+  try {
+    const r = await fetch('https://api.telegram.org/bot' + tk + '/' + method, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}), signal: ctrl.signal });
+    const j = await r.json().catch(() => ({}));
+    if (!j.ok) throw new Error(j.description || ('Telegram ответил ' + r.status));
+    return j.result;
+  } finally { clearTimeout(timer); }
+}
+function tgSend(kind, text, buttons) {
+  const c = tgCfg(); if (!c.token || !c.chatId || !c.enabled || (kind && !c.events[kind])) return Promise.resolve(null);
+  const body = { chat_id: c.chatId, text, parse_mode: 'HTML', disable_web_page_preview: true };
+  if (buttons && buttons.length && /^https:/.test(PUBLIC_URL)) body.reply_markup = { inline_keyboard: [buttons.map((b) => ({ text: b[0], url: b[1] }))] };
+  return tgApi('sendMessage', body).catch((e) => { console.error('Telegram:', e.message); return null; });
+}
+function tgOrderText(o, title) {
+  const d = o.delivery || {}, c = o.customer || {}, PAYL = { online: 'онлайн', cod: 'при получении', bonus: 'бонусами', exchange: 'обмен' };
+  return title + ' <b>№ ' + tgEsc(o.number) + '</b> — ' + tgEsc(Pricing.format(o.total)) + '\n\n' +
+    o.items.map((i) => '• ' + tgEsc(i.name) + ' · ' + tgEsc([i.color, i.size].filter(Boolean).join(' · ')) + ' × ' + i.qty + (i.preorder ? ' (предзаказ)' : '')).join('\n') + '\n\n' +
+    '👤 ' + tgEsc([c.firstName, c.lastName].filter(Boolean).join(' ')) + '\n📞 +' + tgEsc(c.phone) + '\n' +
+    '🚚 ' + tgEsc(d.name || '') + (d.city || d.address ? ' · ' + tgEsc([d.city, d.address].filter(Boolean).join(', ')) : '') + '\n' +
+    '💳 ' + (o.payment.status === 'paid' ? 'оплачено ' : '') + tgEsc(PAYL[o.payment.method] || o.payment.method) + (o.promoCode ? '\n🏷 промокод ' + tgEsc(o.promoCode) : '') + (o.comment ? '\n💬 ' + tgEsc(o.comment) : '');
+}
+function tgState() { const c = tgCfg(); return { connected: !!c.token, bot: (db.secrets.telegram || {}).bot || '', chatId: c.chatId, chatName: (db.settings.telegram || {}).chatName || '' }; }
+function tgOrder(o) { if (o.test) return; tgSend('order', tgOrderText(o, '🛍 Новый заказ'), [['Открыть заказ', PUBLIC_URL + '/admin?s=orders&id=' + o.id]]); }
+function tgPaid(o) { if (o.test) return; tgSend('paid', tgOrderText(o, '💳 Оплачен заказ'), [['Открыть заказ', PUBLIC_URL + '/admin?s=orders&id=' + o.id]]); }
+function tgSupport(t) {
+  const last = t.messages[t.messages.length - 1] || {};
+  tgSend('support', '💬 <b>' + (t.messages.length > 1 ? 'Новое сообщение' : 'Новое обращение') + ' № ' + tgEsc(t.number) + '</b> · ' + tgEsc(t.topic) + (t.orderNumber ? ' · заказ № ' + tgEsc(t.orderNumber) : '') + '\n\n' + tgEsc(t.name) + ': «' + tgEsc(String(last.text || '').slice(0, 700)) + '»',
+    [['Ответить', PUBLIC_URL + '/admin?s=support&id=' + t.id]]);
+}
+// После заказа: размеры, где осталось 0–2 штуки
+function tgLowStock(lines) {
+  const low = [];
+  lines.forEach((l) => { const s = sizeEntry(l.productId, l.colorId, l.size); if (s && s.stock <= 2 && !l.preorder) low.push('• ' + tgEsc(l.name) + ' · ' + tgEsc([l.color, l.size].filter(Boolean).join(' · ')) + ' — ' + (s.stock > 0 ? 'осталось ' + s.stock + ' шт.' : 'закончился')); });
+  if (low.length) tgSend('stock', '⚠️ <b>Заканчивается</b>\n\n' + low.join('\n'), [['Товары', PUBLIC_URL + '/admin?s=products']]);
 }
 
 /* ---------------- Трек-номер ---------------- */
@@ -783,7 +952,7 @@ function supportApi(req, p, M, body, u) {
     const t = { id: uid('t'), number: String(db.ticketSeq), userId: u.id, name: [u.firstName, u.lastName].filter(Boolean).join(' '), email: u.email, phone: u.phone,
       topic: SUPPORT_TOPICS.includes(body.topic) ? body.topic : (o ? 'Заказ' : 'Другое'), orderId: o ? o.id : '', orderNumber: o ? o.number : '',
       status: 'open', createdAt: now, updatedAt: now, unreadUser: false, unreadShop: true, messages: [{ id: uid('m'), from: 'user', text, at: now }] };
-    db.tickets.push(t); save(); supportMail(t, 'shop');
+    db.tickets.push(t); save(); supportMail(t, 'shop'); tgSupport(t);
     return { ticket: ticketForUser(t) };
   }
   const t = p[1] && mine().find((x) => x.id === p[1]);
@@ -794,7 +963,7 @@ function supportApi(req, p, M, body, u) {
     const text = ticketText(body.text); if (!text) fail(400, 'Сообщение пустое');
     const now = new Date().toISOString();
     t.messages.push({ id: uid('m'), from: 'user', text, at: now }); t.status = 'open'; t.unreadShop = true; t.unreadUser = false; t.updatedAt = now;
-    save(); supportMail(t, 'shop');
+    save(); supportMail(t, 'shop'); tgSupport(t);
     return { ticket: ticketForUser(t) };
   }
   fail(404, 'Неизвестный запрос');
@@ -859,7 +1028,7 @@ function requestTicket(o, r) {
   const t = { id: uid('t'), number: String(db.ticketSeq), userId: u.id, name: [u.firstName, u.lastName].filter(Boolean).join(' '), email: u.email, phone: u.phone,
     topic: 'Возврат и обмен', orderId: o.id, orderNumber: o.number, status: 'open', createdAt: now, updatedAt: now, unreadUser: false, unreadShop: true,
     messages: [{ id: uid('m'), from: 'user', text: requestText(o, r), at: now }] };
-  db.tickets.push(t); r.ticketId = t.id; supportMail(t, 'shop');
+  db.tickets.push(t); r.ticketId = t.id; supportMail(t, 'shop'); tgSupport(t);
 }
 // Ответ магазина в переписке по заявке (и письмо покупателю)
 function requestReply(r, text) {
@@ -1168,6 +1337,18 @@ async function api(req, res, url, body) {
     (u.bonusLog || []).forEach((e) => { e.seen = true; }); save();
     return { user: publicUser(u) };
   }
+  // Корзина вошедшего покупателя хранится и на сервере: видна на всех устройствах, по ней приходит напоминание
+  if (p[0] === 'me' && p[1] === 'cart' && M === 'PUT') {
+    const u = user(); if (!u) fail(401, 'Войдите в личный кабинет');
+    const lines = cleanCartLines(body.lines), key = JSON.stringify(lines);
+    if (!u.cart || u.cart.key !== key) u.cart = { lines, key, updatedAt: new Date().toISOString(), reminded: false };
+    save(); return {};
+  }
+  if (p[0] === 'me' && p[1] === 'prefs' && M === 'PUT') {
+    const u = user(); if (!u) fail(401, 'Войдите в личный кабинет');
+    if (typeof body.cartRemind === 'boolean') { u.cartRemind = body.cartRemind; u.cartRemindAt = new Date().toISOString(); }
+    save(); return { user: publicUser(u) };
+  }
   if (p[0] === 'me' && p[1] === 'favorites' && M === 'PUT') {
     const u = user(); if (!u) fail(401, 'Войдите в личный кабинет');
     u.favorites = cleanFavorites(body.list); save(); return { user: publicUser(u) };
@@ -1211,6 +1392,75 @@ async function api(req, res, url, body) {
     }
   }
 
+  // Своя статистика без cookie и персональных данных: сколько зашло, открыло товар, положило в корзину, начало оформление
+  if (p[0] === 't' && M === 'POST') {
+    if (/bot|crawl|spider|slurp|yandex(bot|images)|googlebot|headless|lighthouse|preview/i.test(String(req.headers['user-agent'] || ''))) return {};
+    throttle(req, 'stat', 400);
+    const e = String(body.e || ''); if (!['v', 'p', 'c', 'k'].includes(e)) fail(400, 'Неизвестное событие');
+    const day = new Date(Date.now() + 3 * 36e5).toISOString().slice(0, 10); // по Москве
+    db.stats = db.stats || {};
+    const d = db.stats[day] = db.stats[day] || { v: 0, p: 0, c: 0, k: 0, src: {}, dev: { m: 0, d: 0 } };
+    d[e]++;
+    if (e === 'v') {
+      const SRC = ['instagram', 'telegram', 'vk', 'yandex', 'google', 'direct', 'other'];
+      const sc = SRC.includes(body.src) ? body.src : 'other'; d.src[sc] = (d.src[sc] || 0) + 1;
+      d.dev[body.m ? 'm' : 'd']++;
+      const keys = Object.keys(db.stats).sort(); while (keys.length > 120) delete db.stats[keys.shift()];
+    }
+    statDirty = true; return {};
+  }
+  // Подарочный сертификат: проверить остаток по коду
+  if (p[0] === 'gifts' && p[1] === 'check' && M === 'POST') {
+    throttle(req, 'giftcheck', 20);
+    const g = findGift(body.code), st = giftState(g);
+    if (!g) fail(404, GIFT_MSG.none);
+    return { gift: Object.assign(giftView(g), { message: st === 'active' ? '' : GIFT_MSG[st] }) };
+  }
+  // Купить сертификат: заказ с онлайн-оплатой, после оплаты код уходит получателю
+  if (p[0] === 'gifts' && !p[1] && M === 'POST') {
+    throttle(req, 'gift', 10);
+    const cfg = giftCfg(); if (!cfg.enabled) fail(400, 'Подарочные сертификаты сейчас недоступны');
+    if (!payReady()) fail(400, 'Покупка сертификатов появится после подключения онлайн-оплаты');
+    const amount = Math.round(Number(body.amount) || 0);
+    if (!(amount >= cfg.min && amount <= cfg.max)) fail(400, 'Сумма сертификата — от ' + Pricing.format(cfg.min) + ' до ' + Pricing.format(cfg.max));
+    const t = (v, n) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, n);
+    const c = body.customer || {}, user = currentUser(req);
+    const customer = { firstName: t(c.firstName, 60), lastName: t(c.lastName, 60), phone: normPhone(c.phone), email: t(c.email, 120).toLowerCase() };
+    if (!customer.firstName || !customer.lastName) fail(400, 'Укажите ваше имя и фамилию');
+    if (customer.phone.length !== 11) fail(400, 'Проверьте номер телефона');
+    if (!validEmail(customer.email)) fail(400, 'Проверьте вашу электронную почту');
+    const to = { name: t(body.toName, 60), email: t(body.toEmail, 120).toLowerCase() };
+    if (!validEmail(to.email)) fail(400, 'Проверьте почту получателя');
+    if (!body.consent) fail(400, 'Нужно согласие на обработку персональных данных');
+    const today = new Date(Date.now() + 3 * 36e5).toISOString().slice(0, 10);
+    const sendAt = /^\d{4}-\d{2}-\d{2}$/.test(String(body.sendAt || '')) && body.sendAt > today ? body.sendAt : '';
+    if (sendAt && sendAt > new Date(Date.now() + 366 * 864e5).toISOString().slice(0, 10)) fail(400, 'Дату отправки можно выбрать в пределах года');
+    const g = { id: uid('g'), code: giftCode(), amount, balance: amount, status: 'pending', createdAt: new Date().toISOString(), to, fromName: t(body.fromName, 60), message: t(body.message, 300), sendAt, log: [] };
+    db.orderSeq = Number(db.orderSeq) || 0; do { db.orderSeq++; } while (db.orders.some((o) => o.number === String(db.orderSeq)));
+    const order = {
+      id: uid('o'), number: String(db.orderSeq), token: crypto.randomBytes(16).toString('hex'), createdAt: g.createdAt, userId: user ? user.id : null, customer, consentAt: g.createdAt, kind: 'gift', giftId: g.id,
+      items: [{ productId: '', name: 'Подарочный сертификат ' + db.settings.storeName + ' на ' + Pricing.format(amount), qty: 1, price: amount, gift: true, color: '', size: '' }],
+      subtotal: amount, saleDiscount: 0, promoCode: '', promoDiscount: 0, delivery: { id: 'email', name: 'Электронный сертификат — на почту ' + to.email, price: 0, city: '', address: '' }, comment: '',
+      total: amount, payment: { method: 'online', status: 'pending', provider: (db.settings.payment || {}).provider }, status: 'new', bonusUsed: 0, bonusEarn: 0
+    };
+    g.orderId = order.id;
+    db.giftcards.push(g); db.orders.push(order);
+    let payUrl = null;
+    try { payUrl = await createPayment(order); }
+    catch (e) { db.giftcards = db.giftcards.filter((x) => x.id !== g.id); db.orders = db.orders.filter((x) => x.id !== order.id); save(); throw e; }
+    save(); tgOrder(order);
+    return { order: orderView(order), token: order.token, payUrl };
+  }
+  // «Где мой заказ» без входа: номер заказа и телефон из него → секретная ссылка на страницу заказа
+  if (p[0] === 'track' && M === 'POST') {
+    throttle(req, 'track', 15);
+    const num = String(body.number || '').replace(/\D/g, '').slice(0, 12), ph = normPhone(body.phone);
+    if (!num) fail(400, 'Укажите номер заказа');
+    if (ph.length !== 11) fail(400, 'Укажите телефон полностью');
+    const o = db.orders.find((x) => x.number === num && x.customer && x.customer.phone === ph && !x.test);
+    if (!o) fail(404, 'Заказ не найден. Проверьте номер и телефон — тот, что указывали при оформлении');
+    return { id: o.id, token: o.token };
+  }
   if (p[0] === 'support') { const u = user(); if (!u) fail(401, 'Войдите в личный кабинет'); return supportApi(req, p, M, body, u); }
 
   if (p[0] === 'quote' && M === 'POST') return { quote: await quoteFull(req, body) };
@@ -1267,6 +1517,9 @@ async function api(req, res, url, body) {
       try { d.backup = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'backup-status.json'), 'utf8')); } catch (e) { d.backup = null; }
       // Автообновление из GitHub (файл пишет deploy/autoupdate.sh)
       try { d.update = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'update-status.json'), 'utf8')); } catch (e) { d.update = null; }
+      d.telegram = tgState();
+      d.giftcards = db.giftcards.map((g) => Object.assign({}, g, { state: giftState(g) }));
+      d.stats = db.stats || {};
       return { data: d };
     }
     if (p[1] === 'health' && M === 'GET') return { health: health() };
@@ -1316,6 +1569,47 @@ async function api(req, res, url, body) {
         if (checked && /^https:/.test(PUBLIC_URL)) { try { await cdek.webhook(PUBLIC_URL + '/api/cdek/webhook'); db.settings.cdek.webhook = true; save(); } catch (e) { console.error('СДЭК webhook:', e.message); } }
       }
       return { settings: db.settings, hasSecret: !!s, mask: s ? s.slice(0, 3) + '…' + s.slice(-3) : '', checked, error, env: !!process.env.CDEK_CLIENT_SECRET };
+    }
+    // Подарочные сертификаты: выпустить вручную (подарок блогеру, розыгрыш), отменить, отправить письмо ещё раз
+    if (p[1] === 'gifts' && !p[2] && M === 'POST') {
+      const amount = Math.round(Number(body.amount) || 0); if (!(amount >= 100 && amount <= 1000000)) fail(400, 'Укажите сумму');
+      const to = { name: String(body.toName || '').trim().slice(0, 60), email: String(body.toEmail || '').trim().toLowerCase().slice(0, 120) };
+      if (to.email && !validEmail(to.email)) fail(400, 'Проверьте почту получателя');
+      const now = new Date().toISOString();
+      const g = { id: uid('g'), code: giftCode(), amount, balance: amount, status: 'active', manual: true, createdAt: now, activatedAt: now, expiresAt: new Date(Date.now() + giftCfg().months * 30.5 * 864e5).toISOString(), to, fromName: String(body.fromName || db.settings.storeName).slice(0, 60), message: String(body.message || '').slice(0, 300), sendAt: '', log: [] };
+      db.giftcards.push(g); save();
+      let sent = false; if (to.email && body.send !== false) sent = await sendGift(g);
+      return { gift: g, sent };
+    }
+    if (p[1] === 'gifts' && p[2] && M === 'POST') {
+      const g = db.giftcards.find((x) => x.id === p[2]); if (!g) fail(404, 'Сертификат не найден');
+      if (p[3] === 'cancel') { g.status = 'canceled'; save(); return { gift: g }; }
+      if (p[3] === 'resend') { if (giftState(g) !== 'active') fail(400, 'Сертификат не активен'); if (!(await sendGift(g))) fail(400, mailReady() ? 'Письмо не отправилось — проверьте почту получателя' : 'Почта для отправки не настроена'); return { gift: g }; }
+      fail(404, 'Неизвестное действие');
+    }
+    // Telegram: подключить бота, найти чат владельца, проверить
+    if (p[1] === 'telegram' && !p[2] && M === 'POST') {
+      const token = String(body.token || '').trim();
+      if (!token) { delete db.secrets.telegram; db.settings.telegram = Object.assign({}, db.settings.telegram, { chatId: '', chatName: '' }); save(); return { telegram: tgState() }; }
+      if (!/^\d{5,15}:[A-Za-z0-9_-]{30,60}$/.test(token)) fail(400, 'Токен не похож на токен бота: он выглядит как 123456789:AAE…');
+      let me; try { me = await tgApi('getMe', {}, token); } catch (e) { fail(400, 'Telegram не принял токен: ' + e.message); }
+      db.secrets.telegram = { token, bot: me.username || '' }; save();
+      return { telegram: tgState() };
+    }
+    if (p[1] === 'telegram' && p[2] === 'find' && M === 'POST') {
+      let ups; try { ups = await tgApi('getUpdates', { limit: 50, allowed_updates: ['message'] }); } catch (e) { fail(400, e.message); }
+      const msg = (ups || []).map((u) => u.message).filter((m) => m && m.chat && m.chat.type === 'private').pop();
+      if (!msg) fail(404, 'Сообщений боту пока нет. Откройте бота в Telegram, нажмите «Запустить» или напишите ему что-нибудь — и повторите');
+      db.settings.telegram = Object.assign({ enabled: true }, db.settings.telegram, { chatId: String(msg.chat.id), chatName: [msg.chat.first_name, msg.chat.last_name].filter(Boolean).join(' ') || msg.chat.username || '' });
+      save();
+      await tgSend('', '✅ Готово! Сюда будут приходить уведомления магазина ' + tgEsc(db.settings.storeName) + ': заказы, оплаты, вопросы покупателей и заканчивающиеся размеры.');
+      return { telegram: tgState(), settings: db.settings };
+    }
+    if (p[1] === 'telegram' && p[2] === 'test' && M === 'POST') {
+      if (!tgCfg().chatId) fail(400, 'Сначала найдите чат');
+      const o = db.orders.filter((x) => !x.test).slice(-1)[0];
+      const r = await tgApi('sendMessage', { chat_id: tgCfg().chatId, parse_mode: 'HTML', text: o ? tgOrderText(o, '🧪 Проверка · так выглядит заказ') : '🧪 Проверка связи — уведомления работают' }).catch((e) => fail(400, e.message));
+      return { sent: !!r };
     }
     if (p[1] === 'payment-secret' && M === 'POST') {
       if (typeof body.secret === 'string') { if (body.secret && !/^(live|test)_[\w-]{10,}$/.test(body.secret)) fail(400, 'Ключ должен начинаться с live_ или test_'); db.secrets.yookassaSecret = body.secret; save(); }
@@ -1452,13 +1746,13 @@ async function api(req, res, url, body) {
       const statuses = ['new', 'processing', 'shipped', 'done', 'canceled', 'returned'], pays = ['pending', 'paid', 'canceled', 'refunded'];
       if (body.status && statuses.includes(body.status)) {
         const pc = o.promoCode && db.promocodes.find((x) => x.code === o.promoCode);
-        if (body.status === 'canceled' && o.status !== 'canceled') { restock(o); if (pc) pc.used = Math.max(0, (pc.used || 0) - 1); }
+        if (body.status === 'canceled' && o.status !== 'canceled') { restock(o); giftReturn(o); if (pc) pc.used = Math.max(0, (pc.used || 0) - 1); }
         if (body.status !== 'canceled' && o.status === 'canceled' && pc) pc.used = (pc.used || 0) + 1;
-        if (o.status === 'canceled' && body.status !== 'canceled') o.items.forEach((i) => { const s = sizeEntry(i.productId, i.colorId, i.size); if (s) s.stock = Math.max(0, s.stock - i.qty); });
+        if (o.status === 'canceled' && body.status !== 'canceled') { unrestock(o); giftReapply(o); }
         if (body.status === 'done' && o.status !== 'done') o.doneAt = new Date().toISOString();
         o.status = body.status;
       }
-      if (body.paymentStatus && pays.includes(body.paymentStatus)) o.payment.status = body.paymentStatus;
+      if (body.paymentStatus && pays.includes(body.paymentStatus)) { o.payment.status = body.paymentStatus; giftActivate(o); }
       // Трек-номер СДЭК: сохраняем, ставим «Передан в доставку» и пишем покупателю
       let tracked = false;
       if (typeof body.track === 'string') {
@@ -1545,7 +1839,7 @@ async function api(req, res, url, body) {
       if (!p[2] && M === 'PUT') { if (!Array.isArray(body.value)) fail(400, 'Нужен список'); if (p[1] === 'products') body.value.forEach(Pricing.migrateProduct); db[p[1]] = body.value; save(); return p[1] === 'products' ? { notify: await processWaitlist() } : {}; }
       if (p[2] && M === 'PUT') {
         const item = body.value; if (!item || item.id !== p[2]) fail(400, 'Неверные данные');
-        if (p[1] === 'products') { Pricing.migrateProduct(item); if (item.specs) { item.specs = Specs.clean(item.specs); if (!Object.keys(item.specs).length) delete item.specs; } }
+        if (p[1] === 'products') { const was = arr.find((x) => x.id === item.id); item.preorderSold = was ? (was.preorderSold || 0) : 0; if (Array.isArray(item.look)) item.look = item.look.filter((id) => id !== item.id && db.products.some((x) => x.id === id)).slice(0, 4); Pricing.migrateProduct(item); if (item.specs) { item.specs = Specs.clean(item.specs); if (!Object.keys(item.specs).length) delete item.specs; } }
         const i = arr.findIndex((x) => x.id === item.id);
         if (i === -1) arr.push(item); else arr[i] = item;
         save(); return p[1] === 'products' ? { notify: await processWaitlist() } : {};
@@ -1609,8 +1903,9 @@ function serveStatic(req, res, pathname) {
 }
 // Откуда странице можно загружать скрипты, стили, шрифты и картинки. Скрипты — только свои
 const CSP = [
-  "default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline'",
-  "font-src 'self' data:", "img-src 'self' data: blob: https:", "connect-src 'self'",
+  "default-src 'self'", "script-src 'self' https://mc.yandex.ru https://yastatic.net", "style-src 'self' 'unsafe-inline'",
+  "font-src 'self' data:", "img-src 'self' data: blob: https:", "connect-src 'self' https://mc.yandex.ru https://mc.yandex.com wss://mc.yandex.ru",
+  "frame-src 'self' https://mc.yandex.ru https://mc.yandex.com", // Яндекс Метрика: счётчик, карта кликов
   "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'self'"
 ].join('; ');
 const server = http.createServer(async (req, res) => {
@@ -1623,6 +1918,13 @@ const server = http.createServer(async (req, res) => {
   if (COOKIE_SECURE) res.setHeader('Strict-Transport-Security', 'max-age=31536000');
   let url;
   try { url = new URL(req.url, 'http://x'); } catch (e) { res.writeHead(400); return res.end(); }
+  if (url.pathname === '/api/cart-remind/off' && req.method === 'GET') {
+    const u = db.users.find((x) => x.id === url.searchParams.get('u'));
+    const ok = !!(u && safeEqual(url.searchParams.get('t') || '', cartOffSig(u.id)));
+    if (ok) { u.cartRemind = false; u.cartRemindAt = new Date().toISOString(); save(); }
+    res.writeHead(ok ? 200 : 404, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+    return res.end(ok ? htmlPage('Напоминания отключены', 'Больше не будем писать о товарах в корзине. Включить снова можно в личном кабинете, в разделе «Профиль».') : htmlPage('Ссылка устарела', 'Отключить напоминания можно в личном кабинете, в разделе «Профиль».'));
+  }
   if (url.pathname === '/api/notify/cancel' && req.method === 'GET') {
     const w = db.waitlist.find((x) => x.id === url.searchParams.get('id'));
     const t = url.searchParams.get('t') || '';
@@ -1654,7 +1956,7 @@ const server = http.createServer(async (req, res) => {
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); return res.end(); }
   if (url.pathname === '/robots.txt') {
     res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=3600' });
-    return res.end('User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /cart\nDisallow: /checkout\nDisallow: /account\nDisallow: /favorites\nDisallow: /order/\nDisallow: /*?*q=\nDisallow: /*?*sort=\n' +
+    return res.end('User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /cart\nDisallow: /checkout\nDisallow: /account\nDisallow: /favorites\nDisallow: /track\nDisallow: /gift\nDisallow: /order/\nDisallow: /*?*q=\nDisallow: /*?*sort=\n' +
       'Clean-param: utm_source&utm_medium&utm_campaign&utm_content&utm_term&yclid&source\n\nSitemap: ' + PUBLIC_URL + '/sitemap.xml\n');
   }
   if (url.pathname === '/sitemap.xml' || url.pathname === '/yml.xml') {

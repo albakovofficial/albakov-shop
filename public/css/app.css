@@ -2545,3 +2545,186 @@ input:focus-visible + .pm-track { outline: 2px solid var(--accent); outline-offs
   .sl-dot b { font-size: 10px; }
   .sl-dot { gap: 5px; }
 }
+
+/* =====================================================================
+   ЕДИНЫЙ ДИЗАЙН САЙТА (13.40): скругления, стеклянные плашки, тёплый акцент,
+   тонкие заголовки, кнопки-капсулы. Одни правила для всех страниц магазина.
+   ===================================================================== */
+:root { --ink: #0d0e10; --acc: #ff5a3c; --acc2: #ff9a5c; --acc-grad: linear-gradient(135deg, #ff9a5c, #ff5a3c); --r-xl: clamp(22px, 2.4vw, 34px); --r-lg: 24px; --r-md: 18px; --r-sm: 14px;
+  --ring: inset 0 0 0 1px rgba(18, 20, 23, .07); --lift: 0 24px 48px -30px rgba(18, 20, 23, .4); }
+
+/* --- Полоса объявления и шапка --- */
+.topbar { background: var(--ink); color: rgba(255, 255, 255, .78); border-bottom: 0; }
+.topbar .wrap { display: flex; justify-content: center; align-items: center; gap: 10px; }
+.topbar .wrap::before { content: ""; flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--acc-grad); box-shadow: 0 0 0 3px rgba(255, 90, 60, .22); }
+.nav a { padding: 8px 14px; margin-inline: -8px; border-radius: 999px; transition: color .2s, background .25s; }
+.nav a::after { display: none; }
+.nav a:hover { background: var(--surface); }
+.nav a.active { color: var(--text); background: var(--surface); box-shadow: var(--ring); }
+.icon-btn:hover { background: var(--surface); box-shadow: var(--ring); }
+.badge-count { background: var(--acc-grad); color: #fff; box-shadow: 0 4px 10px -4px rgba(255, 90, 60, .7); }
+
+/* --- Заголовки: тонкие, плотные, с тёплой точкой в конце --- */
+.section-head h2, .page-head h1, .pinfo h1, .empty h3, .prose h2, .drawer-head h3, .cstep-head h3, .benefit h3, .atelier-copy h2 { font-weight: 200; letter-spacing: -.035em; }
+.pinfo h1 { letter-spacing: -.03em; }
+.section-head h2::after, .page-head h1::after { content: ""; display: inline-block; width: .13em; height: .13em; margin-left: .08em; border-radius: 50%; background: var(--acc-grad); vertical-align: .02em; }
+.section-head h2:has(.h-sub)::after { display: none; }
+.benefits-title h2::after { display: inline-block; }
+.prose h2, .prose h3 { letter-spacing: -.025em; }
+.crumbs { gap: 6px; }
+.crumbs a, .crumbs span { padding: 4px 10px; border-radius: 999px; }
+.crumbs a { background: var(--surface); transition: background .2s, color .2s; }
+.crumbs a:hover { background: var(--ink); color: #fff; }
+
+/* --- Надзаголовок — плашка с точкой (как в бонусах и акции) --- */
+.eyebrow { display: inline-flex; align-items: center; gap: 10px; justify-self: start; align-self: flex-start; width: max-content; max-width: 100%; padding: 7px 14px 7px 12px; border-radius: 999px; font-family: var(--sans); font-size: 12px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; line-height: 1.3; color: var(--text); background: rgba(255, 255, 255, .78); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); box-shadow: var(--ring), 0 6px 16px -10px rgba(18, 20, 23, .25); }
+.eyebrow:not(.slide-eb):not(.loyal-eb)::before { content: ""; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--acc-grad); }
+.deal .eyebrow { background: rgba(255, 255, 255, .06); color: rgba(255, 255, 255, .8); }
+
+/* --- Разделы: без серых линий между ними --- */
+.section + .section { border-top: 0; }
+
+/* --- Кнопки --- */
+.btn { background: var(--ink); border-color: var(--ink); color: #fff; box-shadow: 0 14px 28px -18px rgba(13, 14, 16, .65); transition: background .25s, color .25s, border-color .25s, box-shadow .3s, transform .3s var(--ease), opacity .2s; }
+.btn:hover { background: #24272d; border-color: #24272d; color: #fff; transform: translateY(-1px); box-shadow: 0 18px 34px -18px rgba(13, 14, 16, .7); }
+.btn.ghost { background: rgba(255, 255, 255, .7); color: var(--text); border-color: transparent; box-shadow: var(--ring); }
+.btn.ghost:hover { background: var(--ink); color: #fff; border-color: var(--ink); }
+.btn.done { background: var(--acc-grad); border-color: transparent; color: #fff; }
+.link { border-bottom-color: rgba(18, 20, 23, .2); }
+.link:hover { border-color: var(--acc); color: var(--text); }
+
+/* --- Поля ввода --- */
+.input, .select, .textarea { border-radius: var(--r-sm); border-color: transparent; background-color: var(--surface); box-shadow: var(--ring); transition: box-shadow .2s, background-color .2s; }
+.input:hover, .select:hover, .textarea:hover { box-shadow: inset 0 0 0 1px rgba(18, 20, 23, .16); }
+.input:focus, .select:focus, .textarea:focus { border-color: transparent; background-color: #fff; box-shadow: inset 0 0 0 1px var(--ink), 0 0 0 4px rgba(255, 90, 60, .12); }
+.input.invalid { box-shadow: inset 0 0 0 1px var(--danger), 0 0 0 4px rgba(158, 59, 48, .1); }
+.select { background-position: calc(100% - 22px) 50%, calc(100% - 16px) 50%; }
+
+/* --- Чипы, размеры, количество --- */
+.chip, .sz { border-radius: 999px; border-color: transparent; background: var(--surface); box-shadow: var(--ring); }
+.chip:hover, .sz:not(.on):hover { border-color: transparent; box-shadow: inset 0 0 0 1px rgba(18, 20, 23, .25); }
+.chip.on, .sz.on { background: var(--ink); color: #fff; border-color: var(--ink); box-shadow: 0 8px 18px -10px rgba(13, 14, 16, .7); }
+.sz::after { display: none; }
+.qty { border-color: transparent; background: var(--surface); box-shadow: var(--ring); }
+
+/* --- Каталог: фильтры --- */
+.filters h4 { font-family: var(--sans); font-size: 12px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
+.fl-item { border-radius: 12px; }
+.fl-item::before { display: none; }
+.fl-item.on { background: var(--ink); color: #fff; }
+.fl-item.on em { color: rgba(255, 255, 255, .6); }
+
+/* --- Категории --- */
+.cat-ph { border-radius: var(--r-lg); background: linear-gradient(180deg, #f6f7f8, #eceef1); box-shadow: var(--ring); transition: transform .6s var(--ease), box-shadow .6s var(--ease); }
+@media (hover: hover) { .cat:hover .cat-ph, a:hover > .cat-ph { transform: translateY(-4px); box-shadow: var(--ring), var(--lift); } }
+.cat-cap { padding: 14px 4px 0; }
+.cat-name { font-size: 15px; }
+.cat-go { box-sizing: content-box; width: 14px; height: 14px; padding: 9px; border-radius: 50%; color: var(--text); background: var(--surface); box-shadow: var(--ring); transition: background .3s, color .3s, transform .5s var(--ease); }
+a:hover .cat-go { background: var(--ink); color: #fff; transform: rotate(-45deg); }
+
+/* --- «Покупать у нас спокойно» --- */
+.benefit { border-radius: var(--r-lg); border: 0; box-shadow: var(--ring); background: linear-gradient(180deg, #f7f7f6, #eff0f2); }
+.benefit:hover { background: #fff; box-shadow: var(--ring), var(--lift); }
+.benefit-more { border: 0; padding: 6px 12px; border-radius: 999px; background: rgba(255, 255, 255, .8); box-shadow: var(--ring); }
+.benefit-more:hover { background: var(--ink); color: #fff; }
+
+/* --- Ателье: фото со скруглением справа, ссылка-капсула --- */
+.atelier-media { border-radius: 0 var(--r-xl) var(--r-xl) 0; }
+.atelier-copy .link { display: inline-flex; align-items: center; gap: 10px; padding: 10px 20px; border: 0; border-radius: 999px; background: var(--surface); box-shadow: var(--ring); transition: background .3s, color .3s; }
+.atelier-copy .link::after { content: "→"; font-size: 15px; transition: transform .4s var(--ease); }
+.atelier-copy .link:hover { background: var(--ink); color: #fff; }
+.atelier-copy .link:hover::after { transform: translateX(3px); }
+@media (max-width: 760px) { .atelier-media { border-radius: 0; } }
+
+/* --- Карточка товара (страница) --- */
+.main-img { border-radius: var(--r-xl); background: linear-gradient(180deg, #f6f7f8, #eceef1); box-shadow: var(--ring); }
+.thumbs button { border-radius: 12px; border: 0; }
+.thumbs button.on { box-shadow: inset 0 0 0 1.5px var(--ink); }
+.pinfo .badge { gap: 7px; padding: 4px 11px 4px 9px; color: var(--text); background: rgba(255, 255, 255, .85); box-shadow: var(--ring); }
+.pinfo .badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--b, var(--text)); }
+.pinfo .badge-sale { color: #fff; background: var(--acc-grad); box-shadow: 0 8px 18px -8px rgba(255, 90, 60, .7); }
+.pinfo .badge-sale::before { background: #fff; }
+.pinfo .price .now.sale { color: #e5482c; }
+.p-bonus, .fit-guar, .promo-plaque, .bonus-notice { border-radius: var(--r-md); border-color: transparent; box-shadow: var(--ring); }
+.table-wrap { border-radius: var(--r-md); }
+
+/* --- Корзина, оформление, заказы --- */
+.drawer-head, .drawer-foot { border-color: transparent; }
+.drawer-foot { background: var(--surface); border-radius: var(--r-lg) var(--r-lg) 0 0; }
+.cart-line { border-bottom-color: var(--line); }
+.cart-line .ph { border-radius: 12px; }
+.checkout .summary { border: 0; border-radius: var(--r-xl); background: linear-gradient(180deg, #f7f7f6, #eff0f2); box-shadow: var(--ring); }
+.cstep { border: 0; border-radius: var(--r-lg); box-shadow: var(--ring), 0 18px 40px -34px rgba(18, 20, 23, .35); }
+.cstep::before { display: none; }
+.cstep:focus-within { box-shadow: inset 0 0 0 1px rgba(18, 20, 23, .18), 0 24px 48px -32px rgba(18, 20, 23, .4); }
+.cstep:focus-within .cstep-n { background: var(--ink); color: #fff; border-color: var(--ink); }
+.co-login, .co-addr { border-radius: var(--r-md); }
+.co-login-ic { background: var(--acc-grad); }
+.option { border: 0; border-radius: var(--r-md); box-shadow: var(--ring); }
+.option:hover { box-shadow: inset 0 0 0 1px rgba(18, 20, 23, .18); }
+.option.on { box-shadow: inset 0 0 0 1.5px var(--ink), 0 14px 30px -24px rgba(18, 20, 23, .45); }
+.opt-price { border-radius: 999px; }
+.pay-marks i { border-radius: 6px; }
+.order-card { border: 0; border-radius: var(--r-lg); box-shadow: var(--ring); }
+.sum-row.disc span:last-child { color: #e5482c; }
+
+/* --- Вход, кабинет --- */
+.tabs { gap: 4px; padding: 4px; width: max-content; max-width: 100%; border: 0; border-radius: 999px; background: var(--surface); box-shadow: var(--ring); overflow-x: auto; }
+.tabs button, .tabs a { padding: 9px 18px; margin: 0; border: 0; border-radius: 999px; transition: background .25s, color .25s; }
+.tabs button.on, .tabs a.on { background: var(--ink); color: #fff; border: 0; }
+.auth-aside, .ab-side { border-radius: var(--r-xl); background: radial-gradient(70% 60% at 50% 0%, rgba(255, 154, 92, .14), transparent 70%), linear-gradient(180deg, #f7f7f6, #eff0f2); box-shadow: var(--ring); }
+.account nav button { padding: 9px 14px; border-radius: 12px; transition: background .2s, color .2s; }
+.account nav button:hover { background: var(--surface); }
+.account nav button.on { background: var(--ink); color: #fff; }
+.account nav button.on::before { content: none; }
+.acc-profile fieldset, .acc-empty, .sup-thread, .ab-fact, .ab-pillar, .ab-service-row, .ip-step, .req-card, .spec-group, .pm-card, .trk-now, .rf-sum, .pvz, .cs-now { border-radius: var(--r-lg); }
+.modal-box { border: 0; border-radius: var(--r-xl); box-shadow: 0 40px 90px -30px rgba(18, 20, 23, .35); }
+.cookie-note { border-radius: var(--r-md); }
+.empty .btn { margin-top: 6px; }
+
+/* --- Подвал --- */
+.footer { margin: clamp(24px, 4vw, 56px) clamp(8px, 1.4vw, 20px) 0; border: 0; border-radius: var(--r-xl) var(--r-xl) 0 0; background: radial-gradient(50% 70% at 0% 0%, rgba(255, 154, 92, .22), transparent 70%), radial-gradient(40% 60% at 100% 100%, rgba(150, 170, 255, .14), transparent 70%), var(--ink); color: rgba(255, 255, 255, .72); }
+.footer h4 { font-family: var(--sans); font-size: 12px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; color: rgba(255, 255, 255, .45); }
+.footer ul a, .footer a { color: rgba(255, 255, 255, .78); }
+.footer ul a:hover, .footer a:hover { color: #fff; }
+.footer .logo img, .footer .logo svg { filter: brightness(0) invert(1); }
+.footer-mark { filter: brightness(0) invert(1); opacity: .04; }
+.footer-bottom { border-top-color: rgba(255, 255, 255, .08); color: rgba(255, 255, 255, .45); }
+.footer-bottom a { color: rgba(255, 255, 255, .55); }
+.footer p, .footer span, .footer li { color: inherit; }
+
+@media (max-width: 600px) {
+  .eyebrow { font-size: 10.5px; padding: 6px 11px 6px 10px; gap: 8px; }
+  .nav a { margin-inline: 0; }
+  .tabs button, .tabs a { padding: 8px 14px; }
+  .footer { margin-inline: 6px; }
+}
+.footer .muted, .footer .foot-btn, .footer .foot-legal { color: rgba(255, 255, 255, .62); }
+.footer .foot-btn:hover { color: #fff; }
+.footer .foot-legal { border-top-color: rgba(255, 255, 255, .1); }
+.footer .foot-legal-t { color: rgba(255, 255, 255, .4); }
+.footer .socials a { color: rgba(255, 255, 255, .82); }
+
+/* --- Информационные страницы и «О бренде» в общем стиле --- */
+.ip-sec, .ab-story { border-top: 0; }
+.ip-card, .ip-step, .ab-fact, .ab-pillar, .ab-serv, .ac, .ab-founder { border-radius: var(--r-lg); }
+.ip-card { box-shadow: var(--ring); background: linear-gradient(180deg, #f7f7f6, #eff0f2); }
+.ip-card:hover { border-color: transparent; background: #fff; box-shadow: var(--ring), var(--lift); }
+.ip-step { border: 0; box-shadow: var(--ring); }
+.ac, .ab-founder { border-radius: var(--r-xl); }
+.ac { border: 0; box-shadow: var(--ring); }
+.ab-service-row { border: 0; gap: 10px; }
+.ab-serv { box-shadow: var(--ring); background: linear-gradient(180deg, #f7f7f6, #eff0f2); }
+.ab-serv + .ab-serv { border-left: 0; }
+.ab-pillar { border-color: transparent; box-shadow: var(--ring); }
+.ab-plate { box-shadow: var(--ring), 0 40px 80px -50px rgba(18, 20, 23, .35); }
+.ip-title, .ab-hero h1, .ab-story h2, .ip-sec-head h2, .ab-pillar h2, .ac-intro h2, .ab-founder-q, .ip-card h3 { font-weight: 200 !important; letter-spacing: -.035em; }
+.ip-card h3 { letter-spacing: -.015em; }
+.ip-p { border-image: linear-gradient(180deg, #ff9a5c, #ff5a3c) 1; }
+.ab-num::after { background: var(--acc-grad); }
+@media (max-width: 600px) {
+  .topbar .wrap::before { display: none; }
+  .crumbs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; font-size: 12px; gap: 4px; margin-inline: calc(-1 * var(--gutter)); padding-inline: var(--gutter); }
+  .crumbs::-webkit-scrollbar { display: none; }
+  .crumbs a, .crumbs span { flex: none; white-space: nowrap; padding: 4px 9px; }
+}

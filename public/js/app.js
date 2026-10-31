@@ -260,7 +260,7 @@
       (img1 ? '<img class="alt" src="' + esc(img1) + '" alt="" loading="lazy">' : '') + '</div>' +
       '<div class="meta"><span class="name">' + esc(p.name) + '</span><span class="sub">' + sub + '</span>' +
       (cs.length > 1 ? '<span class="card-swatches" title="' + esc(cs.map(function (c) { return c.name; }).join(', ')) + '">' + cs.slice(0, 5).map(function (c) { return '<i style="' + swatchStyle(c) + '"></i>'; }).join('') + (cs.length > 5 ? '<em>+' + (cs.length - 5) + '</em>' : '') + '<span class="sr">' + cs.length + ' ' + plural(cs.length, 'цвет', 'цвета', 'цветов') + '</span></span>' : '') +
-      priceHtml(pr) + bonusLine(pr.price) + '</div></a>';
+      '<span class="card-buy">' + priceHtml(pr) + '</span>' + bonusLine(pr.price) + '</div></a>';
   }
   function priceHtml(pr) { return '<span class="price">' + (pr.oldPrice ? '<span class="now sale">' + fmt(pr.price) + '</span><s>' + fmt(pr.oldPrice) + '</s>' : '<span class="now">' + fmt(pr.price) + '</span>') + '</span>'; }
 
@@ -481,7 +481,7 @@
       '</div><div class="hero-media"><img src="' + esc(heroImg) + '" alt=""></div></section>';
     html += installBannerHtml();
     if (h.showCategories !== false && D.categories.length) {
-      html += '<section class="section"><div class="wrap"><div class="section-head"><h2>Категории</h2><a class="link" href="#/catalog">Весь каталог</a></div><div class="cats">' +
+      html += '<section class="section"><div class="wrap"><div class="section-head"><h2>Категории</h2><a class="link sh-more" href="#/catalog"><span>Весь каталог</span><i aria-hidden="true">' + ARROW + '</i></a></div><div class="cats">' +
         sortedCats().filter(function (c) { return gProducts().some(function (p) { return p.categoryId === c.id; }); }).map(function (c) { return '<a class="cat" href="#/catalog?cat=' + esc(c.slug) + '"><span class="cat-ph"><img src="' + esc(c.image || Art.make(c.art)) + '" alt="" loading="lazy"></span><span class="cat-cap"><span class="cat-name">' + esc(c.name) + '</span><svg class="cat-go" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15M14 7l5 5-5 5"/></svg></span></a>'; }).join('') + '</div></div></section>';
     }
     if (h.showNew !== false) {
@@ -489,12 +489,12 @@
       // если новинок мало — дополняем последними поступлениями раздела, чтобы ряд не выглядел пустым
       if (news.length < 4) news = news.concat(gProducts().filter(function (p) { return news.indexOf(p) === -1; }).sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); })).slice(0, 4);
       news = news.slice(0, 8);
-      if (news.length) html += '<section class="section"><div class="wrap"><div class="section-head"><h2>Новинки' + (curGender() ? ' <em class="h-sub">' + GENDERS[curGender()].toLowerCase() + '</em>' : '') + '</h2><a class="link" href="#/catalog?tag=new">Смотреть все</a></div><div class="grid">' + news.map(card).join('') + '</div></div></section>';
+      if (news.length) html += '<section class="section"><div class="wrap"><div class="section-head"><h2>Новинки' + (curGender() ? ' <em class="h-sub">' + GENDERS[curGender()].toLowerCase() + '</em>' : '') + '</h2><a class="link sh-more" href="#/catalog?tag=new"><span>Смотреть все</span><i aria-hidden="true">' + ARROW + '</i></a></div><div class="grid">' + news.map(card).join('') + '</div></div></section>';
     }
     if (h.showHits !== false) {
       var hits = hitList(gProducts()).slice(0, 8);
       // на телефоне — лента, которую листают пальцем; на компьютере — сетка
-      if (hits.length) html += '<section class="section hits-sec"><div class="wrap"><div class="section-head"><h2>Хиты продаж' + (curGender() ? ' <em class="h-sub">' + GENDERS[curGender()].toLowerCase() + '</em>' : '') + '</h2><a class="link" href="#/catalog?tag=hit">Смотреть все</a></div><div class="grid hits">' + hits.map(card).join('') + '</div></div></section>';
+      if (hits.length) html += '<section class="section hits-sec"><div class="wrap"><div class="section-head"><h2>Хиты продаж' + (curGender() ? ' <em class="h-sub">' + GENDERS[curGender()].toLowerCase() + '</em>' : '') + '</h2><a class="link sh-more" href="#/catalog?tag=hit"><span>Смотреть все</span><i aria-hidden="true">' + ARROW + '</i></a></div><div class="grid hits">' + hits.map(card).join('') + '</div></div></section>';
     }
     if (h.showBonus !== false) html += bonusBand(h);
     if (h.showSale !== false) {

@@ -2454,3 +2454,51 @@ input:focus-visible + .pm-track { outline: 2px solid var(--accent); outline-offs
   .loyal-sec .loyal-act .btn { justify-content: space-between; }
   .loyal-sec .loyal-copy h2 { font-size: clamp(40px, 12vw, 54px); }
 }
+
+/* ---------- Заголовки разделов и карточка товара — премиальный вид (13.39) ---------- */
+.section-head h2 { font-weight: 200; letter-spacing: -.035em; }
+.section-head .h-sub { position: relative; display: inline-flex; align-items: center; gap: .35em; margin-left: .35em; padding: .28em .7em .32em; border-radius: 999px; font-size: .3em; font-weight: 400; letter-spacing: .02em; vertical-align: .55em; color: var(--text); background: var(--surface); box-shadow: inset 0 0 0 1px rgba(18, 20, 23, .06); }
+.section-head .h-sub::before { content: ""; width: .45em; height: .45em; border-radius: 50%; background: linear-gradient(135deg, #ff9a5c, #ff5a3c); }
+.link.sh-more { display: inline-flex; align-items: center; gap: 12px; padding: 6px 6px 6px 20px; border-radius: 999px; border: 0; font-size: 14px; color: var(--text); background: var(--surface); box-shadow: inset 0 0 0 1px rgba(18, 20, 23, .06); text-decoration: none; transition: background .3s, color .3s; }
+.link.sh-more::after { display: none; }
+.link.sh-more i { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: var(--text); color: #fff; transition: transform .5s var(--ease), background .3s; }
+.link.sh-more:hover { background: var(--text); color: #fff; }
+.link.sh-more:hover i { background: #ff5a3c; transform: translateX(3px); }
+
+.card { gap: 14px; }
+.card .ph { border-radius: clamp(16px, 1.6vw, 24px); background: linear-gradient(180deg, #f6f7f8, #eceef1); box-shadow: inset 0 0 0 1px rgba(18, 20, 23, .04); transform: translateZ(0); transition: box-shadow .6s var(--ease), transform .6s var(--ease); }
+@media (hover: hover) { .card:hover .ph { transform: translateY(-4px); box-shadow: inset 0 0 0 1px rgba(18, 20, 23, .05), 0 30px 50px -30px rgba(18, 20, 23, .45); } }
+.card .ph::after { border-radius: inherit; }
+.tags { top: 12px; left: 12px; gap: 5px; }
+.card .badge { gap: 7px; min-height: 26px; padding: 4px 11px 4px 9px; font-size: 11px; font-weight: 600; letter-spacing: .04em; color: var(--text); background: rgba(255, 255, 255, .82); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); box-shadow: inset 0 0 0 1px rgba(18, 20, 23, .06), 0 6px 16px -10px rgba(20, 20, 22, .4); }
+.card .badge::before { content: ""; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--b, var(--text)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--b, #000) 18%, transparent); }
+.card .badge-out::before { background: var(--dim); box-shadow: none; }
+.card .meta { gap: 6px; padding: 0 4px; }
+.card .name { font-size: 15px; font-weight: 500; letter-spacing: 0; }
+.card .sub { font-size: 12.5px; }
+.card-buy { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin-top: 2px; }
+.card .price { gap: 8px; font-size: 16px; letter-spacing: 0; }
+.card .price .now { font-weight: 600; }
+.card .price .now.sale { color: #e5482c; }
+.card .price s { font-size: 13px; color: var(--dim); }
+.card-off { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; color: #fff; background: linear-gradient(135deg, #ff9a5c, #ff5a3c); box-shadow: 0 6px 14px -8px rgba(255, 90, 60, .8); font-variant-numeric: tabular-nums; }
+.card .card-bonus { justify-self: start; gap: 6px; padding: 3px 10px 3px 4px; border-radius: 999px; font-size: 12px; background: var(--surface); }
+.card .card-bonus .b-ic { width: 16px; height: 16px; font-size: 9px; }
+.card-swatches i { width: 12px; height: 12px; box-shadow: inset 0 0 0 1px rgba(20, 20, 22, .16), 0 0 0 2px var(--bg); }
+.qa { left: 10px; right: 10px; bottom: 10px; padding: 12px; border-radius: 18px; background: rgba(255, 255, 255, .78); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: 0 12px 30px -16px rgba(18, 20, 23, .5); }
+.qa-label { font-family: var(--sans); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); text-shadow: none; }
+.qa-size { height: 32px; min-width: 36px; border-color: rgba(18, 20, 23, .1); background: #fff; backdrop-filter: none; }
+@media (hover: hover) { .card:hover .ph::after { opacity: .35; } }
+@media (max-width: 600px) {
+  .card { gap: 10px; }
+  .card .badge { min-height: 22px; padding: 3px 9px 3px 7px; font-size: 10px; gap: 5px; }
+  .card .badge::before { width: 6px; height: 6px; }
+  .card .name { font-size: 13.5px; }
+  .card .price { font-size: 14px; }
+  .card-off { height: 20px; padding: 0 6px; font-size: 10.5px; }
+  .section-head .h-sub { font-size: .42em; vertical-align: .3em; }
+  .link.sh-more { padding: 4px 4px 4px 14px; font-size: 13px; }
+  .link.sh-more i { width: 28px; height: 28px; }
+}
+.card .badge-sale { color: #fff; background: linear-gradient(135deg, #ff9a5c, #ff5a3c); box-shadow: 0 8px 18px -8px rgba(255, 90, 60, .7); }
+.card .badge-sale::before { background: #fff; box-shadow: 0 0 0 3px rgba(255, 255, 255, .3); }

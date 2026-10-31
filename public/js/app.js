@@ -597,29 +597,36 @@
 
   /* Акция на главной: тёмная полоса, крупная скидка, обратный отсчёт и товары, на которые она действует */
   function dealBand(ap) {
-    var off = ap.type === 'percent' ? '−' + ap.value + '<span>%</span>' : '−' + fmt(ap.value);
+    var pct = ap.type === 'percent';
+    var off = pct ? '<span class="do-sign">−</span>' + ap.value + '<span class="do-pct">%</span>' : '−' + fmt(ap.value);
     var items = gProducts().filter(function (p) { return p.active !== false && totalStock(p) > 0; }).map(function (p) { return { p: p, pr: priceOf(p) }; })
       .filter(function (x) { return x.pr.oldPrice && x.pr.promotion && x.pr.promotion.id === ap.id; }).slice(0, 3);
     if (!items.length) items = gProducts().filter(function (p) { return p.active !== false; }).map(function (p) { return { p: p, pr: priceOf(p) }; }).filter(function (x) { return x.pr.oldPrice; }).slice(0, 3);
     var ends = ap.endsAt ? new Date(ap.endsAt + 'T23:59:59').getTime() : 0;
     var timer = ends ? '<div class="deal-timer" data-ends="' + ends + '" role="timer" aria-label="До конца акции">' +
-      [['d', 'дней'], ['h', 'часов'], ['m', 'минут'], ['s', 'секунд']].map(function (u) { return '<span class="st-cell"><b data-u="' + u[0] + '">00</b><i data-l="' + u[0] + '">' + u[1] + '</i></span>'; }).join('') + '</div>' : '';
+      [['d', 'дней'], ['h', 'часов'], ['m', 'минут'], ['s', 'секунд']].map(function (u) { return '<span class="st-cell" data-c="' + u[0] + '"><b data-u="' + u[0] + '">00</b><i data-l="' + u[0] + '">' + u[1] + '</i></span>'; }).join('<span class="st-sep" aria-hidden="true">:</span>') + '</div>' : '';
     var tiles = items.map(function (x) {
       var c0 = shownColor(x.p), img = (c0.images && c0.images[0]) || Art.make(c0.art);
-      return '<a class="deal-item" href="#/product/' + esc(x.p.slug) + '"><span class="si-ph"><img src="' + esc(img) + '" alt="" loading="lazy"></span>' +
-        '<span class="si-name">' + esc(x.p.name) + '</span><span class="si-price"><b>' + fmt(x.pr.price) + '</b><s>' + fmt(x.pr.oldPrice) + '</s></span></a>';
+      var save = Math.round((1 - x.pr.price / x.pr.oldPrice) * 100);
+      return '<a class="deal-item" href="#/product/' + esc(x.p.slug) + '"><span class="si-ph"><img src="' + esc(img) + '" alt="" loading="lazy">' +
+        (save > 0 ? '<span class="si-badge">−' + save + '%</span>' : '') + '</span>' +
+        '<span class="si-meta"><span class="si-name">' + esc(x.p.name) + '</span><span class="si-price"><b>' + fmt(x.pr.price) + '</b><s>' + fmt(x.pr.oldPrice) + '</s></span></span>' +
+        '<span class="si-go" aria-hidden="true">' + ARROW + '</span></a>';
     }).join('');
-    return '<section class="section deal-sec"><div class="wrap"><div class="deal' + (tiles ? '' : ' no-items') + '">' +
+    return '<section class="section deal-sec"><div class="wrap"><div class="deal' + (tiles ? ' n' + items.length : ' no-items') + '">' +
+      '<span class="deal-glow" aria-hidden="true"></span><span class="deal-grain" aria-hidden="true"></span>' +
       '<div class="deal-copy">' +
-        '<span class="deal-when">Акция' + (ap.endsAt ? ' до ' + esc(fmtDate(ap.endsAt).replace(/ \d{4} г\.$/, '')) : '') + '</span>' +
-        '<div class="deal-off' + (ap.type === 'percent' ? '' : ' is-money') + '" aria-hidden="true">' + off + '</div>' +
+        '<span class="deal-when"><i></i>Акция' + (ap.endsAt ? ' до ' + esc(fmtDate(ap.endsAt).replace(/ \d{4} г\.$/, '')) : '') + '</span>' +
+        '<div class="deal-off' + (pct ? '' : ' is-money') + '" aria-hidden="true">' + off + '</div>' +
         '<h2>' + esc(ap.title) + '</h2>' +
         (ap.description ? '<p>' + esc(ap.description) + '</p>' : '') +
-        '<div class="deal-foot">' + timer + '<a class="btn deal-btn" href="#/sale">Смотреть товары со скидкой</a></div>' +
+        timer +
+        '<a class="btn deal-btn" href="#/sale"><span>Смотреть товары со скидкой</span><span class="db-ic" aria-hidden="true">' + ARROW + '</span></a>' +
       '</div>' +
       (tiles ? '<div class="deal-items">' + tiles + '</div>' : '') +
     '</div></div></section>';
   }
+  var ARROW = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
 
   /* «Ателье»: фото во всю левую половину экрана, заголовок заходит на фото и меняет цвет на его фоне */
   function atelierBlock(h) {
@@ -660,6 +667,8 @@
           $('[data-u="' + k + '"]', t).textContent = (vals[k] < 10 ? '0' : '') + vals[k];
           $('[data-l="' + k + '"]', t).textContent = plural(vals[k], forms[k][0], forms[k][1], forms[k][2]);
         });
+        // Когда остались часы, ячейка «дней» с нулём не нужна
+        t.classList.toggle('no-d', vals.d === 0);
       };
       tick(); dealTick = setInterval(tick, 1000);
     }

@@ -2783,3 +2783,92 @@ a:hover .cat-go { background: var(--ink); color: #fff; transform: rotate(-45deg)
 .adm-steps li::before { border: 0; color: #fff; background: var(--ink); }
 .adm-steps li:first-child::before { background: var(--acc-grad); }
 .gate-head .eyebrow { justify-self: center; align-self: center; }
+
+/* =====================================================================
+   КАБИНЕТ ПОКУПАТЕЛЯ, ПОДДЕРЖКА, СТРАНИЦА ЗАКАЗА — общий дизайн (13.40)
+   ===================================================================== */
+.acc-hi h1 { font-weight: 200; letter-spacing: -.04em; }
+.acc-hi h1::after { content: ""; display: inline-block; width: .13em; height: .13em; margin-left: .08em; border-radius: 50%; background: var(--acc-grad); }
+.acc-since { display: inline-flex; align-items: center; gap: 8px; }
+.acc-since::before { content: ""; width: 18px; height: 1px; background: currentColor; opacity: .5; }
+.acc-facts a { min-width: 140px; padding: 14px 18px; border-radius: 20px; background: #fff; box-shadow: var(--ring); transition: transform .4s var(--ease), box-shadow .4s; }
+.acc-facts a:hover { background: #fff; transform: translateY(-3px); box-shadow: var(--ring), var(--lift); }
+.acc-facts b { font-weight: 200; font-size: 32px; letter-spacing: -.03em; }
+.acc-facts span { font-size: 12px; }
+.acc-card .loyal-card { border-radius: 22px; background: radial-gradient(130% 120% at 12% 0%, #3d424b 0%, #1d2026 44%, #0d0e10 100%); }
+.acc-card .loyal-card .lc-pct span { background: var(--acc-grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.acc-tabs { gap: 4px; padding: 5px; width: max-content; max-width: 100%; border: 0; border-radius: 999px; background: rgba(255, 255, 255, .85); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: var(--ring), 0 12px 30px -22px rgba(18, 20, 23, .4); }
+.acc-tabs a { padding: 10px 20px; margin: 0; border: 0; border-radius: 999px; font-size: 14px; transition: background .25s, color .25s; }
+.acc-tabs a:hover { background: var(--surface); }
+.acc-tabs a.on { background: var(--ink); color: #fff; border: 0; }
+.acc-dot { top: 8px; right: 8px; background: var(--acc); box-shadow: 0 0 0 2px #fff; }
+.acc-out { margin-left: 8px; padding: 10px 18px; border-radius: 999px; font-size: 13px; }
+.acc-out:hover { background: var(--surface); }
+.acc-empty { border-radius: var(--r-lg); background: linear-gradient(180deg, #f7f7f6, #eff0f2); box-shadow: var(--ring); }
+.acc-empty h3 { font-weight: 200; letter-spacing: -.03em; }
+
+/* заказы */
+.acc-orders { gap: 10px; border-top: 0; }
+.acc-order { padding: 18px clamp(16px, 2vw, 24px); border: 0; border-radius: var(--r-lg); background: #fff; box-shadow: var(--ring); transition: transform .4s var(--ease), box-shadow .4s; }
+.acc-order:hover { background: #fff; transform: translateY(-2px); box-shadow: var(--ring), var(--lift); }
+.ao-thumbs img { border-radius: 10px; border-color: #fff; }
+.ao-pay { border: 0; border-radius: 999px; background: rgba(122, 92, 22, .1); }
+.ao-track li.is-done::before { background: var(--ink); }
+.ao-track li.is-done i { background: var(--ink); border-color: var(--ink); }
+.ao-track li.is-now i { border-color: var(--acc); background: var(--acc); box-shadow: 0 0 0 4px rgba(255, 90, 60, .18); }
+.ao-sum b { font-weight: 600; }
+
+/* бонусы */
+.ab-bal b { font-weight: 200; letter-spacing: -.04em; }
+.ab-log h3 { font-weight: 200; letter-spacing: -.03em; }
+.ab-steps .ls-n { background: var(--ink); }
+.ab-steps li:first-child .ls-n { background: var(--acc-grad); }
+
+/* профиль */
+.acc-profile fieldset { border: 0; box-shadow: var(--ring); background: #fff; }
+.acc-profile legend, .acc-profile h3 { font-weight: 200; letter-spacing: -.02em; }
+
+/* поддержка */
+.sup-list ul, .sup-items { gap: 6px; border-top: 0; }
+.sup-item { border: 0; border-radius: 16px; box-shadow: var(--ring); background: #fff; }
+.sup-item:hover { background: #fff; box-shadow: inset 0 0 0 1px rgba(18, 20, 23, .16); }
+.sup-item.on { background: var(--ink); color: #fff; border: 0; }
+.sup-item.on .si-sub, .sup-item.on .si-text, .sup-item.on time { color: rgba(255, 255, 255, .65); }
+.sup-item.unread::after { background: var(--acc); }
+.si-state { border: 0; border-radius: 999px; padding: 3px 10px; background: var(--surface); }
+.si-state.s-answered { background: rgba(62, 104, 71, .12); }
+.sup-item.on .si-state { background: rgba(255, 255, 255, .14); color: #fff; }
+.sup-pick { border-radius: var(--r-xl); background: radial-gradient(70% 60% at 50% 0%, rgba(255, 154, 92, .14), transparent 70%), linear-gradient(180deg, #f7f7f6, #eff0f2); box-shadow: var(--ring); }
+.sup-pick h3, .sup-new h3 { font-weight: 200; letter-spacing: -.03em; }
+.sup-new { border: 0; border-radius: var(--r-xl); box-shadow: var(--ring), 0 24px 50px -40px rgba(18, 20, 23, .4); background: #fff; }
+.sup-topics span { border: 0; border-radius: 999px; background: var(--surface); box-shadow: var(--ring); }
+.sup-topics input:checked + span { background: var(--ink); box-shadow: 0 8px 18px -10px rgba(13, 14, 16, .7); }
+.sup-thread { border: 0; border-radius: var(--r-xl); overflow: hidden; box-shadow: var(--ring), 0 24px 50px -40px rgba(18, 20, 23, .4); background: #fff; }
+.st-head, .st-send { border-color: var(--line); }
+.st-msgs { background: linear-gradient(180deg, #f7f7f6, #fff 50%); }
+.msg-b { border: 0; border-radius: 18px 18px 18px 6px; box-shadow: var(--ring); }
+.msg.from-me .msg-b { border-radius: 18px 18px 6px 18px; background: var(--ink); box-shadow: 0 10px 22px -14px rgba(13, 14, 16, .7); }
+.st-send .textarea { border-radius: 18px; }
+
+/* страница заказа: статусы, трек, возвраты */
+.ost { gap: 6px; }
+.ost-i { border-radius: 16px; }
+.ost-i.on { background: var(--ink); color: #fff; }
+.trk-now, .rf-sum, .rf-form, .ret-row, .rf-row, .rf-banner, .cs-now, .cs-route, .pvz, .dm, .pm-card, .req-card, .req-exch { border-radius: var(--r-md); border-color: transparent; box-shadow: var(--ring); }
+.rf-tag { border-radius: 999px; }
+.success h1 { font-weight: 200; letter-spacing: -.04em; }
+.success h1::after { content: ""; display: inline-block; width: .13em; height: .13em; margin-left: .06em; border-radius: 50%; background: var(--acc-grad); }
+@media (max-width: 760px) {
+  .acc-tabs { width: auto; }
+  .acc-tabs a { padding: 9px 15px; }
+  .acc-facts a { min-width: 0; flex: 1; }
+}
+.success .eyebrow, .empty .eyebrow { justify-self: center; }
+.st-head .st-back { border: 0; }
+@media (max-width: 760px) {
+  .acc-tabs { display: flex; width: 100%; overflow: visible; }
+  .acc-tabs a { flex: 1 1 auto; min-width: 0; padding: 9px 10px; font-size: 13px; text-align: center; }
+  .acc-tabs .acc-out { display: none; }
+  .acc-dot { top: 6px; right: 6px; }
+}
+@media (max-width: 360px) { .acc-tabs a { font-size: 12px; padding: 8px 2px; } }

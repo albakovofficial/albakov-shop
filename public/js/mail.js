@@ -46,7 +46,8 @@
      так письмо одинаково выглядит в Яндексе, Mail.ru, Gmail и Apple Mail. На телефоне — свои отступы и шрифты. */
   var F = "Montserrat,'Helvetica Neue',Helvetica,Arial,sans-serif";
   var SANS = F;
-  var K = { ink: '#121417', text: '#2A3036', muted: '#5B6169', dim: '#8A8F96', line: '#E3E6EA', soft: '#F5F6F7', bg: '#EDEEF0' };
+  var K = { ink: '#0D0E10', text: '#2A3036', muted: '#5B6169', dim: '#8A8F96', line: '#E8EAED', soft: '#F4F5F6', bg: '#EEEFF1', acc: '#FF5A3C', acc2: '#FF9A5C' };
+  var ACC_GRAD = 'linear-gradient(135deg,#FF9A5C,#FF5A3C)';
   // Адрес для писем покупателей (info@) и адрес сайта — подставляет сервер. Письма уходят с no-reply@ — на них отвечать не нужно
   var DEFAULTS = { supportEmail: '', siteUrl: '' };
   function supportOf(ctx) { return (ctx && ctx.supportEmail) || DEFAULTS.supportEmail || ''; }
@@ -69,9 +70,9 @@
   function sec(html, pad) { return '<tr><td class="px" style="padding:' + (pad || '0 48px') + ';">' + html + '</td></tr>'; }
   function hero(eb, title, lead) {
     return sec(
-      '<div style="width:28px;height:2px;background:' + K.ink + ';line-height:2px;font-size:0;">&nbsp;</div>' +
-      '<div style="margin-top:18px;font-family:' + F + ';font-size:11px;font-weight:500;line-height:1.4;letter-spacing:4px;text-transform:uppercase;color:' + K.dim + ';">' + esc(eb) + '</div>' +
-      '<h1 class="h1" style="margin:14px 0 0;font-family:' + F + ';font-weight:300;font-size:36px;line-height:1.12;letter-spacing:-0.6px;color:' + K.ink + ';">' + esc(title) + '</h1>' +
+      '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;"><tr><td style="padding:7px 14px 7px 12px;border-radius:999px;background:' + K.soft + ';border:1px solid ' + K.line + ';font-family:' + F + ';font-size:10px;font-weight:600;line-height:1.3;letter-spacing:2px;text-transform:uppercase;color:' + K.ink + ';">' +
+        '<span style="display:inline-block;width:7px;height:7px;border-radius:4px;background:' + K.acc + ';background-image:' + ACC_GRAD + ';vertical-align:1px;margin-right:9px;"></span>' + esc(eb) + '</td></tr></table>' +
+      '<h1 class="h1" style="margin:20px 0 0;font-family:' + F + ';font-weight:300;font-size:38px;line-height:1.08;letter-spacing:-1.2px;color:' + K.ink + ';">' + esc(title) + (/[.!?…:]$/.test(String(title).trim()) ? '' : '<span style="color:' + K.acc + ';">.</span>') + '</h1>' +
       (lead ? '<p style="margin:18px 0 0;font-family:' + F + ';font-size:15px;line-height:1.75;color:' + K.muted + ';">' + lead + '</p>' : ''), '44px 48px 0');
   }
   function gap(h) { return '<tr><td style="height:' + h + 'px;line-height:' + h + 'px;font-size:0;">&nbsp;</td></tr>'; }
@@ -79,15 +80,15 @@
   // Серая плашка для главного: код, номер, сумма
   function plate(label, value, sub, opt) {
     opt = opt || {};
-    return tbl('background:' + K.soft + ';') + '<tr><td style="padding:24px 26px;">' +
+    return tbl('border-collapse:separate;background:' + K.soft + ';border-radius:20px;border:1px solid ' + K.line + ';') + '<tr><td style="padding:24px 26px;">' +
       '<div style="font-family:' + F + ';font-size:11px;font-weight:500;letter-spacing:3px;text-transform:uppercase;color:' + K.dim + ';">' + esc(label) + '</div>' +
       '<div class="plate-v" style="margin-top:10px;font-family:' + F + ';font-size:' + (opt.size || 28) + 'px;font-weight:500;line-height:1.15;letter-spacing:' + (opt.spacing == null ? 3 : opt.spacing) + 'px;color:' + K.ink + ';">' + esc(value) + '</div>' +
       (sub ? '<div style="margin-top:10px;font-family:' + F + ';font-size:13px;line-height:1.6;color:' + K.muted + ';">' + sub + '</div>' : '') +
       '</td></tr></table>';
   }
   function btn(label, url) {
-    return '<table role="presentation" class="btn" cellpadding="0" cellspacing="0" border="0"><tr><td bgcolor="' + K.ink + '" style="background:' + K.ink + ';">' +
-      '<a href="' + esc(url) + '" style="display:inline-block;padding:18px 40px;font-family:' + F + ';font-size:12px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#FFFFFF;text-decoration:none;">' + esc(label) + '</a></td></tr></table>';
+    return '<table role="presentation" class="btn" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;"><tr><td bgcolor="' + K.ink + '" style="background:' + K.ink + ';border-radius:999px;">' +
+      '<a href="' + esc(url) + '" style="display:inline-block;padding:15px 16px 15px 32px;border-radius:999px;font-family:' + F + ';font-size:14px;font-weight:500;letter-spacing:.3px;color:#FFFFFF;text-decoration:none;">' + esc(label) + ' &nbsp; <span style="display:inline-block;width:28px;height:28px;line-height:28px;border-radius:14px;background:#FFFFFF;color:' + K.ink + ';text-align:center;font-size:14px;">&rarr;</span></a></td></tr></table>';
   }
   function textLink(label, url) {
     return '<a href="' + esc(url) + '" style="font-family:' + F + ';font-size:13px;letter-spacing:.5px;color:' + K.ink + ';text-decoration:none;border-bottom:1px solid ' + K.ink + ';padding-bottom:2px;">' + esc(label) + ' &rarr;</a>';
@@ -99,7 +100,7 @@
     return tbl() + '<tr>' + L.map(function (l, i) {
       var on = i <= at;
       return '<td width="25%" valign="top" style="padding:0 ' + (i < 3 ? '6px' : '0') + ' 0 0;">' +
-        '<div style="height:3px;line-height:3px;font-size:0;background:' + (on ? K.ink : K.line) + ';">&nbsp;</div>' +
+        '<div style="height:4px;line-height:4px;font-size:0;border-radius:4px;background:' + (i === at ? K.acc : on ? K.ink : K.line) + ';' + (i === at ? 'background-image:' + ACC_GRAD + ';' : '') + '">&nbsp;</div>' +
         '<div style="margin-top:10px;font-family:' + F + ';font-size:11px;letter-spacing:.5px;line-height:1.3;color:' + (i === at ? K.ink : on ? K.muted : K.dim) + ';font-weight:' + (i === at ? 600 : 400) + ';">' + l + '</div></td>';
     }).join('') + '</tr></table>';
   }
@@ -107,7 +108,7 @@
   function itemRow(i, price, first) {
     var bt = first ? '' : 'border-top:1px solid ' + K.line + ';';
     return '<tr>' +
-      (i.image !== undefined ? '<td width="72" valign="top" style="padding:18px 0;' + bt + '"><div style="width:64px;background:' + K.soft + ';">' + (i.image ? '<img src="' + esc(i.image) + '" width="64" alt="" style="display:block;width:64px;height:auto;border:0;">' : '<div style="height:85px;line-height:85px;font-size:0;">&nbsp;</div>') + '</div></td>' : '') +
+      (i.image !== undefined ? '<td width="72" valign="top" style="padding:18px 0;' + bt + '"><div style="width:64px;background:' + K.soft + ';border-radius:12px;overflow:hidden;">' + (i.image ? '<img src="' + esc(i.image) + '" width="64" alt="" style="display:block;width:64px;height:auto;border:0;">' : '<div style="height:85px;line-height:85px;font-size:0;">&nbsp;</div>') + '</div></td>' : '') +
       '<td valign="top" style="padding:18px 12px 18px ' + (i.image !== undefined ? '14px' : '0') + ';' + bt + 'font-family:' + F + ';">' +
         '<div style="font-size:15px;font-weight:500;line-height:1.4;color:' + K.ink + ';">' + esc(i.name) + '</div>' +
         '<div style="margin-top:6px;font-size:13px;line-height:1.5;color:' + K.dim + ';">' + esc([i.color, i.size ? 'размер ' + i.size : '', i.qty ? i.qty + ' шт.' : ''].filter(Boolean).join(' · ')) + '</div></td>' +
@@ -128,7 +129,7 @@
   // Пронумерованные шаги
   function steps(list) {
     return tbl() + list.map(function (t, i) {
-      return '<tr><td width="40" valign="top" style="padding:' + (i ? '14px' : '0') + ' 0 0;"><div style="width:28px;height:28px;line-height:28px;border-radius:14px;background:' + K.ink + ';color:#FFFFFF;text-align:center;font-family:' + F + ';font-size:12px;font-weight:600;">' + (i + 1) + '</div></td>' +
+      return '<tr><td width="40" valign="top" style="padding:' + (i ? '14px' : '0') + ' 0 0;"><div style="width:28px;height:28px;line-height:28px;border-radius:14px;background:' + (i ? K.ink : K.acc) + ';color:#FFFFFF;text-align:center;font-family:' + F + ';font-size:12px;font-weight:600;">' + (i + 1) + '</div></td>' +
         '<td valign="top" style="padding:' + (i ? '18px' : '4px') + ' 0 0;font-family:' + F + ';font-size:15px;line-height:1.6;color:' + K.text + ';">' + t + '</td></tr>';
     }).join('') + '</table>';
   }
@@ -141,7 +142,7 @@
   // Полоса сервиса внизу карточки
   function services(ctx) {
     var site = siteOf(ctx), S = [['Доставка СДЭК', 'В пункт или курьером', '/page/delivery'], ['Возврат 14 дней', 'Через любой пункт СДЭК', '/page/returns'], ['Бонусы', 'С каждой покупки', '/account?tab=bonus']];
-    return '<tr><td style="padding:0;">' + tbl('background:' + K.soft + ';') + '<tr>' + S.map(function (x, i) {
+    return '<tr><td class="px" style="padding:0 24px 24px;">' + tbl('border-collapse:separate;background:' + K.soft + ';border-radius:20px;border:1px solid ' + K.line + ';') + '<tr>' + S.map(function (x, i) {
       var inner = '<div style="font-family:' + F + ';font-size:12px;font-weight:600;letter-spacing:.5px;color:' + K.ink + ';">' + x[0] + '</div><div style="margin-top:4px;font-family:' + F + ';font-size:12px;line-height:1.4;color:' + K.dim + ';">' + x[1] + '</div>';
       return '<td class="svc" width="33%" align="center" valign="top" style="padding:22px 10px;' + (i ? 'border-left:1px solid ' + K.line + ';' : '') + '">' + (site ? '<a href="' + esc(site + x[2]) + '" style="text-decoration:none;">' + inner + '</a>' : inner) + '</td>';
     }).join('') + '</tr></table></td></tr>';
@@ -160,9 +161,10 @@
       '<body style="margin:0;padding:0;background:' + K.bg + ';">' +
       '<div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;">' + esc(o.preheader || '') + '&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;</div>' +
       tbl('background:' + K.bg + ';') + '<tr><td align="center" style="padding:32px 12px 44px;">' +
-      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;">' +
-        '<tr><td bgcolor="#FFFFFF" style="background:#FFFFFF;border-top:3px solid ' + K.ink + ';">' + tbl() +
-          '<tr><td class="px" align="center" style="padding:34px 48px 30px;border-bottom:1px solid ' + K.line + ';">' + (site ? '<a href="' + esc(site + '/') + '" style="text-decoration:none;">' + logoHtml(ctx) + '</a>' : logoHtml(ctx)) + '</td></tr>' +
+      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;border-collapse:separate;">' +
+        '<tr><td bgcolor="#FFFFFF" style="background:#FFFFFF;border-radius:28px;overflow:hidden;border:1px solid ' + K.line + ';">' + tbl() +
+          '<tr><td style="height:4px;line-height:4px;font-size:0;background:' + K.acc + ';background-image:linear-gradient(90deg,' + K.ink + ' 0%,' + K.ink + ' 55%,' + K.acc2 + ' 80%,' + K.acc + ' 100%);">&nbsp;</td></tr>' +
+          '<tr><td class="px" align="center" style="padding:32px 48px 28px;border-bottom:1px solid ' + K.line + ';">' + (site ? '<a href="' + esc(site + '/') + '" style="text-decoration:none;">' + logoHtml(ctx) + '</a>' : logoHtml(ctx)) + '</td></tr>' +
           o.body + gap(44) + (o.shop ? '' : services(ctx)) +
         '</table></td></tr>' +
         '<tr><td class="px" align="center" style="padding:28px 40px 0;font-family:' + F + ';font-size:12px;line-height:1.7;color:' + K.muted + ';">' + foot +
@@ -232,9 +234,9 @@
     var code = String(ctx.code), spaced = code.slice(0, 3) + ' ' + code.slice(3);
     var subject = spaced + ' — код подтверждения ' + ctx.store;
     var cells = code.split('').map(function (dg) {
-      return '<td align="center" style="width:48px;height:62px;background:' + K.soft + ';font-family:' + F + ';font-size:30px;font-weight:500;color:' + K.ink + ';">' + esc(dg) + '</td>';
+      return '<td align="center" style="width:48px;height:62px;background:' + K.soft + ';border:1px solid ' + K.line + ';border-radius:14px;font-family:' + F + ';font-size:30px;font-weight:500;color:' + K.ink + ';">' + esc(dg) + '</td>';
     });
-    var boxes = '<table role="presentation" class="code" cellpadding="0" cellspacing="6" border="0" style="margin:0 -6px;"><tr>' + cells.slice(0, 3).join('') + '<td style="width:12px;"></td>' + cells.slice(3).join('') + '</tr></table>';
+    var boxes = '<table role="presentation" class="code" cellpadding="0" cellspacing="6" border="0" style="margin:0 -6px;border-collapse:separate;"><tr>' + cells.slice(0, 3).join('') + '<td style="width:12px;"></td>' + cells.slice(3).join('') + '</tr></table>';
     var body = hero('Подтверждение почты', ctx.name ? ctx.name + ', ваш код' : 'Ваш код', 'Введите его на сайте, чтобы закончить регистрацию.') +
       gap(30) + sec(boxes) + gap(18) + sec(p('Код действует ' + ctx.minutes + ' минут. Никому его не сообщайте — сотрудники ' + esc(ctx.store) + ' никогда не спрашивают коды.', 'font-size:13px;color:' + K.dim + ';'));
     var footer = 'Если вы не регистрировались на сайте ' + esc(ctx.store) + ', просто удалите это письмо — без кода аккаунт не создастся.';
@@ -250,7 +252,7 @@
     perks.push(['Доставка по России', 'СДЭК в пункт выдачи рядом с домом или курьером до двери.']);
     perks.push(['Личный кабинет', 'Заказы, трек-номера, бонусный счёт и данные для быстрого оформления.']);
     var list = tbl() + perks.map(function (x, i) {
-      return '<tr><td width="54" valign="top" style="padding:18px 0;' + (i ? 'border-top:1px solid ' + K.line + ';' : '') + 'font-family:' + F + ';font-size:13px;font-weight:500;letter-spacing:1px;color:' + K.dim + ';">0' + (i + 1) + '</td>' +
+      return '<tr><td width="54" valign="top" style="padding:18px 0;' + (i ? 'border-top:1px solid ' + K.line + ';' : '') + 'font-family:' + F + ';font-size:13px;font-weight:500;letter-spacing:1px;color:' + K.dim + ';">' + (i + 1) + '</td>' +
         '<td valign="top" style="padding:18px 0;' + (i ? 'border-top:1px solid ' + K.line + ';' : '') + 'font-family:' + F + ';"><div style="font-size:15px;font-weight:500;color:' + K.ink + ';">' + esc(x[0]) + '</div><div style="margin-top:5px;font-size:14px;line-height:1.6;color:' + K.muted + ';">' + esc(x[1]) + '</div></td></tr>';
     }).join('') + '</table>';
     var body = hero('Добро пожаловать', ctx.name ? 'Здравствуйте, ' + ctx.name + '!' : 'Здравствуйте!', 'Вы зарегистрировались в ' + esc(ctx.store) + '. Рады видеть вас среди наших покупателей — вот что теперь доступно.') +

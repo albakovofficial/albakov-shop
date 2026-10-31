@@ -2217,10 +2217,15 @@ input:focus-visible + .pm-track { outline: 2px solid var(--accent); outline-offs
 .fit-guar b { display: block; margin-bottom: 2px; font-size: 14px; font-weight: 500; color: var(--text); }
 .fit-modal, .req-modal { display: grid; gap: 18px; }
 .fit-modal h3, .req-modal h3 { font-size: 34px; margin-top: -8px; }
-.fit-range { display: grid; gap: 8px; }
-.fit-range span { display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; color: var(--muted); }
-.fit-range b { font-size: 20px; font-weight: 500; color: var(--text); font-variant-numeric: tabular-nums; }
-.fit-range input { width: 100%; accent-color: var(--accent); height: 28px; }
+.fit-range { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px 12px; }
+.fit-range > label { font-size: 14px; color: var(--muted); }
+.fit-range input[type=range] { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); height: 28px; }
+/* Рост и вес цифрами: поле в форме таблетки, единица справа */
+.fit-num { display: inline-flex; align-items: baseline; gap: 6px; padding: 4px 14px 4px 6px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--paper); transition: border-color .2s; }
+.fit-num:focus-within { border-color: var(--text); }
+.fit-num i { font-style: normal; font-size: 15px; color: var(--muted); }
+.fit-num-in { width: calc(3ch + 14px); box-sizing: content-box; border: 0; background: none; outline: none; padding: 4px 0 4px 6px; font: inherit; font-size: 20px !important; font-weight: 500; color: var(--text); text-align: right; font-variant-numeric: tabular-nums; -moz-appearance: textfield; }
+.fit-num-in::-webkit-outer-spin-button, .fit-num-in::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .fit-pref { display: grid; gap: 8px; }
 .fit-pref > span { font-size: 14px; color: var(--muted); }
 .fit-pref > div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
@@ -2316,3 +2321,18 @@ input:focus-visible + .pm-track { outline: 2px solid var(--accent); outline-offs
 .spec-chip .care-ic { width: 22px; height: 22px; padding: 2px; border: 0; background: none; color: inherit; }
 .spec-custom { min-height: 36px; padding: 6px 12px; font-size: 13px; flex: 1 1 220px; max-width: 360px; border-radius: 999px; }
 @media (max-width: 640px) { .spec-row { grid-template-columns: 1fr; } .spec-label { padding-top: 0; } }
+
+
+/* ---------- Скруглённые кнопки по всему сайту ---------- */
+:root { --btn-radius: 999px; --ctl-radius: 14px; }
+.btn, .sbtn, .sbtn-primary, .inst-banner-btn, .qa-size, .af-chip, .chip, .slide-code, .promo-form .btn, .mnav-app-btn, .wl-copy, .cookie-note .btn, .adm-x, .adm-row-tools button, .icon-btn, .sl-arrow, .to-top { border-radius: var(--btn-radius); }
+.sz { border-radius: var(--btn-radius); }
+.qty { border-radius: var(--btn-radius); overflow: hidden; }
+.qty button:first-child { padding-left: 4px; } .qty button:last-child { padding-right: 4px; }
+.option, .bonus-use, .gate-panel, .adm-tpl-item, .ticket { border-radius: var(--ctl-radius); }
+.adm-img-tools button { border-radius: 50%; }
+/* выбранный размер и фильтры — заливкой, без нижней черты: на скруглённой форме она смотрится чужой */
+.chip.on { background: var(--text); color: var(--bg); border-color: var(--text); box-shadow: none; }
+.sz::after, .chip.on::after { display: none; }
+.sz.on { background: var(--text); color: var(--bg); border-color: var(--text); }
+.chip.out.on { background: transparent; color: var(--text); }

@@ -236,7 +236,7 @@
   function head(title, actions, sub) { return '<div class="adm-head"><div><h1 class="serif">' + esc(title) + '</h1>' + (sub ? '<p class="muted" style="margin-top:6px;font-size:14px;max-width:70ch">' + sub + '</p>' : '') + '</div><div class="adm-actions">' + (actions || '') + '</div></div>'; }
 
   function loginView(v) {
-    v.innerHTML = '<div class="wrap"><div class="auth" style="padding-top:72px"><div style="text-align:center;display:grid;gap:12px"><span class="eyebrow">Панель управления</span><h1 class="serif" style="font-size:52px">Вход</h1></div>' +
+    v.innerHTML = '<div class="wrap"><div class="auth" style="padding-top:72px"><div class="adm-login-head" style="text-align:center;display:grid;gap:12px;justify-items:center"><span class="eyebrow">Панель управления</span><h1 class="serif" style="font-size:52px">Вход</h1></div>' +
       '<form class="form" id="admLogin" novalidate><label class="field"><span>Пароль администратора</span><input class="input" type="password" id="adm-pass" autocomplete="current-password"></label><p class="form-error" id="admErr"></p><button class="btn block">Войти</button></form>' + '</div></div>';
     $('#admLogin').addEventListener('submit', async function (e) {
       e.preventDefault();

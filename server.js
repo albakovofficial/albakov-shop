@@ -575,7 +575,15 @@ function quote(req, b, extra) {
     cdekAuto: !!(extra && extra.cdekAuto), deliveryPrice: extra ? extra.deliveryPrice : undefined, deliveryDays: extra ? extra.deliveryDays : undefined
   });
 }
+// Защита от двойного заказа: если ответ потерялся и покупатель отправил форму ещё раз, возвращаем уже созданный заказ
+const recentOrders = new Map();
+setInterval(() => { const old = Date.now() - 30 * 60e3; for (const [k, v] of recentOrders) if (v.t < old) recentOrders.delete(k); }, 10 * 60e3).unref();
 async function placeOrder(req, b) {
+  const idem = /^[a-z0-9]{16,64}$/i.test(String(b.idem || '')) ? String(b.idem) : '';
+  if (idem && recentOrders.has(idem)) {
+    const prev = db.orders.find((o) => o.id === recentOrders.get(idem).id);
+    if (prev) return { order: orderView(prev), token: prev.token, payUrl: prev.payment.status === 'paid' ? null : prev.payUrl || null, user: publicUser(currentUser(req)), repeated: true };
+  }
   const user = currentUser(req), c = b.customer || {};
   const customer = { firstName: String(c.firstName || '').trim().slice(0, 60), lastName: String(c.lastName || '').trim().slice(0, 60), phone: normPhone(c.phone), email: String(c.email || '').trim().toLowerCase().slice(0, 120) };
   if (!customer.firstName || !customer.lastName) fail(400, 'Укажите имя и фамилию');
@@ -645,6 +653,7 @@ async function placeOrder(req, b) {
     }
   }
   syncBonus(order);
+  if (idem) recentOrders.set(idem, { id: order.id, t: Date.now() });
   save();
   if (order.payment.method !== 'online') sendOrderMails(order); // при онлайн-оплате письмо уйдёт после оплаты
   console.log(`Новый заказ № ${order.number} на ${order.total} ₽`);

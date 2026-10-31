@@ -1513,7 +1513,8 @@
       err.textContent = '';
       var btn = $('#coSubmit'); btn.disabled = true; btn.textContent = st.payment === 'online' && !st.free ? 'Переходим к оплате…' : 'Оформляем…';
       try {
-        var r = await API.placeOrder({ lines: Cart.get(), code: st.code, deliveryId: st.deliveryId, payment: st.payment, useBonus: st.useBonus, customer: f, city: needAddr ? $('#co-city').value.trim() : '', address: needAddr ? $('#co-addr').value.trim() : doorMode() ? (st.addr || '').trim() : '', pvz: pvzMode() && st.pvz ? st.pvz.code : '', cityCode: cdekMode() && st.city ? st.city.code : '', pvzType: st.pvz ? st.pvz.type : '', comment: $('#co-comment').value.trim(), consent: true });
+        if (!st.idem) st.idem = Array.from(crypto.getRandomValues(new Uint8Array(16)), function (x) { return ('0' + x.toString(16)).slice(-2); }).join('');
+        var r = await API.placeOrder({ idem: st.idem, lines: Cart.get(), code: st.code, deliveryId: st.deliveryId, payment: st.payment, useBonus: st.useBonus, customer: f, city: needAddr ? $('#co-city').value.trim() : '', address: needAddr ? $('#co-addr').value.trim() : doorMode() ? (st.addr || '').trim() : '', pvz: pvzMode() && st.pvz ? st.pvz.code : '', cityCode: cdekMode() && st.city ? st.city.code : '', pvzType: st.pvz ? st.pvz.type : '', comment: $('#co-comment').value.trim(), consent: true });
         Cart.clear();
         if (r.payUrl) { location.href = r.payUrl; return; }
         go('#/order/' + r.order.id);
@@ -2357,8 +2358,9 @@
     var i = $('#sInput'); setTimeout(function () { i.focus(); }, 50);
     i.addEventListener('input', function () {
       var t = i.value.trim().toLowerCase();
-      var res = t.length < 2 ? [] : D.products.filter(onSale).filter(function (p) { return (p.name + ' ' + colorNames(p) + ' ' + (p.description || '')).toLowerCase().indexOf(t) !== -1; }).slice(0, 6);
-      $('#sRes').innerHTML = res.map(function (p) { return '<a class="mini-line" href="#/product/' + esc(p.slug) + '"><img src="' + esc(imgOf(p)) + '" alt=""><div>' + esc(p.name) + '<div class="sub">' + esc(Pricing.colorsOf(p).map(function (c) { return c.name; }).join(', ')) + '</div></div><span class="num">' + fmt(priceOf(p).price) + '</span></a>'; }).join('') || (t.length >= 2 ? '<p class="muted">Ничего не нашлось</p>' : '');
+      var res = t.length < 2 ? [] : D.products.filter(onSale).filter(function (p) { var cat = catById(p.categoryId); return (p.name + ' ' + colorNames(p) + ' ' + (cat ? cat.name : '') + ' ' + (p.description || '') + ' ' + (window.Specs ? Specs.list(p).map(function (x) { return x.value; }).join(' ') : '')).toLowerCase().indexOf(t) !== -1; });
+      var more = res.length > 6; res = res.slice(0, 6);
+      $('#sRes').innerHTML = res.map(function (p) { return '<a class="mini-line" href="#/product/' + esc(p.slug) + '"><img src="' + esc(imgOf(p)) + '" alt=""><div>' + esc(p.name) + '<div class="sub">' + esc(Pricing.colorsOf(p).map(function (c) { return c.name; }).join(', ')) + '</div></div><span class="num">' + fmt(priceOf(p).price) + '</span></a>'; }).join('') + (more ? '<a class="link sh-more" style="margin-top:14px" href="#/catalog?q=' + encodeURIComponent(i.value.trim()) + '"><span>Все результаты</span><i aria-hidden="true">' + ARROW + '</i></a>' : '') || (t.length >= 2 ? '<p class="muted">Ничего не нашлось</p>' : '');
     });
     $('#sForm').addEventListener('submit', function (e) { e.preventDefault(); if (i.value.trim()) go('#/catalog?q=' + encodeURIComponent(i.value.trim())); });
   }
@@ -2391,9 +2393,17 @@
   }
 
   /* ---------- Админка (подключается из admin.js) ---------- */
+  // Панель управления (250 КБ) загружаем только когда её открывают — покупателям она не нужна
+  var adminLoading = null;
   function adminPage(v, parts, q) {
-    if (window.Admin) window.Admin.render(v, parts, q);
-    else v.innerHTML = '<div class="wrap"><div class="empty"><h3>Модуль администратора не загружен</h3></div></div>';
+    if (window.Admin) { window.Admin.render(v, parts, q); return; }
+    v.innerHTML = '<div class="loader">…</div>';
+    if (!adminLoading) adminLoading = new Promise(function (ok, bad) {
+      var sc = document.createElement('script'); sc.src = 'js/admin.js?v=' + ((document.querySelector('script[src*="js/app.js"]') || {}).src || '').split('v=')[1];
+      sc.onload = ok; sc.onerror = function () { adminLoading = null; bad(); }; document.body.appendChild(sc);
+    });
+    adminLoading.then(function () { if (window.Admin && $('#view') === v) window.Admin.render(v, parts, q); },
+      function () { v.innerHTML = '<div class="wrap"><div class="empty"><h3>Не удалось загрузить панель</h3><p>Проверьте интернет и обновите страницу.</p></div></div>'; });
   }
 
   /* ---------- Обновление данных после правок в админке ---------- */

@@ -555,20 +555,26 @@
     ];
     var bal = u ? (u.bonus || 0) : 0;
     var act = u
-      ? '<a class="btn" href="#/account?tab=bonus">Открыть бонусный счёт</a>'
-      : '<a class="btn" href="#/account?tab=register">Присоединиться</a><span class="loyal-note">Регистрация займёт минуту</span>';
+      ? '<a class="btn loyal-btn" href="#/account?tab=bonus"><span>Открыть бонусный счёт</span><span class="db-ic" aria-hidden="true">' + ARROW + '</span></a>'
+      : '<a class="btn loyal-btn" href="#/account?tab=register"><span>Присоединиться</span><span class="db-ic" aria-hidden="true">' + ARROW + '</span></a><span class="loyal-note">Регистрация займёт минуту</span>';
     var cardHtml = loyalCardHtml(u, bal);
     return '<section class="section loyal-sec"><div class="wrap"><div class="loyal">' +
       '<div class="loyal-copy">' +
-        (h.bonusEyebrow ? '<span class="eyebrow">' + esc(h.bonusEyebrow) + '</span>' : '') +
+        (h.bonusEyebrow ? '<span class="eyebrow loyal-eb"><i></i>' + esc(h.bonusEyebrow) + '</span>' : '') +
         '<h2><span class="sr">' + pct + '% — </span>' + title + '</h2>' +
         (h.bonusText ? '<p class="loyal-rate">' + esc(h.bonusText) + '</p>' : '') +
-        '<ol class="loyal-steps">' + steps.map(function (x, i) { return '<li><span class="ls-n">' + (i + 1) + '</span><b>' + x[0] + '</b><span>' + esc(x[1]) + '</span></li>'; }).join('') + '</ol>' +
+        '<ol class="loyal-steps">' + steps.map(function (x, i) { return '<li><span class="ls-n">' + (i + 1) + '</span><span class="ls-ic" aria-hidden="true">' + LOYAL_IC[i] + '</span><b>' + x[0] + '</b><span>' + esc(x[1]) + '</span></li>'; }).join('') + '</ol>' +
         '<div class="loyal-act">' + act + '</div>' +
       '</div>' +
       '<div class="loyal-visual">' + cardHtml + '</div>' +
     '</div></div></section>';
   }
+
+  var LOYAL_IC = [
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8h12l-1 12H7L6 8Z"/><path d="M9 8V7a3 3 0 0 1 6 0v1"/></svg>',
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="7" rx="7" ry="3"/><path d="M5 7v5c0 1.7 3.1 3 7 3s7-1.3 7-3V7"/><path d="M5 12v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/></svg>',
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10.5h18M7 15h4"/></svg>'
+  ];
 
   /* Бонусная карта: знак бренда, процент, имя и баланс. Одна и та же — на главной и в кабинете */
   function loyalCardHtml(u, bal) {

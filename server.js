@@ -94,7 +94,27 @@ const validEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(s || '').t
 // bonusNews — свежие начисления, о которых покупатель ещё не знает (показываем уведомление)
 const publicUser = (u) => u && { id: u.id, firstName: u.firstName, lastName: u.lastName, phone: u.phone, email: u.email, createdAt: u.createdAt, bonus: u.bonus || 0,
   supportUnread: db.tickets.filter((t) => t.userId === u.id && t.unreadUser).length,
-  bonusNews: (u.bonusLog || []).filter((e) => !e.seen).slice(0, 5).map((e) => ({ id: e.id, amount: e.amount, type: e.type, orderNumber: e.orderNumber || '', note: e.note || '' })) };
+  bonusNews: (u.bonusLog || []).filter((e) => !e.seen).slice(0, 5).map((e) => ({ id: e.id, amount: e.amount, type: e.type, orderNumber: e.orderNumber || '', note: e.note || '' })),
+  favorites: u.favorites || [], addresses: u.addresses || [] };
+/* Избранное и адреса покупателя: проверяем и обрезаем всё, что пришло из браузера */
+const ADDR_KINDS = ['home', 'work', 'other'];
+function cleanFavorites(list) {
+  const ids = new Set(db.products.map((x) => x.id)), out = [];
+  (Array.isArray(list) ? list : []).forEach((x) => { const id = String(x && x.id || x || ''); if (ids.has(id) && !out.some((y) => y.id === id)) out.push({ id, at: String(x && x.at || new Date().toISOString()).slice(0, 30) }); });
+  return out.slice(0, 200);
+}
+function cleanAddress(a) {
+  const t = (v, n) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, n);
+  const out = { id: /^[a-z0-9]{4,40}$/i.test(String(a && a.id || '')) ? String(a.id) : uid('a'), kind: ADDR_KINDS.includes(a && a.kind) ? a.kind : 'other', label: t(a && a.label, 40), city: t(a && a.city, 100), address: t(a && a.address, 250), note: t(a && a.note, 200), isDefault: !!(a && a.isDefault) };
+  const cc = a && a.cdekCity; if (cc && /^\d{1,9}$/.test(String(cc.code || ''))) out.cdekCity = { code: Number(cc.code), city: t(cc.city, 100), region: t(cc.region, 120) };
+  return out;
+}
+function cleanAddresses(list) {
+  const out = (Array.isArray(list) ? list : []).map(cleanAddress).filter((a) => a.city && a.address.length >= 3).slice(0, 10);
+  if (out.length && !out.some((a) => a.isDefault)) out[0].isDefault = true;
+  let seen = false; out.forEach((a) => { if (a.isDefault) { if (seen) a.isDefault = false; seen = true; } });
+  return out;
+}
 const userOf = (order) => order && order.userId ? db.users.find((u) => u.id === order.userId) || null : null;
 // Бонусы заказа после смены статуса или оплаты (начислить, вернуть, забрать)
 function syncBonus(order) { return Pricing.syncOrderBonus(order, userOf(order), db.settings, uid); }
@@ -654,6 +674,12 @@ async function placeOrder(req, b) {
   }
   syncBonus(order);
   if (idem) recentOrders.set(idem, { id: order.id, t: Date.now() });
+  // «Сохранить адрес в кабинете»: адрес курьерской доставки добавляем в книгу адресов покупателя
+  if (user && b.saveAddress && order.delivery && order.delivery.address && !order.delivery.pvz) {
+    const list = user.addresses || [], d = order.delivery, raw = (d.door && d.door.city) || String(b.city || d.city || '');
+    const same = list.some((x) => x.address.toLowerCase() === String(d.address).toLowerCase() && x.city.toLowerCase() === raw.toLowerCase());
+    if (!same && list.length < 10) user.addresses = cleanAddresses(list.concat([{ kind: 'home', label: '', city: raw, address: d.address, isDefault: !list.length, cdekCity: d.door ? { code: d.door.cityCode, city: d.door.city, region: d.door.region } : null }]));
+  }
   save();
   if (order.payment.method !== 'online') sendOrderMails(order); // при онлайн-оплате письмо уйдёт после оплаты
   console.log(`Новый заказ № ${order.number} на ${order.total} ₽`);
@@ -1142,6 +1168,15 @@ async function api(req, res, url, body) {
     (u.bonusLog || []).forEach((e) => { e.seen = true; }); save();
     return { user: publicUser(u) };
   }
+  if (p[0] === 'me' && p[1] === 'favorites' && M === 'PUT') {
+    const u = user(); if (!u) fail(401, 'Войдите в личный кабинет');
+    u.favorites = cleanFavorites(body.list); save(); return { user: publicUser(u) };
+  }
+  if (p[0] === 'me' && p[1] === 'addresses' && M === 'PUT') {
+    const u = user(); if (!u) fail(401, 'Войдите в личный кабинет');
+    if (Array.isArray(body.list) && body.list.length > 10) fail(400, 'Можно сохранить до 10 адресов');
+    u.addresses = cleanAddresses(body.list); save(); return { user: publicUser(u) };
+  }
   if (p[0] === 'me' && !p[1] && M === 'PUT') {
     const u = user(); if (!u) fail(401, 'Войдите в личный кабинет');
     const email = String(body.email || '').trim().toLowerCase(), phone = normPhone(body.phone);
@@ -1619,7 +1654,7 @@ const server = http.createServer(async (req, res) => {
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); return res.end(); }
   if (url.pathname === '/robots.txt') {
     res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=3600' });
-    return res.end('User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /cart\nDisallow: /checkout\nDisallow: /account\nDisallow: /order/\nDisallow: /*?*q=\nDisallow: /*?*sort=\n' +
+    return res.end('User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /cart\nDisallow: /checkout\nDisallow: /account\nDisallow: /favorites\nDisallow: /order/\nDisallow: /*?*q=\nDisallow: /*?*sort=\n' +
       'Clean-param: utm_source&utm_medium&utm_campaign&utm_content&utm_term&yclid&source\n\nSitemap: ' + PUBLIC_URL + '/sitemap.xml\n');
   }
   if (url.pathname === '/sitemap.xml' || url.pathname === '/yml.xml') {

@@ -41,20 +41,22 @@
     return j;
   }
   var Server = {
-    async init(state) { this.user = state.user || null; this.isAdmin = !!state.isAdmin; return state.data; },
+    async init(state) { this.user = state.user || null; this.isAdmin = !!state.isAdmin; if (this.user) Fav.merge(this.user); return state.data; },
     // Ответ: { user, welcome } — аккаунт создан сразу; { pending } — на почту ушёл код, ждём его
-    async register(f) { var r = await call('POST', 'api/auth/register', f); if (r.user) this.user = r.user; return r; },
-    async verify(id, code) { var r = await call('POST', 'api/auth/verify', { id: id, code: code }); this.user = r.user; return r; },
+    async register(f) { var r = await call('POST', 'api/auth/register', f); if (r.user) { this.user = r.user; Fav.merge(r.user); } return r; },
+    async verify(id, code) { var r = await call('POST', 'api/auth/verify', { id: id, code: code }); this.user = r.user; Fav.merge(r.user); return r; },
     async resendCode(id) { return await call('POST', 'api/auth/resend', { id: id }); },
     async forgot(l) { return await call('POST', 'api/auth/forgot', { login: l }); },
-    async resetPassword(id, code, password) { this.user = (await call('POST', 'api/auth/reset', { id: id, code: code, password: password })).user; return this.user; },
-    async login(l, p) { this.user = (await call('POST', 'api/auth/login', { login: l, password: p })).user; return this.user; },
-    async logout() { await call('POST', 'api/auth/logout'); this.user = null; },
+    async resetPassword(id, code, password) { this.user = (await call('POST', 'api/auth/reset', { id: id, code: code, password: password })).user; Fav.merge(this.user); return this.user; },
+    async login(l, p) { this.user = (await call('POST', 'api/auth/login', { login: l, password: p })).user; Fav.merge(this.user); return this.user; },
+    async logout() { await call('POST', 'api/auth/logout'); this.user = null; Fav.set([], true); },
     async cdekCities(q) { return (await call('GET', 'api/cdek/cities?q=' + encodeURIComponent(q))).cities; },
     async cdekPoints(code) { return (await call('GET', 'api/cdek/points?city=' + encodeURIComponent(code))).points; },
     async adminCdek(body) { return await call('POST', 'api/admin/cdek', body); },
     async adminReturn(id, act, body) { return await call('POST', 'api/admin/orders/' + encodeURIComponent(id) + '/' + act, body || {}); },
     async adminCdekOrder(id, method, act, body) { return (await call(method, 'api/admin/orders/' + encodeURIComponent(id) + '/' + act, body)).order; },
+    async saveFavorites(list) { this.user = (await call('PUT', 'api/me/favorites', { list: list })).user; return this.user; },
+    async saveAddresses(list) { this.user = (await call('PUT', 'api/me/addresses', { list: list })).user; return this.user; },
     async updateProfile(f) { this.user = (await call('PUT', 'api/me', f)).user; return this.user; },
     async myBonus() { var r = await call('GET', 'api/me'); this.user = r.user; return r; },
     async bonusSeen() { this.user = (await call('POST', 'api/me/bonus-seen')).user; return this.user; },
@@ -119,6 +121,44 @@
     count() { return this.get().reduce(function (s, x) { return s + x.qty; }, 0); }
   };
 
+  /* ================= «Купить сейчас»: один товар оформляется отдельно, корзина не меняется ================= */
+  var LS_BUY = 'vanta:buynow';
+  function ssGet(k) { try { return JSON.parse(sessionStorage.getItem(k)); } catch (e) { return null; } }
+  function ssSet(k, v) { try { sessionStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+  var BuyNow = {
+    get() { var c = ssGet(LS_BUY); return Array.isArray(c) ? c : []; },
+    set(c) { ssSet(LS_BUY, c); document.dispatchEvent(new CustomEvent('cart:change')); },
+    start(productId, colorId, size, qty) { ssSet(LS_BUY, [{ productId: productId, colorId: colorId, size: size, qty: qty || 1 }]); },
+    same: Cart.same,
+    find(productId, colorId, size) { var self = this; return this.get().find(function (x) { return self.same(x, productId, colorId, size); }); },
+    update(productId, colorId, size, qty) { var self = this; this.set(this.get().map(function (x) { if (self.same(x, productId, colorId, size)) x.qty = qty; return x; }).filter(function (x) { return x.qty > 0; })); },
+    clear() { this.set([]); },
+    count() { return this.get().reduce(function (s, x) { return s + x.qty; }, 0); }
+  };
+
+  /* ================= Избранное: в браузере, а у вошедших — ещё и в аккаунте (на всех устройствах) ================= */
+  var LS_FAV = 'vanta:fav';
+  var Fav = {
+    get() { var c = lsGet(LS_FAV); return Array.isArray(c) ? c : []; },
+    ids() { return this.get().map(function (x) { return x.id; }); },
+    has(id) { return this.get().some(function (x) { return x.id === id; }); },
+    count() { return this.get().length; },
+    set(list, silentSync) {
+      lsSet(LS_FAV, list); document.dispatchEvent(new CustomEvent('fav:change'));
+      if (!silentSync && Server.user) Server.saveFavorites(list).catch(function () {});
+    },
+    toggle(id) { var l = this.get(), on = !this.has(id); this.set(on ? [{ id: id, at: new Date().toISOString() }].concat(l) : l.filter(function (x) { return x.id !== id; })); return on; },
+    // После входа: объединяем избранное с этого устройства и из аккаунта
+    merge(user) {
+      if (!user) return;
+      var local = this.get(), remote = user.favorites || [], out = remote.slice();
+      local.forEach(function (x) { if (!out.some(function (y) { return y.id === x.id; })) out.push(x); });
+      var changed = out.length !== remote.length;
+      this.set(out, true);
+      if (changed) Server.saveFavorites(out).catch(function () {});
+    }
+  };
+
   /* Загрузка данных с сервера: при сбое связи несколько раз повторяем запрос */
   async function connect() {
     var wait = [0, 600, 1500, 3000], last = null;
@@ -136,5 +176,5 @@
     var err = new Error('offline'); err.cause = last; throw err;
   }
 
-  root.Store = { connect: connect, Cart: Cart, normPhone: normPhone, uid: uid, readImage: readImage };
+  root.Store = { connect: connect, Cart: Cart, BuyNow: BuyNow, Fav: Fav, normPhone: normPhone, uid: uid, readImage: readImage };
 })(this);

@@ -3197,27 +3197,6 @@ a:hover .cat-go { background: var(--ink); color: #fff; transform: rotate(-45deg)
 .pre-tag { display: inline-flex; align-self: start; justify-self: start; width: fit-content; margin: 2px 0; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 500; color: #6e5526; background: rgba(176, 138, 69, .14); }
 [data-multi="look"] .adm-multi { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); max-height: 240px; overflow: auto; padding: 10px 12px; border-radius: 14px; background: var(--surface); box-shadow: var(--ring); }
 
-/* ---------- Оплата частями (13.42) ---------- */
-.parts-chip { display: flex; align-items: center; gap: 14px; width: 100%; padding: 12px 16px 12px 12px; border-radius: 18px; text-align: left; background: #fff; box-shadow: var(--ring); transition: box-shadow .25s; }
-.parts-chip:hover { box-shadow: inset 0 0 0 1px rgba(18, 20, 23, .2); }
-.parts-chip > span:nth-child(2) { display: grid; gap: 2px; flex: 1; min-width: 0; }
-.parts-chip b { font-weight: 500; font-size: 15px; }
-.parts-chip small { font-size: 12.5px; color: var(--muted); }
-.parts-go { font-size: 22px; color: var(--dim); }
-.parts-ic, .parts-opt-ic { flex: none; display: grid; grid-template-columns: 1fr 1fr; gap: 3px; width: 40px; height: 40px; padding: 9px; border-radius: 13px; background: var(--surface); box-shadow: var(--ring); }
-.parts-ic i, .parts-opt-ic i { border-radius: 3px; background: #c9ccd2; }
-.parts-ic i:first-child, .parts-opt-ic i:first-child { background: var(--ink); }
-.parts-opt-ic { width: 52px; height: 52px; padding: 13px; border-radius: 16px; }
-.parts-plan { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 10px 0 4px; }
-.parts-plan > div { display: grid; gap: 4px; }
-.parts-plan i { display: block; height: 5px; border-radius: 5px; background: #e2e4e8; }
-.parts-plan .now i { background: var(--ink); }
-.parts-plan b { font-weight: 600; font-size: 14px; }
-.parts-plan span { font-size: 12px; color: var(--muted); }
-.parts-how { margin: 18px 0 0; padding: 0; list-style: none; display: grid; gap: 10px; counter-reset: ph; }
-.parts-how li { counter-increment: ph; display: flex; gap: 12px; align-items: center; font-size: 14px; }
-.parts-how li::before { content: counter(ph); flex: none; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--surface); box-shadow: var(--ring); font-size: 12px; font-weight: 500; }
-.opt-parts[hidden] { display: none; }
 
 /* ---------- Подарочные сертификаты (13.42) ---------- */
 .gift-page { padding-bottom: 96px; }
@@ -3289,3 +3268,77 @@ a:hover .cat-go { background: var(--ink); color: #fff; transform: rotate(-45deg)
 .an-kpi { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 @media (max-width: 900px) { .an-kpi { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .adm-card .copyable { white-space: nowrap; font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; padding: 1px 6px; border-radius: 6px; background: rgba(13, 14, 16, .05); }
+.tg-tests { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.tg-note { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 12.5px; line-height: 1.55; color: var(--muted); }
+
+/* ---------- 13.43: телефон — ровная прокрутка без мельканий и зависаний ----------
+   1) Прокрутку страницы двигаем сами и мгновенно (плавной остаётся только кнопка «Наверх»).
+   2) Убран полноэкранный слой «зерна» с наложением: телефон перерисовывал его на каждом кадре.
+   3) Шапка больше не меняет высоту при прокрутке на телефоне — из-за этого содержимое прыгало на 18 px,
+      браузер поправлял прокрутку, шапка снова росла, и так по кругу.
+   4) На сенсорных экранах нет размытия под «стеклом» и бесконечных декоративных анимаций с blur —
+      они грузили видеочип и память, отсюда «замирающие» кнопки и перезагрузки страницы. */
+html { scroll-behavior: auto; }
+body::after { content: none; display: none; }
+@media (hover: none), (pointer: coarse), (max-width: 900px) {
+  .header .wrap { transition: none; }
+  .header.scrolled .wrap { height: var(--header-h); }
+  .header, .header.scrolled { background: var(--bg); }
+  *, *::before, *::after { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+  .promo-band .pct, .benefit-ico, .slide.is-active .slide-badge, .brand-foot .brand-mark, .loyal-card, .deal-glow, .deal-when i,
+  .ab-plate::before, .ab-plate::after, .ab-plate img, .ab-pillar-ico, .ab-founder::before, .ab-founder::after, .ac::before, .ac::after,
+  .ac-hours i, .ac-ico, .ip-sec-ico, .loyal-sec .loyal-visual::before, .slide-eb i { animation: none !important; }
+  .deal-glow, .ab-plate::before, .ab-plate::after, .ab-founder::before, .ab-founder::after, .ac::before, .ac::after, .loyal-sec .loyal-visual::before { filter: none; opacity: .35; }
+  .qa, .card .ph .fav-btn, .slide-code, .st-cell, .acc-tabs, .loyal-sec .loyal-steps li, .ac-card { background-color: rgba(255, 255, 255, .94); }
+  .hero-under .header:not(.scrolled) { background: transparent; }
+  #view.view-in { animation-duration: .2s; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
+
+/* Подсказки адреса (13.43) */
+.ad-hint { display: block; min-height: 16px; margin-top: 6px; font-size: 12.5px; color: var(--muted); }
+.field .pvz-combo { margin-top: 0; }
+.pvz-sug { border-radius: 16px; box-shadow: 0 18px 40px -18px rgba(13, 14, 16, .35); border-color: rgba(13, 14, 16, .1); max-height: 300px; overflow-y: auto; overscroll-behavior: contain; }
+.pvz-sug li.on, .pvz-sug li:hover { background: var(--surface); }
+.pvz-sug li b { font-weight: 500; }
+.modal .pvz-sug { z-index: 60; }
+
+/* ---------- Пустая корзина (13.43) ---------- */
+.ec { position: relative; isolation: isolate; overflow: hidden; display: grid; justify-items: center; gap: 14px; max-width: 640px; margin: 0 auto; padding: clamp(40px, 6vw, 72px) clamp(22px, 4vw, 56px) clamp(36px, 5vw, 56px); text-align: center; border-radius: var(--r-xl); background: radial-gradient(80% 70% at 50% 0%, rgba(255, 154, 92, .14), transparent 70%), linear-gradient(180deg, #fff, #fafafa); box-shadow: var(--ring), 0 40px 80px -60px rgba(13, 14, 16, .35); }
+.ec-visual { position: relative; display: grid; place-items: center; width: 132px; height: 132px; margin-bottom: 6px; }
+.ec-ring { position: absolute; inset: 0; border-radius: 50%; background: radial-gradient(circle at 50% 40%, #fff 0 52%, rgba(255, 90, 60, .07) 53% 100%); box-shadow: inset 0 0 0 1px rgba(255, 90, 60, .14); }
+.ec-bag { position: relative; display: grid; place-items: center; width: 84px; height: 84px; border-radius: 28px; background: linear-gradient(160deg, #fff, #f4f4f5); box-shadow: 0 1px 0 #fff inset, 0 22px 34px -18px rgba(13, 14, 16, .45), 0 0 0 1px rgba(13, 14, 16, .05); transform: rotate(-6deg); animation: ecFloat 6s ease-in-out infinite; }
+.ec-bag svg { width: 46px; height: 46px; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.ec-b1 { fill: rgba(255, 90, 60, .08); stroke: var(--ink); stroke-width: 1.6; }
+.ec-b2 { stroke: var(--ink); stroke-width: 1.6; }
+.ec-b3 { stroke: var(--acc); stroke-width: 1.8; }
+.ec-dot { position: absolute; border-radius: 50%; background: var(--acc-grad, linear-gradient(135deg, #ff9a5c, #ff5a3c)); }
+.ec-dot.d1 { width: 10px; height: 10px; top: 14px; right: 18px; }
+.ec-dot.d2 { width: 6px; height: 6px; bottom: 22px; left: 12px; opacity: .6; }
+.ec-dot.d3 { width: 4px; height: 4px; top: 30px; left: 22px; opacity: .4; }
+@keyframes ecFloat { 0%, 100% { transform: rotate(-6deg) translateY(0); } 50% { transform: rotate(-3deg) translateY(-6px); } }
+.ec .eyebrow { justify-self: center; }
+.ec-title { font-family: var(--serif); font-weight: 200; font-size: clamp(32px, 4vw, 46px); line-height: 1.05; letter-spacing: -.035em; }
+.ec-title::after { content: "."; color: var(--acc); }
+.ec-text { max-width: 420px; color: var(--muted); line-height: 1.65; font-size: 15px; }
+.ec-acts { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 8px; }
+.ec-acts .btn { min-height: 52px; }
+.btn.ec-go { gap: 14px; padding-right: 7px; }
+.btn.ec-go .bn-ic { width: 38px; height: 38px; transition: transform .4s var(--ease); }
+.btn.ec-go:hover .bn-ic { transform: translateX(3px); }
+.ec-cats { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 14px; padding-top: 20px; border-top: 1px solid var(--line); width: 100%; }
+.ec-cats a { padding: 8px 14px; border-radius: 999px; font-size: 13px; color: var(--text); background: #fff; box-shadow: var(--ring); transition: box-shadow .2s, color .2s; }
+.ec-cats a:hover { color: var(--acc); box-shadow: inset 0 0 0 1px rgba(255, 90, 60, .4); }
+.ec-compact { padding: 36px 20px 28px; box-shadow: none; background: radial-gradient(80% 60% at 50% 0%, rgba(255, 154, 92, .12), transparent 70%); border-radius: var(--r-lg); }
+.ec-compact .ec-visual { width: 108px; height: 108px; }
+.ec-compact .ec-bag { width: 70px; height: 70px; border-radius: 24px; }
+.ec-compact .ec-bag svg { width: 38px; height: 38px; }
+.ec-compact .ec-title { font-size: 32px; }
+.ec-compact .ec-text { font-size: 14px; }
+.ec-compact .ec-acts { flex-direction: column; width: 100%; }
+.ec-compact .ec-acts .btn { width: 100%; justify-content: center; }
+.ec-compact .btn.ec-go { justify-content: space-between; padding-left: 22px; }
+@media (hover: none), (pointer: coarse), (max-width: 900px) { .ec-bag { animation: none; } }
+@media (max-width: 560px) { .ec-acts { flex-direction: column; width: 100%; } .ec-acts .btn { width: 100%; justify-content: center; } .btn.ec-go { justify-content: space-between; padding-left: 22px; } }

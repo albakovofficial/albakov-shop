@@ -36,6 +36,9 @@
     genderChoice = GENDERS[g] ? g : 'all';
     try { localStorage.setItem(LS_G, genderChoice); } catch (e) {}
     $$('[data-gender]').forEach(function (b) { var on = b.getAttribute('data-gender') === curGender(); b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); });
+    var ft = $('#app > .footer'), mn = $('.mnav-sub:not(.mnav-sub-sm)');
+    if (ft) { var tmp = document.createElement('div'); tmp.innerHTML = footerHtml(); ft.replaceWith(tmp.firstElementChild); bindFooter(); }
+    if (mn) mn.innerHTML = sortedCats().map(function (c) { return '<a href="#/catalog?cat=' + esc(c.slug) + '">' + esc(c.name) + '</a>'; }).join('');
     routeKeepScroll = true; route();
   }
   function genderTabs(cls) {
@@ -52,7 +55,16 @@
   function plural(n, a, b, c) { n = Math.abs(n) % 100; var n1 = n % 10; if (n > 10 && n < 20) return c; if (n1 > 1 && n1 < 5) return b; if (n1 === 1) return a; return c; }
   function fmtPhone(d) { d = String(d || '').replace(/\D/g, ''); if (d.length !== 11) return d; return '+7 (' + d.slice(1, 4) + ') ' + d.slice(4, 7) + '-' + d.slice(7, 9) + '-' + d.slice(9, 11); }
   function fmtDate(iso) { try { return new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }); } catch (e) { return iso; } }
-  function sortedCats() { return D.categories.slice().sort(function (a, b) { return (a.order || 0) - (b.order || 0); }); }
+  // Категории текущего раздела: в «Мужчинам» нет платьев и юбок, в «Женщинам» — мужских категорий
+  var WOMEN_CAT = /плать|юбк|блуз|сарафан|бюстгал|бель[её] жен|туник|топ[ыи]? жен|колгот|купальник/i, MEN_CAT = /мужск|галстук|запонк|плавки/i;
+  function catGender(c) {
+    if (c.gender === 'women' || c.gender === 'men' || c.gender === 'unisex') return c.gender;
+    var gs = D.products.filter(function (p) { return p.categoryId === c.id && p.active !== false; }).map(function (p) { return p.gender || 'unisex'; });
+    if (gs.length) return gs.every(function (g) { return g === 'women'; }) ? 'women' : gs.every(function (g) { return g === 'men'; }) ? 'men' : 'unisex';
+    return WOMEN_CAT.test(c.name) ? 'women' : MEN_CAT.test(c.name) ? 'men' : 'unisex';
+  }
+  function catInG(c) { var g = curGender(), cg = catGender(c); return !g || cg === 'unisex' || cg === g; }
+  function sortedCats() { return D.categories.filter(catInG).sort(function (a, b) { return (a.order || 0) - (b.order || 0); }); }
   var STATUS = { new: 'Новый', processing: 'Собирается', shipped: 'Передан в доставку', done: 'Выполнен', canceled: 'Отменён', returned: 'Возврат' };
   var PAY = { pending: 'Ожидает оплаты', paid: 'Оплачен', canceled: 'Оплата отменена', refunded: 'Деньги возвращены' };
 
@@ -129,8 +141,10 @@
       '<div class="toast-wrap" aria-live="polite"></div>' +
       fabHtml() +
       '<button class="to-top" id="toTop" aria-label="Наверх" hidden><svg viewBox="0 0 24 24"><path d="M6 14l6-6 6 6"/></svg></button>';
-    updateCartCount(); updateFavCount(); bindFab();
-    // подвал: на телефоне колонки свёрнуты, на компьютере всегда раскрыты
+    updateCartCount(); updateFavCount(); bindFab(); bindFooter();
+  }
+  // подвал: на телефоне колонки свёрнуты, на компьютере всегда раскрыты
+  function bindFooter() {
     var narrow = window.matchMedia && matchMedia('(max-width: 760px)').matches;
     $$('.footer details.fcol').forEach(function (d) { if (narrow) d.removeAttribute('open'); $('summary', d).addEventListener('click', function (e) { if (!(window.matchMedia && matchMedia('(max-width: 760px)').matches)) e.preventDefault(); }); });
   }
@@ -307,12 +321,26 @@
      превращаются в новые. */
   function curRoute() { return '#' + location.pathname + location.search; }
   function toPath(h) { h = String(h || ''); return h.indexOf('#/') === 0 ? h.slice(1) : h; }
-  function navTo(h, replace) {
+  function navTo(h, replace, keep) {
     var u = toPath(h) || '/';
+    if (keep) routeKeepScroll = true;
     if (!replace && u === location.pathname + location.search) { route(); return; }
-    try { history[replace ? 'replaceState' : 'pushState'](null, '', u); } catch (e) { location.href = u; return; }
+    saveScroll();
+    try { history[replace ? 'replaceState' : 'pushState']({ y: keep ? window.scrollY : 0 }, '', u); } catch (e) { location.href = u; return; }
     route();
   }
+  /* Прокрутка: «Назад» возвращает на то же место страницы, а переключение вкладок и фильтров не уводит наверх */
+  try { history.scrollRestoration = 'manual'; } catch (e) {}
+  function saveScroll() { try { history.replaceState(Object.assign({}, history.state, { y: window.scrollY }), ''); } catch (e) {} }
+  var userScrolled = 0;
+  ['touchstart', 'wheel', 'keydown'].forEach(function (ev) { window.addEventListener(ev, function () { userScrolled = Date.now(); }, { passive: true }); });
+  function restoreScroll(y) {
+    var t0 = Date.now(), jump = function () { if (userScrolled > t0) return; window.scrollTo({ top: y, behavior: 'instant' }); };
+    jump(); requestAnimationFrame(jump); setTimeout(jump, 120); setTimeout(jump, 400); // картинки и блоки могли догрузиться
+  }
+  // Ссылка-вкладка или фильтр на той же странице (кабинет, акции, админка) — оставляем прокрутку на месте
+  var KEEP_SCROLL = '.acc-tabs, .tabs, .adm-tabs, .adm-chips, .ost, .chips, .gtabs, [data-keep-scroll]';
+  function sameScreen(href) { var u = toPath(href) || '/'; return u.split('?')[0] === location.pathname; }
   function fromOldHash() {
     if (!/^#\//.test(location.hash)) return false;
     try { history.replaceState(null, '', location.hash.slice(1)); return true; } catch (e) { return false; }
@@ -358,14 +386,20 @@
     var map = { '': home, catalog: catalog, product: product, sale: sale, sizes: sizes, cart: cartPage, checkout: checkout, account: account, order: orderPage, page: textPage, favorites: favoritesPage, track: trackPage, gift: giftPage };
     var fn = map.hasOwnProperty(name) ? map[name] : isAdminRoute(name) ? adminPage : notFound;
     if ((name === '' || name === 'catalog' || name === 'sale') && gClosed(curGender())) fn = soonPage;
-    fn(v, p, r.q);
+    try { fn(v, p, r.q); }
+    catch (err) {
+      // Страница не нарисовалась — показываем понятный экран вместо белого листа, остальной сайт продолжает работать
+      if (window.console) console.error(err);
+      v.innerHTML = '<div class="wrap"><div class="empty"><h3>Страница не открылась</h3><p>Попробуйте ещё раз — обычно это помогает.</p><div class="empty-acts"><button class="btn" type="button" id="viewReload">Обновить</button><a class="btn ghost" href="#/">На главную</a></div></div></div>';
+      $('#viewReload').addEventListener('click', function () { location.reload(); });
+    }
     if (routeN++ && window.Metrika && fn !== adminPage) setTimeout(function () { Metrika.hit(location.pathname + location.search); }, 50);
     pageMeta(name, p, r.q);
     document.body.classList.toggle('hero-under', !!$('#view > .slider:first-child'));
     var fab = $('#fab'); if (fab) { fab.hidden = fn === adminPage || (name === 'account' && r.q.tab === 'support'); fabSet(false); }
     syncHeaderH();
     v.classList.remove('view-in'); void v.offsetWidth; v.classList.add('view-in');
-    if (!routeKeepScroll) window.scrollTo(0, 0);
+    if (!routeKeepScroll) window.scrollTo({ top: 0, behavior: 'instant' });
     routeKeepScroll = false;
   }
   var routeKeepScroll = false;
@@ -413,7 +447,7 @@
     var h = D.settings.adminPathHash;
     return h ? hashPath(name) === h : name === 'admin';
   }
-  function go(h) { navTo(h); }
+  function go(h, keep) { navTo(h, false, keep); }
 
 
   /* ---------- Слайдер на первом экране ---------- */
@@ -995,7 +1029,6 @@
     v.innerHTML = '<div class="wrap"><div class="page-head" style="padding-bottom:20px"><div class="crumbs"><a href="#/">Главная</a><span>/</span><a href="#/catalog">Каталог</a>' + (cat ? '<span>/</span><a href="#/catalog?cat=' + esc(cat.slug) + '">' + esc(cat.name) + '</a>' : '') + '</div></div>' +
       '<div class="product"><div id="galleryBox"></div>' +
       '<div class="pinfo"><div style="display:grid;gap:14px">' + (function () { var b = badgeHtml(p, pr); return b.length ? '<div class="badges-row">' + b.join('') + '</div>' : ''; })() + '<h1>' + esc(p.name) + '</h1>' + specsSummaryHtml(p) + priceHtml(pr) +
-        (partsOn() && partsFits(pr.price) ? '<button type="button" class="parts-chip" id="partsInfo"><span class="parts-ic" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span><b>4 платежа по ' + fmt(Math.ceil(pr.price / 4)) + '</b><small>Частями без переплаты · при оформлении</small></span><span class="parts-go" aria-hidden="true">›</span></button>' : '') +
         (Pricing.bonusFor(pr.price, D.settings) > 0 ? '<div class="p-bonus">' + bonusLine(pr.price, 'p-bonus-n') + '<span class="muted">за покупку · 1 бонус = 1 ₽. Начислим на бонусный счёт ' + (bonusCfg().creditOn === 'done' ? 'после получения заказа' : 'после оплаты') + ', потратить можно на следующие покупки — хоть все сразу' + (API.user ? '' : '. Нужен <a class="link" href="#/account">личный кабинет</a>') + '</span></div>' : '') +
         (pr.promotion ? '<span class="promo-note">Акция «' + esc(pr.promotion.title) + '»' + (pr.promotion.endsAt ? ' до ' + esc(fmtDate(pr.promotion.endsAt)) : '') + '</span>' : '') +
         (pre ? '<div class="pre-box"><div class="pre-top"><b>Предзаказ</b>' + (p.preorderShip ? '<span>отправим ' + esc(preDate()) + '</span>' : '') + '</div>' +
@@ -1109,11 +1142,6 @@
       if (s.stock > 0 && qty > s.stock) { toast('В наличии только ' + s.stock + ' шт.', true); return; }
       BuyNow.start(p.id, col.id, sel, qty);
       go('#/checkout?buy=1');
-    });
-    var pi = $('#partsInfo'); if (pi) pi.addEventListener('click', function () {
-      var sum = priceOf(p).price;
-      openModal('<span class="eyebrow">Оплата частями</span><h3 class="serif" style="font-size:34px;margin:14px 0 8px">4 платежа по ' + fmt(Math.ceil(sum / 4)) + '</h3><p class="muted" style="margin-bottom:22px">Сервис «Плати частями» от Сбера. Без процентов и переплаты: первую часть платите сразу, остальные спишутся автоматически раз в две недели.</p>' +
-        partsPlanHtml(sum) + '<ul class="parts-how"><li>Выберите «Частями» на шаге оплаты при оформлении</li><li>Подтвердите первый платёж кодом из SMS на странице ЮKassa</li><li>Заказ собираем сразу — как при обычной оплате</li></ul><p class="muted" style="font-size:12.5px;margin-top:14px">Для заказов от 1 000 до 50 000 ₽. Решение об оплате частями принимает сервис.</p>');
     });
     var oc = $('#openChart'); if (oc) oc.addEventListener('click', function () {
       openModal(fitMeasuresHtml(p) + (chart ? '<h3 class="serif" style="font-size:34px;margin-bottom:6px">Таблица размеров</h3><p class="muted" style="margin-bottom:22px">' + esc(chart.name) + '</p>' + chartTable(chart) + (chart.note ? '<p class="muted" style="margin-top:16px;font-size:14px">' + esc(chart.note) + '</p>' : '') + measureHtml() : ''));
@@ -1362,15 +1390,6 @@
   }
 
   /* ---------- Корзина ---------- */
-  /* ---------- Оплата частями («Плати частями» через ЮKassa): 4 платежа раз в две недели ---------- */
-  function partsOn() { var p = D.settings.payment || {}; return !!(p.parts && p.parts.enabled && D.payReady); }
-  function partsFits(sum) { return sum >= 1000 && sum <= 50000; }
-  function partsPlan(sum) {
-    var part = Math.floor(sum / 4), first = sum - part * 3, out = [];
-    for (var i = 0; i < 4; i++) { var d = new Date(Date.now() + i * 14 * 864e5); out.push({ sum: i ? part : first, when: i ? d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) : 'Сегодня' }); }
-    return out;
-  }
-  function partsPlanHtml(sum) { return '<div class="parts-plan">' + partsPlan(sum).map(function (x, i) { return '<div class="' + (i ? '' : 'now') + '"><i></i><b class="num">' + fmt(x.sum) + '</b><span>' + x.when + '</span></div>'; }).join('') + '</div>'; }
   function preTag(l) { return '<span class="pre-tag">Предзаказ' + (l.shipDate ? ' · отправим ' + esc(fmtDate(l.shipDate).replace(/ \d{4} г\.$/, '')) : '') + '</span>'; }
   function lineHtml(l) {
     return '<div class="cart-line"><a class="ph" href="#/product/' + esc(l.slug) + '?color=' + esc(l.colorId) + '"><img src="' + esc(l.image || Art.make(l.art)) + '" alt=""></a>' +
@@ -1406,7 +1425,7 @@
   async function renderCartDrawer() {
     var body = $('#cartBody'), foot = $('#cartFoot'); if (!body) return;
     var q = await cartQuote();
-    if (!q.lines.length) { body.innerHTML = '<div class="empty"><h3>Корзина пуста</h3><p>Загляните в каталог — там много спокойных вещей.</p><a class="btn ghost" href="#/catalog">В каталог</a></div>'; foot.hidden = true; return; }
+    if (!q.lines.length) { body.innerHTML = emptyCartHtml(true); foot.hidden = true; return; }
     foot.hidden = false;
     body.innerHTML = bracketHint(q) + q.lines.map(lineHtml).join('');
     foot.innerHTML = (q.saleDiscount ? '<div class="sum-row disc"><span>Скидка</span><span>−' + fmt(q.saleDiscount) + '</span></div>' : '') +
@@ -1422,14 +1441,26 @@
     var r = e.target.closest && e.target.closest('[data-remind]'); if (!r || !API.user) return;
     try { await API.savePrefs({ cartRemind: r.checked }); toast(r.checked ? 'Напомним, если не успеете оформить' : 'Напоминания отключены'); } catch (ex) { toast(errMsg(ex), true); }
   });
+  /* Пустая корзина: спокойная карточка с объёмной иконкой, переход в каталог и подсказки, куда заглянуть */
+  function emptyCartHtml(compact) {
+    var favN = Fav.count(), cats = sortedCats().filter(function (c) { return gProducts().some(function (p) { return p.categoryId === c.id; }); }).slice(0, compact ? 3 : 5);
+    return '<div class="ec' + (compact ? ' ec-compact' : '') + '">' +
+      '<div class="ec-visual" aria-hidden="true"><span class="ec-ring"></span><span class="ec-bag"><svg viewBox="0 0 48 48"><path class="ec-b1" d="M11 17h26l-2.2 22.4a3 3 0 0 1-3 2.6H16.2a3 3 0 0 1-3-2.6z"/><path class="ec-b2" d="M18 17v-3.5a6 6 0 0 1 12 0V17"/><path class="ec-b3" d="M19 26.5c1.3 1.6 3 2.4 5 2.4s3.7-.8 5-2.4"/></svg></span><i class="ec-dot d1"></i><i class="ec-dot d2"></i><i class="ec-dot d3"></i></div>' +
+      '<span class="eyebrow">Корзина</span><h3 class="ec-title">Пока здесь пусто</h3>' +
+      '<p class="ec-text">Загляните в каталог — соберём образ из спокойных вещей. Доставим по всей России, примерить можно перед оплатой.</p>' +
+      '<div class="ec-acts"><a class="btn ec-go" href="#/catalog"><span>Перейти в каталог</span><span class="bn-ic" aria-hidden="true">' + ARROW + '</span></a>' +
+        (favN ? '<a class="btn ghost" href="#/favorites">Избранное · ' + favN + '</a>' : '<a class="btn ghost" href="#/catalog?tag=new">Новинки</a>') + '</div>' +
+      (cats.length ? '<div class="ec-cats">' + cats.map(function (c) { return '<a href="#/catalog?cat=' + esc(c.slug) + '">' + esc(c.name) + '</a>'; }).join('') + '</div>' : '') +
+    '</div>';
+  }
   function openCart() { renderCartDrawer(); openPanel('cartDrawer'); }
 
   function cartPage(v) {
-    v.innerHTML = '<div class="wrap"><div class="page-head"><h1>Корзина</h1></div><div class="checkout"><div id="cpLines"></div><aside class="summary" id="cpSum"></aside></div></div>';
+    v.innerHTML = '<div class="wrap"><div class="page-head"><h1>Корзина</h1></div><div class="checkout"><div id="cpLines"></div><aside class="summary" id="cpSum"></aside></div></div><div id="cpRecent"></div>';
     var draw = async function () {
       var q = await cartQuote();
-      if (!q.lines.length) { $('#cpLines').innerHTML = '<div class="empty"><h3>Корзина пуста</h3><p>Загляните в каталог — там много спокойных вещей.</p><a class="btn ghost" href="#/catalog">В каталог</a></div>'; $('#cpSum').hidden = true; $('#cpLines').parentNode.classList.add('is-empty'); return; }
-      $('#cpSum').hidden = false;
+      if (!q.lines.length) { $('#cpLines').innerHTML = emptyCartHtml(false); drawRecent($('#cpRecent')); $('#cpSum').hidden = true; $('#cpLines').parentNode.classList.add('is-empty'); return; }
+      $('#cpSum').hidden = false; $('#cpLines').parentNode.classList.remove('is-empty'); if ($('#cpRecent')) $('#cpRecent').innerHTML = '';
       $('#cpLines').innerHTML = bracketHint(q) + q.lines.map(lineHtml).join('');
       $('#cpSum').innerHTML = '<div class="sum-row"><span>' + q.count + ' ' + plural(q.count, 'товар', 'товара', 'товаров') + '</span><span>' + fmt(q.baseTotal) + '</span></div>' +
         (q.saleDiscount ? '<div class="sum-row disc"><span>Скидка по акциям</span><span>−' + fmt(q.saleDiscount) + '</span></div>' : '') +
@@ -1456,7 +1487,7 @@
   function checkout(v) {
     var buy = coSrc() === BuyNow;
     if (coSrc().get().length) { stat('k'); if (window.Metrika) Metrika.goal('checkout'); }
-    if (!coSrc().get().length) { v.innerHTML = '<div class="wrap"><div class="empty"><h3>Корзина пуста</h3><a class="btn ghost" href="#/catalog">В каталог</a></div></div>'; return; }
+    if (!coSrc().get().length) { v.innerHTML = '<div class="wrap" style="padding-block:clamp(24px,5vw,64px)">' + emptyCartHtml(false) + '</div>'; return; }
     var s = D.settings, u = API.user || {}, methods = (s.delivery && s.delivery.methods) || [], pay = Object.assign({}, s.payment || {});
     if (!D.payReady) pay.online = false; // ЮKassa ещё не подключена — онлайн-оплату не предлагаем
     var st = { deliveryId: methods[0] && methods[0].id, payment: pay.online ? 'online' : 'cod', code: '', useBonus: false, city: null, pvz: null, sumSeq: 0 };
@@ -1488,7 +1519,6 @@
       coStep(3, 'pay', 'Оплата', 'Оплатите заказ сразу после подтверждения',
         '<div class="options" id="payOpts">' +
         (pay.online ? '<label class="option ico"><input type="radio" name="pay" value="online">' + optIc('payment') + '<span><b>' + esc(pay.onlineLabel || 'Онлайн') + (bonusCfg().enabled && bonusCfg().onlineExtra > 0 ? ' <em class="pay-bonus">+' + bonusCfg().onlineExtra + '% бонусами</em>' : '') + '</b><small>Быстро и безопасно через ЮKassa' + (bonusCfg().enabled && bonusCfg().onlineExtra > 0 ? (API.user ? '. Бонусы придут на следующий заказ' : '. Бонусы — для покупателей с личным кабинетом') : '') + '</small><span class="pay-marks" aria-label="Карта «Мир», СБП, SberPay, T-Pay"><i>МИР</i><i>СБП</i><i>SberPay</i><i>T-Pay</i></span></span><span></span></label>' : '') +
-        (pay.online && partsOn() ? '<label class="option ico opt-parts" id="optParts" hidden><input type="radio" name="pay" value="parts"><span class="opt-ic parts-opt-ic" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span><b>Частями — 4 платежа</b><small id="partsHint">Без переплаты, раз в две недели · «Плати частями»</small><span id="partsPlanBox"></span></span><span class="opt-price" id="partsPrice"></span></label>' : '') +
         (!pay.online && !pay.cod ? '<p class="demo-note">Оформление заказов временно недоступно — свяжитесь с нами по телефону из раздела «Контакты».</p>' : '') +
         (pay.cod ? '<label class="option ico"><input type="radio" name="pay" value="cod">' + optIc('cash') + '<span><b>' + esc(pay.codLabel || 'При получении') + '</b><small id="codHint">Наличными или картой при получении</small></span><span></span></label>' : '') + '</div>' +
         (pay.online ? '<p class="co-secure" id="coSecure"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.5 3 8.3 7 10 4-1.7 7-5.5 7-10V6z"/><path d="m9 12 2 2 4-4"/></svg><span>После подтверждения откроется защищённая страница ЮKassa. Данные карты к нам не попадают, чек придёт на почту.</span></p>' : '') +
@@ -1528,7 +1558,7 @@
     }
     function drawOpts() {
       $('#delivOpts').innerHTML = methods.map(function (m) { return '<label class="option ico' + (st.deliveryId === m.id ? ' on' : '') + '"><input type="radio" name="deliv" value="' + esc(m.id) + '"' + (st.deliveryId === m.id ? ' checked' : '') + '>' + optIc(m.needsAddress === false ? 'pin' : 'delivery') + '<span><b>' + esc(m.name) + '</b><small>' + esc(m.desc || '') + (m.freeFrom ? ' · бесплатно от ' + fmt(m.freeFrom) : '') + '</small></span><span class="num opt-price" data-dp="' + esc(m.id) + '"></span></label>'; }).join('');
-      $$('#payOpts .option').forEach(function (o) { var i = $('input', o); i.checked = i.value === (st.parts ? 'parts' : st.payment); o.classList.toggle('on', i.checked); });
+      $$('#payOpts .option').forEach(function (o) { var i = $('input', o); i.checked = i.value === st.payment; o.classList.toggle('on', i.checked); });
       var m = methods.find(function (x) { return x.id === st.deliveryId; });
       var cm = cdekMode(), pm = cm === 'pvz';
       $('#addrBox').hidden = !(m && m.needsAddress !== false) || !!cm;
@@ -1604,12 +1634,6 @@
       var free = q.lines.length && q.total === 0;
       $('#bonusPaid').hidden = !free; $('#payOpts').hidden = free; st.free = free;
       if (free) $('#bonusPaid').textContent = 'Заказ полностью оплачен ' + (q.giftUsed && q.bonusUsed ? 'сертификатом и бонусами' : q.giftUsed ? 'подарочным сертификатом' : 'бонусами') + ' — платить ничего не нужно.';
-      var op = $('#optParts');
-      if (op) {
-        var fits = partsFits(q.total); op.hidden = !fits;
-        if (fits) { $('#partsPrice').textContent = '4 × ' + fmt(Math.ceil(q.total / 4)); $('#partsPlanBox').innerHTML = st.parts ? partsPlanHtml(q.total) : ''; }
-        else if (st.parts) { st.parts = false; drawOpts(); }
-      }
       submitLabel(); if ($('#coSecure')) $('#coSecure').hidden = st.payment !== 'online' || free;
       return q;
     }
@@ -1661,6 +1685,7 @@
         // курьер: после города — только улица, дом, квартира
         box.innerHTML = cityChip() + '<label class="field pvz-door"><span>Улица, дом, квартира</span><input class="input" id="door-addr" autocomplete="street-address" placeholder="Например, ул. Ленина, 5, кв. 12" value="' + esc(st.addr || '') + '"></label>' +
           '<p class="pvz-door-note"><span id="pvzDeliv">' + delivLine(st.q) + '</span>' + (doorTry() ? ' · ' + doorTry() : '') + '</p>';
+        streetCombo($('#door-addr'), function () { return st.city; });
         pvzSave(); coProgress(); drawSum(); return;
       }
       box.innerHTML = cityChip() + '<div class="pvz-load">Загружаем пункты выдачи…</div>';
@@ -1726,7 +1751,7 @@
     $('#delivOpts').addEventListener('change', function (e) { st.deliveryId = e.target.value; drawOpts(); drawSum(); });
     $('#coBonus').addEventListener('change', function (e) { if (e.target.id === 'co-bonus') { st.useBonus = e.target.checked; drawSum(); } });
     $('#payOpts').addEventListener('change', function (e) {
-      st.parts = e.target.value === 'parts'; st.payment = st.parts ? 'online' : e.target.value;
+      st.payment = e.target.value;
       // при оплате при получении подходят не все пункты СДЭК
       if (codNow() && st.pvz && !st.pvz.cod) { st.pvz = null; st.codReset = true; pvzSave(); }
       drawOpts(); drawSum(); if (st.city && st.points) drawPoints();
@@ -1761,7 +1786,7 @@
       var btn = $('#coSubmit'); btn.disabled = true; btn.textContent = st.payment === 'online' && !st.free ? 'Переходим к оплате…' : 'Оформляем…';
       try {
         if (!st.idem) st.idem = Array.from(crypto.getRandomValues(new Uint8Array(16)), function (x) { return ('0' + x.toString(16)).slice(-2); }).join('');
-        var r = await API.placeOrder({ gift: st.gift && st.q && st.q.gift && st.q.gift.ok ? st.gift : '', parts: !!st.parts, idem: st.idem, saveAddress: !!($('#co-save') && $('#co-save').checked), lines: coSrc().get(), code: st.code, deliveryId: st.deliveryId, payment: st.payment, useBonus: st.useBonus, customer: f, city: needAddr ? $('#co-city').value.trim() : '', address: needAddr ? $('#co-addr').value.trim() : doorMode() ? (st.addr || '').trim() : '', pvz: pvzMode() && st.pvz ? st.pvz.code : '', cityCode: cdekMode() && st.city ? st.city.code : '', pvzType: st.pvz ? st.pvz.type : '', comment: $('#co-comment').value.trim(), consent: true });
+        var r = await API.placeOrder({ gift: st.gift && st.q && st.q.gift && st.q.gift.ok ? st.gift : '', idem: st.idem, saveAddress: !!($('#co-save') && $('#co-save').checked), lines: coSrc().get(), code: st.code, deliveryId: st.deliveryId, payment: st.payment, useBonus: st.useBonus, customer: f, city: needAddr ? $('#co-city').value.trim() : '', address: needAddr ? $('#co-addr').value.trim() : doorMode() ? (st.addr || '').trim() : '', pvz: pvzMode() && st.pvz ? st.pvz.code : '', cityCode: cdekMode() && st.city ? st.city.code : '', pvzType: st.pvz ? st.pvz.type : '', comment: $('#co-comment').value.trim(), consent: true });
         if (window.Metrika && !r.repeated) { Metrika.ec('purchase', r.order.items.map(function (i) { var pp = D.products.find(function (x) { return x.id === i.productId; }); return pp ? ecItem(pp, i.color, i.size, i.qty, i.price) : { id: i.productId, name: i.name, price: i.price, quantity: i.qty }; }), { id: r.order.number, revenue: r.order.total }); Metrika.goal('order', { order_price: r.order.total, currency: 'RUB' }); }
         if (buy) BuyNow.clear(); else Cart.clear();
         if (r.payUrl) { location.href = r.payUrl; return; }
@@ -1993,10 +2018,23 @@
         '<label class="field"><span>Подсказка курьеру <small class="muted">— необязательно</small></span><input class="input" id="ad-note" maxlength="200" placeholder="Подъезд, этаж, домофон" value="' + esc(a.note || '') + '"></label>' +
         '<label class="check"><input type="checkbox" id="ad-def"' + (a.isDefault ? ' checked' : '') + '> <span>Основной адрес — подставлять при оформлении</span></label>' +
         '<p class="form-error" id="adErr"></p><button class="btn block">' + (isNew ? 'Сохранить адрес' : 'Сохранить изменения') + '</button></form>');
+      var picked = a.cdekCity && a.cdekCity.city === a.city ? a.cdekCity : null, cityIn = $('#ad-city');
+      if (D.cdekReady) {
+        cityIn.placeholder = 'Начните вводить, например «Мурино»';
+        bindCombo({ input: cityIn, empty: 'Ничего не нашли — проверьте название',
+          fetch: function (v) { return API.cdekCities(v); },
+          item: function (c) { return '<b>' + esc(c.city) + '</b><span>' + esc(c.region || 'Россия') + '</span>'; },
+          onType: function () { picked = null; cityHint(); },
+          pick: function (c) { picked = { code: c.code, city: c.city, region: c.region || '' }; cityIn.value = c.city; cityIn.classList.remove('invalid'); cityHint(); $('#ad-addr').focus(); } });
+      }
+      function cityHint() { var h = $('#adCityHint'); if (h) h.textContent = picked ? (picked.region || 'Россия') : D.cdekReady ? 'Выберите из списка — область подставится сама' : ''; }
+      (cityIn.closest('.pvz-combo') || cityIn).insertAdjacentHTML('afterend', '<small class="ad-hint" id="adCityHint"></small>'); cityHint();
+      streetCombo($('#ad-addr'), function () { return picked || { city: cityIn.value.trim() }; });
       setTimeout(function () { $(isNew ? '#ad-city' : '#ad-addr').focus(); }, 60);
       $('#adForm').addEventListener('submit', async function (e) {
         e.preventDefault();
-        var f = { id: a.id, kind: ($('input[name="ad-kind"]:checked') || {}).value || 'other', label: $('#ad-label').value.trim(), city: $('#ad-city').value.trim(), address: $('#ad-addr').value.trim(), note: $('#ad-note').value.trim(), isDefault: $('#ad-def').checked, cdekCity: a.cdekCity && a.city === $('#ad-city').value.trim() ? a.cdekCity : null };
+        var f = { id: a.id, kind: ($('input[name="ad-kind"]:checked') || {}).value || 'other', label: $('#ad-label').value.trim(), city: $('#ad-city').value.trim(), address: $('#ad-addr').value.trim(), note: $('#ad-note').value.trim(), isDefault: $('#ad-def').checked, cdekCity: picked && picked.city === $('#ad-city').value.trim() ? picked : null };
+        if (D.cdekReady && !f.cdekCity && f.city) { $('#ad-city').classList.add('invalid'); $('#adErr').textContent = 'Выберите город из списка подсказок — так курьер точно найдёт адрес'; $('#ad-city').focus(); return; }
         $('#ad-city').classList.toggle('invalid', !f.city); $('#ad-addr').classList.toggle('invalid', f.address.length < 3);
         if (!f.city || f.address.length < 3) { $('#adErr').textContent = 'Укажите город и адрес'; return; }
         var L = list(); if (f.isDefault) L = L.map(function (x) { return Object.assign({}, x, { isDefault: false }); });
@@ -2005,6 +2043,47 @@
       });
     }
     draw();
+  }
+
+  /* Поле с подсказками (город из базы СДЭК, улица и дом): стрелки, Enter, Esc, нажатие пальцем.
+     opts: input, fetch(q) → Promise<items>, item(x) → html, pick(x), min — с какой длины искать */
+  function bindCombo(o) {
+    var q = o.input, box = document.createElement('ul'), timer = 0, seq = 0, items = [], act = -1, id = 'cmb' + Math.random().toString(36).slice(2, 8);
+    box.className = 'pvz-sug'; box.id = id; box.setAttribute('role', 'listbox'); box.hidden = true;
+    var wrap = document.createElement('div'); wrap.className = 'pvz-combo'; q.parentNode.insertBefore(wrap, q); wrap.appendChild(q); wrap.appendChild(box);
+    q.setAttribute('role', 'combobox'); q.setAttribute('aria-autocomplete', 'list'); q.setAttribute('aria-controls', id); q.setAttribute('aria-expanded', 'false'); q.setAttribute('autocomplete', 'off');
+    function close() { box.hidden = true; q.setAttribute('aria-expanded', 'false'); act = -1; }
+    function paint() {
+      if (!items.length) { if (o.empty) { box.innerHTML = '<li class="none">' + o.empty + '</li>'; box.hidden = false; } else close(); return; }
+      box.innerHTML = items.map(function (x, i) { return '<li role="option" id="' + id + i + '" data-i="' + i + '"' + (i === act ? ' class="on" aria-selected="true"' : '') + '>' + o.item(x) + '</li>'; }).join('');
+      box.hidden = false; q.setAttribute('aria-expanded', 'true');
+    }
+    function choose(x) { close(); o.pick(x); }
+    q.addEventListener('input', function () {
+      clearTimeout(timer); var v = q.value.trim(), my = ++seq;
+      if (o.onType) o.onType();
+      if (v.length < (o.min || 2)) { close(); return; }
+      timer = setTimeout(function () {
+        Promise.resolve(o.fetch(v)).then(function (r) { if (my !== seq || document.activeElement !== q) return; items = r || []; act = items.length ? 0 : -1; paint(); }, function () { if (my === seq) { items = []; close(); } });
+      }, 260);
+    });
+    q.addEventListener('keydown', function (e) {
+      if (box.hidden || !items.length) return;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); act = (act + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length; paint(); }
+      else if (e.key === 'Enter') { e.preventDefault(); if (act >= 0) choose(items[act]); }
+      else if (e.key === 'Escape') { e.stopPropagation(); close(); }
+    });
+    box.addEventListener('mousedown', function (e) { var li = e.target.closest('[data-i]'); if (li) { e.preventDefault(); choose(items[Number(li.getAttribute('data-i'))]); } });
+    q.addEventListener('blur', function () { setTimeout(close, 150); });
+    return { close: close };
+  }
+  // Подсказка улицы: «улица Петровка, 21» — после выбора курсор в конце, остаётся дописать квартиру
+  function streetCombo(input, cityOf) {
+    return bindCombo({ input: input, min: 3,
+      fetch: function (v) { var c = cityOf(); return c && c.city ? API.geoStreet(v, c.city, c.region) : []; },
+      item: function (x) { return '<b>' + esc(x.label) + '</b>' + (x.house ? '' : '<span>улица</span>'); },
+      pick: function (x) { input.value = x.label + (x.house ? ', кв. ' : ', '); input.dispatchEvent(new Event('input', { bubbles: true })); input.focus(); try { input.setSelectionRange(input.value.length, input.value.length); } catch (e) {} }
+    });
   }
 
   function orderTrack(o) {
@@ -2293,7 +2372,7 @@
         '<p class="form-error" id="authErr"></p><button class="btn block" id="rgBtn">Зарегистрироваться</button>' +
         '<p class="auth-note">Обрабатываем данные по <a href="#/page/privacy" data-page-modal="privacy">политике обработки персональных данных</a>. На почту придёт код из 6 цифр — он подтвердит, что адрес ваш.</p></form>') +
       '<p class="muted auth-switch">' + (mode === 'login' ? 'Нет аккаунта? <button class="link" data-m="register">Зарегистрируйтесь</button>' : 'Уже есть аккаунт? <button class="link" data-m="login">Войдите</button>') + '</p></div></div>' + authAside() + '</div>';
-    $$('[data-m]', v).forEach(function (b) { b.addEventListener('click', function () { go('#/account' + (b.getAttribute('data-m') === 'register' ? '?tab=register' + (backQ ? '&' + backQ : '') : (backQ ? '?' + backQ : ''))); }); });
+    $$('[data-m]', v).forEach(function (b) { b.addEventListener('click', function () { go('#/account' + (b.getAttribute('data-m') === 'register' ? '?tab=register' + (backQ ? '&' + backQ : '') : (backQ ? '?' + backQ : '')), true); }); });
     if (mode === 'register') phoneMask($('#rg-phone'));
     if (mode === 'login') $('#lgForgot').addEventListener('click', function () { forgotFlow($('#lg-login').value.trim(), back); });
     $('#authForm').addEventListener('submit', async function (e) {
@@ -2760,12 +2839,12 @@
     var st = { amount: cfg.nominals[1] || cfg.nominals[0] || 10000, custom: false, when: 'now' };
     var tomorrow = new Date(Date.now() + 864e5 + 3 * 36e5).toISOString().slice(0, 10), maxDate = new Date(Date.now() + 365 * 864e5).toISOString().slice(0, 10);
     v.innerHTML = '<div class="wrap gift-page"><div class="page-head"><span class="eyebrow">Подарочные сертификаты</span><h1>Подарите ' + esc(D.settings.storeName || 'ALBAKOV') + '</h1>' +
-      '<p class="muted gift-lead">Электронный сертификат придёт получателю на почту — сразу или в день праздника. Им можно оплатить любые вещи, целиком или частями.</p></div>' +
+      '<p class="muted gift-lead">Электронный сертификат придёт получателю на почту — сразу или в день праздника. Им можно оплатить любые вещи, целиком или за несколько покупок.</p></div>' +
       '<div class="gift-grid"><div class="gift-visual"><div class="gift-card" id="gcCard"><i class="gc-glow" aria-hidden="true"></i>' +
         '<div class="gc-top"><span class="gc-word">' + esc(String(D.settings.storeName || 'ALBAKOV').toUpperCase()) + '</span><span class="gc-label">Подарочный сертификат</span></div>' +
         '<b class="gc-amount num" id="gcAmount"></b>' +
         '<div class="gc-bottom"><span id="gcFor">Для получателя</span><span class="gc-code">GIFT-••••-••••</span></div></div>' +
-        '<ul class="gift-facts"><li><b>' + cfg.months + ' ' + plural(cfg.months, 'месяц', 'месяца', 'месяцев') + '</b><span>срок действия</span></li><li><b>Частями</b><span>можно тратить несколько раз</span></li><li><b>На почту</b><span>в выбранный день</span></li></ul></div>' +
+        '<ul class="gift-facts"><li><b>' + cfg.months + ' ' + plural(cfg.months, 'месяц', 'месяца', 'месяцев') + '</b><span>срок действия</span></li><li><b>Не сгорает сразу</b><span>можно тратить в несколько покупок</span></li><li><b>На почту</b><span>в выбранный день</span></li></ul></div>' +
       '<form class="gift-form" id="gfForm" novalidate>' +
         '<div class="gf-sec"><span class="gf-k">Сумма</span><div class="gf-noms">' + cfg.nominals.map(function (n) { return '<button type="button" class="chip" data-nom="' + n + '">' + fmt(n) + '</button>'; }).join('') + '<button type="button" class="chip" data-nom="custom">Своя сумма</button></div>' +
           '<label class="field gf-custom" id="gfCustom" hidden><span>Своя сумма, ₽ <small class="muted">— от ' + fmt(cfg.min) + ' до ' + fmt(cfg.max) + '</small></span><input class="input num" id="gf-amount" inputmode="numeric" placeholder="15 000"></label></div>' +
@@ -2870,7 +2949,7 @@
   async function refresh() {
     try { var r = await fetch('api/state', { credentials: 'same-origin' }); var j = await r.json(); if (j.ok) D = j.data; } catch (e) {}
     window.App.D = D;
-    var scroll = window.scrollY; renderShell(); routeKeepScroll = true; route(); window.scrollTo(0, scroll);
+    var scroll = window.scrollY; renderShell(); routeKeepScroll = true; route(); restoreScroll(scroll);
   }
 
   /* ---------- Запуск ---------- */
@@ -2926,7 +3005,7 @@
       var link = e.target.closest('a[href]');
       if (link && !e.defaultPrevented && e.button === 0 && !(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) && !link.target && !link.hasAttribute('download')) {
         var href = link.getAttribute('href');
-        if (/^#\//.test(href) || (/^\/(?!\/)/.test(href) && !/^\/(api|uploads|img|css|js|fonts)\//.test(href) && !/\.[a-z0-9]{2,5}($|\?)/i.test(href))) { e.preventDefault(); navTo(href); }
+        if (/^#\//.test(href) || (/^\/(?!\/)/.test(href) && !/^\/(api|uploads|img|css|js|fonts)\//.test(href) && !/\.[a-z0-9]{2,5}($|\?)/i.test(href))) { e.preventDefault(); navTo(href, false, !!link.closest(KEEP_SCROLL) && sameScreen(href)); }
       }
     });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closePanels(); });
@@ -2960,7 +3039,7 @@
     function onScroll() {
       ticking = false;
       var y = window.scrollY;
-      var hd = $('.header'); if (hd) hd.classList.toggle('scrolled', y > 24);
+      var hd = $('.header'); if (hd) { var was = hd.classList.contains('scrolled'); if (!was && y > 48) hd.classList.add('scrolled'); else if (was && y < 8) hd.classList.remove('scrolled'); }
       var tt = $('#toTop'); if (tt) tt.hidden = y < 900;
     }
     window.addEventListener('scroll', function () { if (!ticking) { ticking = true; requestAnimationFrame(onScroll); } }, { passive: true });
@@ -2971,7 +3050,7 @@
       try { navigator.clipboard.writeText(t).then(done, function () { toast('Трек-номер: ' + t); }); } catch (ex) { toast('Трек-номер: ' + t); }
     });
     initTilt();
-    window.addEventListener('popstate', route);
+    window.addEventListener('popstate', function (e) { var y = (e.state && e.state.y) || 0; routeKeepScroll = true; route(); restoreScroll(y); });
     // кто-то сменил адрес через #/… (старый код, ссылка без перехвата) — переводим в обычный адрес
     window.addEventListener('hashchange', function () { if (fromOldHash()) route(); });
     route();

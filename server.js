@@ -51,6 +51,7 @@ db.secrets = db.secrets || {};
 db.waitlist = db.waitlist || [];
 db.tickets = db.tickets || [];
 db.giftcards = db.giftcards || [];
+if (db.settings && db.settings.payment && db.settings.payment.parts) delete db.settings.payment.parts; // оплата частями убрана в 13.43
 if (!db.secrets.adminHash) {
   const pw = process.env.ADMIN_PASSWORD || crypto.randomBytes(6).toString('base64url');
   db.secrets.adminHash = hashPassword(pw);
@@ -496,10 +497,7 @@ async function createPayment(order) {
     description: `Заказ № ${order.number}`,
     metadata: { orderId: order.id }
   };
-  // «Плати частями» (Сбер, через ЮKassa): 4 платежа за 2 месяца. Чеки по этому способу ЮKassa не отправляет — их пробивает своя касса
-  const parts = order.payment.variant === 'parts';
-  if (parts) body.payment_method_data = { type: 'sber_bnpl' };
-  if (cfg.sendReceipt && !parts) {
+  if (cfg.sendReceipt) {
     body.receipt = {
       customer: receiptCustomer(order),
       items: receiptItems(order, Number(cfg.vatCode) || 1),
@@ -695,11 +693,6 @@ async function placeOrder(req, b) {
   if (q.giftUsed) { const g = findGift(q.gift.code); g.balance -= q.giftUsed; (g.log = g.log || []).push({ at: order.createdAt, orderId: order.id, number: order.number, amount: -q.giftUsed, type: 'spend' }); }
   // Весь заказ оплачен бонусами — платить деньгами нечего
   if (order.total === 0) order.payment = { method: order.giftUsed ? 'gift' : 'bonus', status: 'paid', provider: null };
-  else if (method === 'online' && b.parts) {
-    if (!(pay.parts && pay.parts.enabled)) fail(400, 'Оплата частями сейчас недоступна');
-    if (order.total < 1000 || order.total > 50000) fail(400, 'Частями можно оплатить заказ от 1 000 до 50 000 ₽');
-    order.payment.variant = 'parts';
-  }
   db.orders.push(order);
   const spent = q.bonusUsed ? Pricing.bonusMove(user, -q.bonusUsed, 'spend', order, uid) : null;
   let payUrl = null;
@@ -862,15 +855,42 @@ setInterval(() => { if (statDirty) { statDirty = false; save(); } }, 60e3).unref
    Токен бота хранится в секретах, номер чата — в настройках. Ошибки Telegram не мешают работе магазина. */
 const tgEsc = (s) => String(s == null ? '' : s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 function tgCfg() { const t = (db.settings.telegram || {}); return { token: (db.secrets.telegram || {}).token || '', chatId: t.chatId || '', enabled: t.enabled !== false, events: Object.assign({ order: true, paid: true, support: true, stock: true }, t.events || {}) }; }
+// Российские провайдеры не пускают серверы в дата-центрах к api.telegram.org, поэтому запросы идут через
+// ретранслятор на Cloudflare (Worker пересылает только нужные методы бота). Если ретранслятор недоступен —
+// пробуем напрямую. Рабочий путь запоминаем, чтобы следующие уведомления уходили сразу.
+const TG_RELAY_DEFAULT = 'https://albakov-tg.albakovv-official.workers.dev';
+function tgBases() {
+  const own = String(process.env.TG_API_BASE || (db.settings.telegram || {}).relay || TG_RELAY_DEFAULT).trim().replace(/\/+$/, '');
+  const list = [own, 'https://api.telegram.org'].filter((x, i, a) => /^https:\/\//.test(x) && a.indexOf(x) === i);
+  if (tgGood && list.indexOf(tgGood) > 0) list.unshift(list.splice(list.indexOf(tgGood), 1)[0]);
+  return list;
+}
+let tgGood = '';
+function tgNetMsg(e) {
+  const c = (e && e.cause && (e.cause.code || e.cause.name)) || (e && e.name) || '';
+  if (c === 'AbortError' || /TIMEOUT/i.test(c)) return 'нет ответа за 8 секунд';
+  if (/ENOTFOUND|EAI_AGAIN/.test(c)) return 'адрес не найден (DNS)';
+  if (/ECONNREFUSED|ECONNRESET|EPIPE|UND_ERR_SOCKET|ETIMEDOUT|EHOSTUNREACH|ENETUNREACH/.test(c)) return 'соединение сброшено провайдером';
+  return c || (e && e.message) || 'нет связи';
+}
 async function tgApi(method, body, token) {
   const tk = token || tgCfg().token; if (!tk) throw new Error('Бот не подключён');
-  const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), 10000);
-  try {
-    const r = await fetch('https://api.telegram.org/bot' + tk + '/' + method, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}), signal: ctrl.signal });
+  const errs = [];
+  for (const base of tgBases()) {
+    const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), 8000);
+    let r;
+    try { r = await fetch(base + '/bot' + tk + '/' + method, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}), signal: ctrl.signal }); }
+    catch (e) { errs.push((base.indexOf('api.telegram.org') !== -1 ? 'напрямую' : 'через ретранслятор') + ': ' + tgNetMsg(e)); continue; }
+    finally { clearTimeout(timer); }
+    tgGood = base;
     const j = await r.json().catch(() => ({}));
-    if (!j.ok) throw new Error(j.description || ('Telegram ответил ' + r.status));
+    if (!j.ok) {
+      if (r.status === 401 || r.status === 404) throw new Error('Telegram не узнал токен — скопируйте его из @BotFather ещё раз целиком');
+      throw new Error(j.description || ('Telegram ответил ' + r.status));
+    }
     return j.result;
-  } finally { clearTimeout(timer); }
+  }
+  const err = new Error('сервер магазина не смог связаться с Telegram (' + errs.join('; ') + ')'); err.net = true; throw err;
 }
 function tgSend(kind, text, buttons) {
   const c = tgCfg(); if (!c.token || !c.chatId || !c.enabled || (kind && !c.events[kind])) return Promise.resolve(null);
@@ -887,6 +907,18 @@ function tgOrderText(o, title) {
     '💳 ' + (o.payment.status === 'paid' ? 'оплачено ' : '') + tgEsc(PAYL[o.payment.method] || o.payment.method) + (o.promoCode ? '\n🏷 промокод ' + tgEsc(o.promoCode) : '') + (o.comment ? '\n💬 ' + tgEsc(o.comment) : '');
 }
 function tgState() { const c = tgCfg(); return { connected: !!c.token, bot: (db.secrets.telegram || {}).bot || '', chatId: c.chatId, chatName: (db.settings.telegram || {}).chatName || '' }; }
+// Ищем личный чат владельца с ботом: последнее сообщение боту (после «Запустить»)
+async function tgFindChat() {
+  let ups;
+  try { ups = await tgApi('getUpdates', { limit: 50, allowed_updates: ['message'] }); }
+  catch (e) { if (!/webhook/i.test(e.message)) throw e; await tgApi('deleteWebhook', {}); ups = await tgApi('getUpdates', { limit: 50, allowed_updates: ['message'] }); }
+  const msg = (ups || []).map((u) => u.message).filter((m) => m && m.chat && m.chat.type === 'private').pop();
+  if (!msg) return null;
+  db.settings.telegram = Object.assign({ enabled: true }, db.settings.telegram, { chatId: String(msg.chat.id), chatName: [msg.chat.first_name, msg.chat.last_name].filter(Boolean).join(' ') || msg.chat.username || '' });
+  save();
+  await tgSend('', '✅ Готово! Сюда будут приходить уведомления магазина ' + tgEsc(db.settings.storeName || 'ALBAKOV') + ': заказы, оплаты, вопросы покупателей и заканчивающиеся размеры.');
+  return msg.chat;
+}
 function tgOrder(o) { if (o.test) return; tgSend('order', tgOrderText(o, '🛍 Новый заказ'), [['Открыть заказ', PUBLIC_URL + '/admin?s=orders&id=' + o.id]]); }
 function tgPaid(o) { if (o.test) return; tgSend('paid', tgOrderText(o, '💳 Оплачен заказ'), [['Открыть заказ', PUBLIC_URL + '/admin?s=orders&id=' + o.id]]); }
 function tgSupport(t) {
@@ -899,6 +931,39 @@ function tgLowStock(lines) {
   const low = [];
   lines.forEach((l) => { const s = sizeEntry(l.productId, l.colorId, l.size); if (s && s.stock <= 2 && !l.preorder) low.push('• ' + tgEsc(l.name) + ' · ' + tgEsc([l.color, l.size].filter(Boolean).join(' · ')) + ' — ' + (s.stock > 0 ? 'осталось ' + s.stock + ' шт.' : 'закончился')); });
   if (low.length) tgSend('stock', '⚠️ <b>Заканчивается</b>\n\n' + low.join('\n'), [['Товары', PUBLIC_URL + '/admin?s=products']]);
+}
+
+/* ---------------- Подсказки адреса ---------------- */
+const geoCache = new Map();
+const geoNorm = (v) => String(v || '').toLowerCase().replace(/ё/g, 'е').replace(/[^a-zа-я0-9]+/g, ' ').trim();
+async function streetSuggest(q, city, region) {
+  q = String(q || '').replace(/\s+/g, ' ').trim().slice(0, 80); city = String(city || '').trim().slice(0, 80); region = String(region || '').trim().slice(0, 80);
+  if (q.length < 3 || !city) return [];
+  const key = geoNorm(city + '|' + q);
+  const hit = geoCache.get(key); if (hit && hit.until > Date.now()) return hit.items;
+  const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), 4000);
+  let j;
+  try {
+    const qs = new URLSearchParams({ q: q + ', ' + city + (region ? ', ' + region : ''), limit: '15' }).toString() + '&layer=house&layer=street';
+    const r = await fetch('https://photon.komoot.io/api/?' + qs, { headers: { 'User-Agent': 'ALBAKOV shop (' + PUBLIC_URL + ')' }, signal: ctrl.signal });
+    j = await r.json();
+  } catch (e) { return []; } finally { clearTimeout(timer); }
+  const want = geoNorm(city), seen = new Set(), items = [];
+  for (const f of (j && j.features) || []) {
+    const pr = f.properties || {};
+    if (pr.countrycode && pr.countrycode !== 'RU') continue;
+    // только этот населённый пункт: улица с таким же названием в соседнем городе не подойдёт
+    if (![pr.city, pr.town, pr.village, pr.district, pr.locality, pr.county, pr.state].some((v) => geoNorm(v) === want)) continue;
+    const street = String(pr.street || (pr.type === 'street' ? pr.name : '') || '').trim(); if (!street) continue;
+    const house = String(pr.housenumber || '').trim();
+    const label = street + (house ? ', ' + house : '');
+    if (seen.has(label)) continue; seen.add(label);
+    items.push({ street, house, label, postcode: String(pr.postcode || '') });
+    if (items.length >= 7) break;
+  }
+  if (geoCache.size > 2000) geoCache.clear();
+  geoCache.set(key, { items, until: Date.now() + 864e5 });
+  return items;
 }
 
 /* ---------------- Трек-номер ---------------- */
@@ -1483,6 +1548,12 @@ async function api(req, res, url, body) {
     } catch (e) { console.error('СДЭК:', e.message); fail(502, 'СДЭК сейчас не отвечает. Попробуйте ещё раз через минуту.'); }
   }
 
+  // Подсказки улицы и дома внутри выбранного города (данные OpenStreetMap через Photon) — чтобы адрес был без опечаток
+  if (p[0] === 'geo' && p[1] === 'street' && M === 'GET') {
+    throttle(req, 'geo', 300);
+    return { items: await streetSuggest(url.searchParams.get('q'), url.searchParams.get('city'), url.searchParams.get('region')) };
+  }
+
   if (p[0] === 'notify' && !p[1] && M === 'POST') return subscribe(req, body);
 
   if (p[0] === 'payments' && p[1] === 'yookassa' && M === 'POST') {
@@ -1592,23 +1663,28 @@ async function api(req, res, url, body) {
       const token = String(body.token || '').trim();
       if (!token) { delete db.secrets.telegram; db.settings.telegram = Object.assign({}, db.settings.telegram, { chatId: '', chatName: '' }); save(); return { telegram: tgState() }; }
       if (!/^\d{5,15}:[A-Za-z0-9_-]{30,60}$/.test(token)) fail(400, 'Токен не похож на токен бота: он выглядит как 123456789:AAE…');
-      let me; try { me = await tgApi('getMe', {}, token); } catch (e) { fail(400, 'Telegram не принял токен: ' + e.message); }
+      let me; try { me = await tgApi('getMe', {}, token); } catch (e) { fail(400, e.net ? 'Не получилось проверить токен: ' + e.message + '. Попробуйте через минуту' : e.message); }
       db.secrets.telegram = { token, bot: me.username || '' }; save();
-      return { telegram: tgState() };
-    }
-    if (p[1] === 'telegram' && p[2] === 'find' && M === 'POST') {
-      let ups; try { ups = await tgApi('getUpdates', { limit: 50, allowed_updates: ['message'] }); } catch (e) { fail(400, e.message); }
-      const msg = (ups || []).map((u) => u.message).filter((m) => m && m.chat && m.chat.type === 'private').pop();
-      if (!msg) fail(404, 'Сообщений боту пока нет. Откройте бота в Telegram, нажмите «Запустить» или напишите ему что-нибудь — и повторите');
-      db.settings.telegram = Object.assign({ enabled: true }, db.settings.telegram, { chatId: String(msg.chat.id), chatName: [msg.chat.first_name, msg.chat.last_name].filter(Boolean).join(' ') || msg.chat.username || '' });
-      save();
-      await tgSend('', '✅ Готово! Сюда будут приходить уведомления магазина ' + tgEsc(db.settings.storeName) + ': заказы, оплаты, вопросы покупателей и заканчивающиеся размеры.');
+      if (!tgCfg().chatId) await tgFindChat().catch(() => null); // владелец уже нажал «Запустить» — чат найдётся сразу
       return { telegram: tgState(), settings: db.settings };
     }
+    if (p[1] === 'telegram' && p[2] === 'find' && M === 'POST') {
+      let chat; try { chat = await tgFindChat(); } catch (e) { fail(400, e.message); }
+      if (!chat) fail(404, 'Сообщений боту пока нет. Откройте бота в Telegram, нажмите «Запустить» или напишите ему что-нибудь — и повторите');
+      return { telegram: tgState(), settings: db.settings };
+    }
+    // Проверка: прислать пример любого уведомления — заказ, оплата, обращение, остатки или просто «связь есть»
     if (p[1] === 'telegram' && p[2] === 'test' && M === 'POST') {
       if (!tgCfg().chatId) fail(400, 'Сначала найдите чат');
-      const o = db.orders.filter((x) => !x.test).slice(-1)[0];
-      const r = await tgApi('sendMessage', { chat_id: tgCfg().chatId, parse_mode: 'HTML', text: o ? tgOrderText(o, '🧪 Проверка · так выглядит заказ') : '🧪 Проверка связи — уведомления работают' }).catch((e) => fail(400, e.message));
+      const kind = ['order', 'paid', 'support', 'stock'].includes(body.kind) ? body.kind : 'ping';
+      const o = db.orders.filter((x) => !x.test && x.kind !== 'gift').slice(-1)[0] || { number: '1042', total: 12900, items: [{ name: 'Футболка Оверсайз', color: 'Чёрный', size: 'M', qty: 2 }], customer: { firstName: 'Анна', lastName: 'Иванова', phone: '79001234567' }, delivery: { name: 'СДЭК, пункт выдачи', city: 'Москва' }, payment: { method: 'online', status: 'new' } };
+      const tag = '🧪 <i>Проверка — это пример, не настоящее событие</i>\n\n';
+      const text = kind === 'order' ? tag + tgOrderText(o, '🛍 Новый заказ')
+        : kind === 'paid' ? tag + tgOrderText(Object.assign({}, o, { payment: Object.assign({}, o.payment, { status: 'paid' }) }), '💳 Оплачен заказ')
+        : kind === 'support' ? tag + '💬 <b>Новое обращение № 57</b> · Размер и посадка\n\nАнна: «Здравствуйте! Подскажите, какой размер взять при росте 170 см?»'
+        : kind === 'stock' ? tag + '⚠️ <b>Заканчивается</b>\n\n• Футболка Оверсайз · Чёрный · M — осталось 1 шт.\n• Худи Базовое · Серый · L — закончился'
+        : '✅ Связь с магазином ' + tgEsc(db.settings.storeName || 'ALBAKOV') + ' есть — уведомления приходят сюда.';
+      const r = await tgApi('sendMessage', { chat_id: tgCfg().chatId, parse_mode: 'HTML', text, disable_web_page_preview: true }).catch((e) => fail(400, e.message));
       return { sent: !!r };
     }
     if (p[1] === 'payment-secret' && M === 'POST') {
@@ -1824,7 +1900,7 @@ async function api(req, res, url, body) {
     }
     if (p[1] === 'settings' && M === 'PUT') {
       if (!body.value || typeof body.value !== 'object') fail(400, 'Пустые настройки');
-      db.settings = body.value; save(); return {};
+      db.settings = body.value; if (db.settings.payment) delete db.settings.payment.parts; save(); return {};
     }
     if (COLLECTIONS.includes(p[1])) {
       const arr = db[p[1]];
@@ -1906,13 +1982,16 @@ const CSP = [
   "default-src 'self'", "script-src 'self' https://mc.yandex.ru https://yastatic.net", "style-src 'self' 'unsafe-inline'",
   "font-src 'self' data:", "img-src 'self' data: blob: https:", "connect-src 'self' https://mc.yandex.ru https://mc.yandex.com wss://mc.yandex.ru",
   "frame-src 'self' https://mc.yandex.ru https://mc.yandex.com", // Яндекс Метрика: счётчик, карта кликов
-  "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'self'"
+  "object-src 'none'", "base-uri 'self'", "form-action 'self'"
 ].join('; ');
+// Страницы магазина может показывать у себя плеер Вебвизора и карта кликов Метрики; админку и API — только сам сайт
+const FRAME_SHOP = "frame-ancestors 'self' https://metrika.yandex.ru https://metrika.yandex.by https://metrica.yandex.com https://metrika.yandex.kz https://*.webvisor.com";
 const server = http.createServer(async (req, res) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
-  res.setHeader('Content-Security-Policy', CSP);
+  const strictFrame = /^\/(admin|api)(\/|$)/.test(String(req.url || ''));
+  if (strictFrame) res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Content-Security-Policy', CSP + '; ' + (strictFrame ? "frame-ancestors 'self'" : FRAME_SHOP));
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
   res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
   if (COOKIE_SECURE) res.setHeader('Strict-Transport-Security', 'max-age=31536000');

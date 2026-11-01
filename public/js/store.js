@@ -50,6 +50,7 @@
     async resetPassword(id, code, password) { this.user = (await call('POST', 'api/auth/reset', { id: id, code: code, password: password })).user; Fav.merge(this.user); Cart.merge(this.user); return this.user; },
     async login(l, p) { this.user = (await call('POST', 'api/auth/login', { login: l, password: p })).user; Fav.merge(this.user); Cart.merge(this.user); return this.user; },
     async logout() { await call('POST', 'api/auth/logout'); this.user = null; Fav.set([], true); Cart.set([], true); },
+    async geoStreet(q, city, region) { return (await call('GET', 'api/geo/street?q=' + encodeURIComponent(q) + '&city=' + encodeURIComponent(city || '') + '&region=' + encodeURIComponent(region || ''))).items; },
     async cdekCities(q) { return (await call('GET', 'api/cdek/cities?q=' + encodeURIComponent(q))).cities; },
     async cdekPoints(code) { return (await call('GET', 'api/cdek/points?city=' + encodeURIComponent(code))).points; },
     async adminCdek(body) { return await call('POST', 'api/admin/cdek', body); },

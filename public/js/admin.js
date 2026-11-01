@@ -324,7 +324,7 @@
       '<div><span>Возвращено</span><b class="num' + (back ? ' rf-back' : '') + '">' + (back ? '−' + fmt(back) : '0 ₽') + '</b></div>' +
       '<div><span>Осталось у магазина</span><b class="num">' + fmt(pm.status === 'paid' || pm.status === 'refunded' ? left : 0) + '</b></div></div>';
     var meta = '<dl class="rf-meta"><dt>Плательщик</dt><dd>' + esc(c.lastName + ' ' + c.firstName) + ' · ' + esc(A().fmtPhone(c.phone)) + '</dd>' +
-      '<dt>Способ</dt><dd>' + (pm.method === 'online' ? 'Онлайн через ЮKassa' + (pm.variant === 'parts' ? ' — частями' : '') : pm.method === 'bonus' ? 'Бонусами' : pm.method === 'gift' ? 'Подарочным сертификатом' : 'При получении') + (o.giftUsed ? ' · сертификатом ' + fmt(o.giftUsed) + ' (' + esc(o.giftCode) + ')' : '') + '</dd>' +
+      '<dt>Способ</dt><dd>' + (pm.method === 'online' ? 'Онлайн через ЮKassa' : pm.method === 'bonus' ? 'Бонусами' : pm.method === 'gift' ? 'Подарочным сертификатом' : 'При получении') + (o.giftUsed ? ' · сертификатом ' + fmt(o.giftUsed) + ' (' + esc(o.giftCode) + ')' : '') + '</dd>' +
       (online ? '<dt>Платёж ЮKassa</dt><dd><span class="copyable num">' + esc(pm.providerId) + '</span></dd>' : '') + '</dl>';
     var hist = refunds.length ? '<div class="rf-hist"><b>История возвратов</b>' + refunds.map(function (r) {
       var what = r.items.map(function (i) { return esc(i.name) + ', ' + esc(i.size) + ' × ' + i.qty; }); if (r.delivery) what.push('доставка');
@@ -893,9 +893,9 @@
       itemTitle: function (x) { return x.name; },
       blank: function () { return { name: '', slug: '', image: '', art: { kind: 'tee', tone: '#3b3b3f' }, order: DATA.categories.length + 1 }; },
       sort: function (a, b) { return (a.order || 0) - (b.order || 0); },
-      cols: ['', 'Название', 'Порядок', 'Товаров'],
-      row: function (c) { return ['<img class="adm-thumb" src="' + esc(c.image || Art.make(c.art)) + '" alt="">', esc(c.name), '<span class="num">' + (c.order || 0) + '</span>', '<span class="num">' + DATA.products.filter(function (p) { return p.categoryId === c.id; }).length + '</span>']; },
-      fields: function () { return [{ k: 'name', label: 'Название' }, { k: 'order', label: 'Порядок', type: 'number' }, { k: 'image', label: 'Обложка', type: 'image', hint: 'Вертикальное фото 3:4' }, { k: 'slug', label: 'Адрес', hint: 'Латиницей, заполнится сам' }]; },
+      cols: ['', 'Название', 'Раздел', 'Порядок', 'Товаров'],
+      row: function (c) { return ['<img class="adm-thumb" src="' + esc(c.image || Art.make(c.art)) + '" alt="">', esc(c.name), ({ women: 'Женщинам', men: 'Мужчинам', unisex: 'Оба раздела' })[c.gender] || '<span class="muted">по товарам</span>', '<span class="num">' + (c.order || 0) + '</span>', '<span class="num">' + DATA.products.filter(function (p) { return p.categoryId === c.id; }).length + '</span>']; },
+      fields: function () { return [{ k: 'name', label: 'Название' }, { k: 'gender', label: 'Раздел', type: 'select', options: [['', 'Определять по товарам'], ['women', 'Женщинам'], ['men', 'Мужчинам'], ['unisex', 'В обоих разделах']], hint: 'В каком разделе показывать категорию в меню, подвале и каталоге. «По товарам» — по тому, для кого товары внутри; пустая категория — по названию (платья и юбки — женские)' }, { k: 'order', label: 'Порядок', type: 'number' }, { k: 'image', label: 'Обложка', type: 'image', hint: 'Вертикальное фото 3:4' }, { k: 'slug', label: 'Адрес', hint: 'Латиницей, заполнится сам' }]; },
       read: function (box, c) { c.slug = translit(c.slug || c.name); },
       validate: function (c, all) { if (!c.name) return 'Укажите название'; if (all.some(function (x) { return x.id !== c.id && x.slug === c.slug; })) return 'Такой адрес уже занят'; return ''; }
     });
@@ -1238,13 +1238,15 @@
       '<div class="adm-two"><div class="adm-card"><ol class="tg-steps">' +
         step(1, t.connected, 'Создайте бота', t.connected
           ? '<p>Подключён бот <a class="link" href="https://t.me/' + esc(t.bot) + '" target="_blank" rel="noopener">@' + esc(t.bot) + '</a>. <button class="link" id="tgOff" type="button">Отключить</button></p>'
-          : '<p>Откройте в Telegram <a class="link" href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a>, отправьте ему <b>/newbot</b>, придумайте имя (например, «ALBAKOV Заказы») и адрес бота. BotFather пришлёт токен — длинную строку вида <span class="copyable">123456789:AAE…</span>. Вставьте её сюда:</p>' +
+          : '<p>Бот уже создан? Откройте в Telegram <a class="link" href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a> → <b>/mybots</b> → ваш бот → <b>API Token</b> и скопируйте токен — строку вида <span class="copyable">123456789:AAE…</span>. Нового бота создаёт команда <b>/newbot</b>. Вставьте токен сюда:</p>' +
             '<div class="tg-row"><input class="input" id="tgToken" placeholder="Токен бота" autocomplete="off" spellcheck="false"><button class="btn" id="tgSave" type="button">Подключить</button></div>') +
         step(2, !!t.chatId, 'Напишите боту', t.chatId
           ? '<p>Уведомления приходят в чат: <b>' + esc(t.chatName || t.chatId) + '</b>. <button class="link" id="tgFind" type="button">Найти заново</button></p>'
           : '<p>' + (t.connected ? 'Откройте <a class="link" href="https://t.me/' + esc(t.bot) + '" target="_blank" rel="noopener">@' + esc(t.bot) + '</a>, нажмите «Запустить» — и вернитесь сюда.' : 'После шага 1.') + '</p>' + (t.connected ? '<button class="btn ghost" id="tgFind" type="button">Найти мой чат</button>' : '')) +
-        step(3, !!t.chatId, 'Готово', '<p>Проверьте, как выглядит уведомление о заказе.</p>' + (t.chatId ? '<button class="btn ghost" id="tgTest" type="button">Отправить проверку</button>' : '')) +
-      '</ol><p class="form-error" id="tgErr"></p></div>' +
+        step(3, !!t.chatId, 'Проверьте', t.chatId ? '<p>Пришлём пример — посмотрите, как выглядит каждое уведомление.</p><div class="tg-tests">' +
+            [['ping', 'Связь'], ['order', 'Новый заказ'], ['paid', 'Оплата'], ['support', 'Вопрос покупателя'], ['stock', 'Остатки']].map(function (x) { return '<button class="btn ghost sm" type="button" data-tg-test="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div>' : '<p>После шага 2.</p>') +
+      '</ol><p class="form-error" id="tgErr"></p>' +
+      '<p class="tg-note">Telegram ограничен в России, и серверы магазина не могут обращаться к нему напрямую. Уведомления идут через ваш ретранслятор на Cloudflare — он пересылает только сообщения бота и ничего не хранит.</p></div>' +
       '<div class="adm-card"><h3 class="adm-h3">Что присылать</h3><div class="tg-events">' +
         [['enabled', 'Уведомления включены', 'Главный выключатель'], ['order', 'Новый заказ', 'Состав, покупатель, доставка, оплата'], ['paid', 'Заказ оплачен', 'Когда пришла онлайн-оплата'], ['support', 'Вопросы покупателей', 'Новые обращения и сообщения в поддержку'], ['stock', 'Заканчивается размер', 'Когда после заказа осталось 2 штуки или меньше']].map(function (x) {
           var on = x[0] === 'enabled' ? tg.enabled !== false : ev[x[0]];
@@ -1252,10 +1254,10 @@
         }).join('') + '</div></div></div>';
     var err = $('#tgErr');
     var busy = function (b, on) { if (b) b.disabled = on; };
-    var sv = $('#tgSave'); if (sv) sv.addEventListener('click', async function () { busy(sv, true); err.textContent = ''; try { await A().API.adminPost('telegram', { token: $('#tgToken').value }); await afterSave('Бот подключён'); } catch (e) { err.textContent = A().errMsg(e); busy(sv, false); } });
+    var sv = $('#tgSave'); if (sv) sv.addEventListener('click', async function () { busy(sv, true); err.textContent = ''; try { var r = await A().API.adminPost('telegram', { token: $('#tgToken').value }); await afterSave(r && r.telegram && r.telegram.chatId ? 'Бот подключён, чат найден — проверьте Telegram' : 'Бот подключён'); } catch (e) { err.textContent = A().errMsg(e); busy(sv, false); } });
     var off = $('#tgOff'); if (off) off.addEventListener('click', async function () { if (!confirm('Отключить уведомления в Telegram?')) return; await A().API.adminPost('telegram', { token: '' }); await afterSave('Бот отключён'); });
     var fd = $('#tgFind'); if (fd) fd.addEventListener('click', async function () { busy(fd, true); err.textContent = ''; try { await A().API.adminPost('telegram/find'); await afterSave('Чат найден — проверьте Telegram'); } catch (e) { err.textContent = A().errMsg(e); busy(fd, false); } });
-    var ts = $('#tgTest'); if (ts) ts.addEventListener('click', async function () { busy(ts, true); try { await A().API.adminPost('telegram/test'); toast('Отправили — проверьте Telegram'); } catch (e) { err.textContent = A().errMsg(e); } busy(ts, false); });
+    $$('[data-tg-test]', m).forEach(function (ts) { ts.addEventListener('click', async function () { busy(ts, true); err.textContent = ''; try { await A().API.adminPost('telegram/test', { kind: ts.getAttribute('data-tg-test') }); toast('Отправили «' + ts.textContent + '» — проверьте Telegram'); } catch (e) { err.textContent = A().errMsg(e); } busy(ts, false); }); });
     $$('[data-tg]', m).forEach(function (i) { i.addEventListener('change', async function () {
       var k = i.getAttribute('data-tg'); if (k === 'enabled') tg.enabled = i.checked; else { ev[k] = i.checked; tg.events = ev; }
       try { await A().API.adminSave('settings', s); DATA.settings = s; toast('Сохранено'); } catch (e) { toast(A().errMsg(e), true); }
@@ -1484,8 +1486,6 @@
         '<div class="pm-card' + (p.cod ? ' on' : '') + '" id="pmCod"><div class="pm-top"><span class="pm-ic">' + PAY_IC.cash + '</span><div><b>При получении</b><span>Наличными или картой в пункте выдачи СДЭК</span></div>' + switchHtml('f-cod', p.cod, 'Оплата при получении') + '</div>' +
           '<label class="pm-f"><span>Название на сайте</span><input class="input" id="f-codLabel" value="' + esc(p.codLabel || '') + '" placeholder="При получении"></label>' +
           '<div class="pm-state"><i aria-hidden="true"></i>' + (A().D.cdekReady ? 'Покупатель видит только пункты СДЭК, где принимают оплату. СДЭК возьмёт сумму заказа и доставки и переведёт вам за вычетом комиссии; после вручения заказ отметится оплаченным' : 'Заказ приходит неоплаченным, оплату отмечаете в заказе') + '</div></div>' +
-        '<div class="pm-card' + ((p.parts || {}).enabled ? ' on' : '') + '" id="pmParts"><div class="pm-top"><span class="pm-ic">' + PAY_IC.card + '</span><div><b>Частями</b><span>«Плати частями» от Сбера через ЮKassa: 4 платежа за 2 месяца, без переплаты для покупателя. Заказы от 1 000 до 50 000 ₽</span></div>' + switchHtml('f-parts', (p.parts || {}).enabled, 'Оплата частями') + '</div>' +
-          '<div class="pm-state ' + (ready ? '' : 'warn') + '"><i aria-hidden="true"></i>' + (ready ? 'Перед включением попросите менеджера ЮKassa подключить «Плати частями». Чеки по этому способу ЮKassa не отправляет — их нужно пробивать своей онлайн-кассой' : 'Работает только с подключённой ЮKassa') + '</div></div>' +
       '</div></section>' +
 
       // ---- ЮKassa
@@ -1533,7 +1533,7 @@
       '</div><div class="adm-bar"><button class="btn" id="stSave">Сохранить</button><span class="form-error" id="stErr"></span></div>';
 
     // переключатели способов оплаты подсвечивают карточку
-    [['f-online', 'pmOnline'], ['f-cod', 'pmCod'], ['f-parts', 'pmParts']].forEach(function (x) { $('#' + x[0]).addEventListener('change', function () { $('#' + x[1]).classList.toggle('on', this.checked); }); });
+    [['f-online', 'pmOnline'], ['f-cod', 'pmCod']].forEach(function (x) { $('#' + x[0]).addEventListener('change', function () { $('#' + x[1]).classList.toggle('on', this.checked); }); });
 
     // доставка: живое превью, порядок, удаление, добавление
     var list = $('#dmList');
@@ -1595,8 +1595,7 @@
       if (methods.some(function (x) { return !x.name; })) { err.textContent = 'У каждого способа доставки должно быть название'; return; }
       var prov = ($('input[name="f-provider"]:checked', m) || {}).value || 'demo';
       s.payment = { provider: prov, online: online, cod: cod, onlineLabel: $('#f-onlineLabel').value.trim() || 'Картой или СБП онлайн', codLabel: $('#f-codLabel').value.trim() || 'При получении',
-        yookassa: { shopId: $('#f-shopId').value.trim(), sendReceipt: $('#f-sendReceipt').checked, taxSystem: Number($('#f-taxSystem').value), vatCode: Number($('#f-vatCode').value) },
-        parts: { enabled: $('#f-parts').checked } };
+        yookassa: { shopId: $('#f-shopId').value.trim(), sendReceipt: $('#f-sendReceipt').checked, taxSystem: Number($('#f-taxSystem').value), vatCode: Number($('#f-vatCode').value) } };
       s.delivery = Object.assign({}, s.delivery, { methods: methods });
       try { await A().API.adminSave('settings', s); await afterSave('Сохранено', '#/admin?s=payment'); } catch (ex) { err.textContent = A().errMsg(ex); }
     });

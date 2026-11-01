@@ -5,7 +5,7 @@
    на том же месте, без белого экрана и заставки. */
 (function () {
   var START = 16;    // столько пикселей пальцем — и понятно, тянут вниз или листают вбок
-  var TRIGGER = 72;  // насколько опустить значок, чтобы при отпускании обновилось
+  var TRIGGER = 96;  // насколько опустить значок, чтобы при отпускании обновилось (с запасом — чтобы не срабатывало от резкой прокрутки вверх)
   var MAX = 120;     // ниже значок не опускается
   // Открыто меню, корзина, окно, выбор раздела или ещё идёт заставка — там жест не нужен
   var OVERLAY = '.drawer.open, .modal.open, .gate, #splash, .scrim.open';
@@ -44,6 +44,8 @@
     document.body.appendChild(ind);
     var ic = ind.firstChild;
     var x0 = 0, y0 = 0, dist = 0, state = 'idle';   // idle → maybe → pull → busy
+    // Страница ещё катится по инерции или пружинит у верха — это прокрутка, а не жест обновления
+    var lastScroll = 0; window.addEventListener('scroll', function () { lastScroll = Date.now(); }, { passive: true });
 
     function show(d) {
       var p = Math.min(1, d / TRIGGER);
@@ -62,7 +64,7 @@
       if (state === 'busy' || e.touches.length !== 1) return;
       state = 'idle';
       if (!document.querySelector('#app .header') || typingNow() || (e.target.closest && e.target.closest(FIELD))) return;
-      if (window.scrollY > 0 || document.querySelector(OVERLAY) || innerScrolled(e.target)) return;
+      if (window.scrollY > 0 || Date.now() - lastScroll < 450 || document.querySelector(OVERLAY) || innerScrolled(e.target)) return;
       x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; dist = 0; state = 'maybe';
     }, { passive: true });
 

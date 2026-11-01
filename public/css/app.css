@@ -3585,3 +3585,83 @@ body::after { content: none; display: none; }
 }
 /* Логотип в шапке никогда не сжимается до нуля */
 .header .logo { min-width: max-content; }
+
+/* ---------- 13.49: СДЭК пачкой, приход товара, состояние сайта ---------- */
+.o-pickable td.adm-pick, .o-pickable th.adm-pick { width: 44px; padding-right: 0; }
+.adm-pick input { width: 18px; height: 18px; accent-color: var(--ink); cursor: pointer; }
+.o-cdek { display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: .02em; color: #0f7a3a; background: #e8f6ee; vertical-align: middle; }
+.o-bar { position: sticky; bottom: 16px; z-index: 30; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; padding: 12px 14px 12px 20px; border-radius: 20px; background: rgba(13, 14, 16, .96); color: #fff; box-shadow: 0 24px 48px -20px rgba(13, 14, 16, .6); }
+.o-bar[hidden] { display: none; }
+.o-bar-n { font-size: 14px; color: rgba(255, 255, 255, .75); }
+.o-bar-n b { color: #fff; }
+.o-bar-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.o-bar .btn.sm { min-height: 38px; }
+.o-bar .btn:not(.ghost) { background: var(--acc); border-color: var(--acc); color: #fff; }
+.o-bar .btn.ghost { background: rgba(255, 255, 255, .08); border-color: rgba(255, 255, 255, .18); color: #fff; }
+.o-bar .btn:disabled { opacity: .4; }
+.o-bar .link { color: rgba(255, 255, 255, .7); }
+.o-intakes { display: grid; gap: 8px; margin: 0 0 16px; }
+.o-intake { display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-radius: 16px; background: #f1f7ff; box-shadow: inset 0 0 0 1px rgba(37, 99, 235, .15); }
+.o-intake > div { flex: 1; display: grid; gap: 2px; min-width: 0; }
+.o-intake b { font-weight: 600; font-size: 14px; }
+.o-intake small { font-size: 12.5px; color: var(--muted); }
+.o-intake-ic svg { width: 26px; height: 26px; fill: none; stroke: #2563eb; stroke-width: 1.6; stroke-linejoin: round; }
+.ob-list { display: grid; gap: 8px; max-height: 46vh; overflow: auto; margin-bottom: 14px; }
+.ob-row { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 12px; align-items: start; padding: 12px 14px; border-radius: 14px; background: var(--surface); }
+.ob-row b { display: block; font-weight: 500; font-size: 14px; }
+.ob-row small { display: block; font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+.ob-msg { display: block; font-style: normal; font-size: 12.5px; margin-top: 4px; }
+.ob-st { width: 18px; height: 18px; margin-top: 2px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px #c9ccd2; }
+.ob-row.run .ob-st { box-shadow: inset 0 0 0 2px var(--ink); border-top-color: transparent; animation: ptrSpin .8s linear infinite; background: conic-gradient(var(--ink) 0 25%, transparent 0); }
+.ob-row.ok .ob-st { background: #16a34a; box-shadow: none; }
+.ob-row.ok .ob-msg { color: #15803d; }
+.ob-row.bad .ob-st { background: #dc2626; box-shadow: none; }
+.ob-row.bad .ob-msg { color: #b91c1c; }
+.ob-acts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ik-orders { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+.ik-orders span { padding: 5px 10px; border-radius: 999px; font-size: 12.5px; background: var(--surface); }
+.ik-grid { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 10px; }
+.ik-grid.two { grid-template-columns: 1fr 1fr; }
+.ik .field, .rcv .field { margin-bottom: 12px; }
+.rcv-open { gap: 8px; }
+.rcv-open svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; }
+.rcv-lead { font-size: 14px; margin-bottom: 18px; line-height: 1.6; }
+.rcv-top, .rcv-money { display: grid; grid-template-columns: 1.6fr 1fr; gap: 10px; }
+.rcv-grid { display: grid; gap: 10px; margin-bottom: 8px; }
+.rcv-color { padding: 14px; border-radius: 16px; background: var(--surface); }
+.rcv-ch { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 14px; }
+.rcv-ch i { width: 16px; height: 16px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .12); }
+.rcv-ch b { font-weight: 500; }
+.rcv-sizes { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px; }
+.rcv-sz { display: grid; gap: 4px; text-align: center; }
+.rcv-sz span { font-size: 12.5px; font-weight: 600; }
+.rcv-sz .input { min-height: 42px; padding: 0 8px; text-align: center; background: #fff; }
+.rcv-sz small { font-size: 11px; color: var(--muted); }
+.rcv-now { font-size: 12.5px; margin: 4px 0 14px; }
+.rcv-cost { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
+.rcv-cost label { position: relative; cursor: pointer; }
+.rcv-cost input { position: absolute; opacity: 0; }
+.rcv-cost span { display: grid; gap: 2px; height: 100%; padding: 10px 12px; border-radius: 14px; box-shadow: inset 0 0 0 1px var(--line); transition: box-shadow .2s, background .2s; }
+.rcv-cost b { font-weight: 500; font-size: 13.5px; }
+.rcv-cost small { font-size: 11.5px; color: var(--muted); line-height: 1.35; }
+.rcv-cost input:checked + span { background: #fff; box-shadow: inset 0 0 0 1.5px var(--ink); }
+.rcv-cost input:focus-visible + span { box-shadow: var(--ring); }
+.rcv-sum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 6px 0 10px; padding: 14px; border-radius: 16px; background: linear-gradient(135deg, #fff6f1, #fff); box-shadow: inset 0 0 0 1px rgba(255, 90, 60, .15); }
+.rcv-sum div { display: grid; gap: 2px; }
+.rcv-sum span { font-size: 12px; color: var(--muted); }
+.rcv-sum b { font-weight: 500; font-size: 17px; }
+.rcv-hist { display: grid; gap: 6px; margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 13px; }
+.rcv-h { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.rcv-h span { display: grid; }
+.rcv-h b { font-weight: 500; }
+.rcv-h small { color: var(--muted); font-size: 12px; }
+.site-prob { display: grid; gap: 4px; }
+.site-prob span { font-size: 13.5px; }
+@media (max-width: 600px) {
+  .rcv-top, .rcv-money, .ik-grid.two { grid-template-columns: 1fr; }
+  .ik-grid { grid-template-columns: 1fr 1fr; }
+  .ik-grid > :first-child { grid-column: 1 / -1; }
+  .rcv-cost, .rcv-sum { grid-template-columns: 1fr; }
+  .o-bar { bottom: 8px; padding: 12px; }
+  .o-bar-acts { width: 100%; }
+}

@@ -294,6 +294,7 @@
     var legal = String(DATA.settings.legal || '');
     var legalBad = !legal.trim() || /0{10}|Иванов И\. И\./.test(legal);
     m.innerHTML = head('Обзор') +
+      ((DATA.problems || []).length ? '<div class="adm-alert site-prob"><b>Состояние сайта: нужно внимание</b>' + DATA.problems.map(function (x) { return '<span>' + esc(x.title) + ' — ' + esc(x.text) + '</span>'; }).join('') + '</div>' : '') +
       (legalBad ? '<div class="adm-alert"><b>Укажите реквизиты продавца.</b> Они подставляются в публичную оферту, политику обработки персональных данных и согласие. Сейчас там: «' + esc(legal || 'пусто') + '». <a class="link" href="#/admin?s=settings">Открыть настройки</a></div>' : '') +
       '<div class="adm-stats">' +
         stat('Новые заказы', newN, '#/admin?s=orders&f=new') + stat('Заказов сегодня', todayN, '#/admin?s=orders') + stat('Выручка, всего', fmt(revenue), '#/admin?s=orders') + stat('Покупателей', DATA.users.length, '#/admin?s=customers') +
@@ -307,10 +308,11 @@
 
   /* ================= Заказы ================= */
   function ordersTable(list) {
-    return '<div class="table-wrap adm-table"><table class="sizes"><thead><tr><th>№</th><th>Дата</th><th>Покупатель</th><th>Сумма</th><th>Оплата</th><th>Статус</th></tr></thead><tbody>' +
+    var pick = !!A().D.cdekReady;
+    return '<div class="table-wrap adm-table"><table class="sizes' + (pick ? ' o-pickable' : '') + '"><thead><tr>' + (pick ? '<th class="adm-pick"><input type="checkbox" id="oPickAll" aria-label="Выбрать все"></th>' : '') + '<th>№</th><th>Дата</th><th>Покупатель</th><th>Сумма</th><th>Оплата</th><th>Статус</th></tr></thead><tbody>' +
       list.map(function (o) {
         var ret = o.status === 'returned';
-        return '<tr data-href="#/admin?s=orders&id=' + esc(o.id) + '"' + (ret ? ' class="row-returned"' : '') + '><td>' + esc(o.number) + (o.refunds && o.refunds.length ? '<span class="rf-tag">' + (ret ? 'Возврат' : 'Частичный возврат') + '</span>' : '') + '</td><td>' + esc(new Date(o.createdAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })) + '</td><td>' + esc(o.customer.firstName + ' ' + o.customer.lastName) + '</td><td class="num">' + (o.refunded ? '<s class="muted">' + fmt(o.total) + '</s><br><span class="rf-back">−' + fmt(o.refunded) + '</span>' : fmt(o.total)) + '</td>' +
+        return '<tr data-href="#/admin?s=orders&id=' + esc(o.id) + '"' + (ret ? ' class="row-returned"' : '') + '>' + (pick ? '<td class="adm-pick"><input type="checkbox" data-opick="' + esc(o.id) + '" aria-label="Выбрать заказ ' + esc(o.number) + '"></td>' : '') + '<td>' + esc(o.number) + (o.cdek && o.cdek.number ? '<span class="o-cdek" title="Отправление СДЭК">СДЭК ' + esc(o.cdek.number) + '</span>' : '') + (o.refunds && o.refunds.length ? '<span class="rf-tag">' + (ret ? 'Возврат' : 'Частичный возврат') + '</span>' : '') + '</td><td>' + esc(new Date(o.createdAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })) + '</td><td>' + esc(o.customer.firstName + ' ' + o.customer.lastName) + '</td><td class="num">' + (o.refunded ? '<s class="muted">' + fmt(o.total) + '</s><br><span class="rf-back">−' + fmt(o.refunded) + '</span>' : fmt(o.total)) + '</td>' +
           '<td><span class="status ' + esc(o.refunded ? 'refunded' : o.payment.status) + '">' + esc(payText(o)) + '</span></td><td><span class="status ' + esc(o.status) + '">' + esc(A().STATUS[o.status]) + '</span></td></tr>';
       }).join('') + '</tbody></table></div>';
   }
@@ -326,13 +328,13 @@
     if (q.id) return orderDetail(m, q.id);
     var f = q.f || 'all', search = (q.q || '').toLowerCase();
     var list = DATA.orders.slice().reverse().filter(function (o) {
-      if (f === 'refund' ? !(o.refunds && o.refunds.length) : f !== 'all' && o.status !== f) return false;
+      if (f === 'ship' ? !readyShip(o) : f === 'refund' ? !(o.refunds && o.refunds.length) : f !== 'all' && o.status !== f) return false;
       if (search) { var t = [o.number, o.customer.firstName, o.customer.lastName, o.customer.email, o.customer.phone, A().fmtPhone(o.customer.phone), o.payment.providerId || ''].join(' ').toLowerCase(); if (t.indexOf(search) === -1) return false; }
       return true;
     });
     // Фильтр по статусу: число заказов крупно, подпись под ним, цветная точка статуса
-    var F = [['all', 'Все заказы'], ['new', 'Новые'], ['processing', 'Собираются'], ['shipped', 'В доставке'], ['done', 'Выполнены'], ['canceled', 'Отменены'], ['refund', 'Возвраты']];
-    var cnt = function (k) { return k === 'all' ? DATA.orders.length : k === 'refund' ? DATA.orders.filter(function (o) { return o.refunds && o.refunds.length; }).length : DATA.orders.filter(function (o) { return o.status === k; }).length; };
+    var F = [['all', 'Все заказы']].concat(A().D.cdekReady ? [['ship', 'Готовы к отправке']] : [], [['new', 'Новые'], ['processing', 'Собираются'], ['shipped', 'В доставке'], ['done', 'Выполнены'], ['canceled', 'Отменены'], ['refund', 'Возвраты']]);
+    var cnt = function (k) { return k === 'all' ? DATA.orders.length : k === 'ship' ? DATA.orders.filter(readyShip).length : k === 'refund' ? DATA.orders.filter(function (o) { return o.refunds && o.refunds.length; }).length : DATA.orders.filter(function (o) { return o.status === k; }).length; };
     var tabs = '<nav class="ost" aria-label="Статус заказов">' + F.map(function (x) {
       var n = cnt(x[0]);
       return '<a class="ost-i s-' + x[0] + (f === x[0] ? ' on' : '') + (n ? '' : ' zero') + '" href="#/admin?s=orders&f=' + x[0] + (q.q ? '&q=' + encodeURIComponent(q.q) : '') + '"' + (f === x[0] ? ' aria-current="page"' : '') + '>' +
@@ -341,13 +343,107 @@
     var test = DATA.testOrders ? '<div class="ost-test"><span>Тестовые заказы скрыты и не считаются: ' + DATA.testOrders + '</span><button class="link" type="button" id="delTest">Удалить их</button></div>' : '';
     var emptyTxt = f === 'all' && !search ? ['Заказов пока нет', 'Они появятся здесь сразу после оформления на сайте.'] : ['Ничего не нашлось', search ? 'Проверьте номер заказа, имя, телефон, почту или номер платежа ЮKassa.' : 'В этом статусе заказов нет.'];
     m.innerHTML = head('Заказы', '<input class="input" id="oSearch" type="search" placeholder="Номер, имя, телефон, почта" value="' + esc(q.q || '') + '" style="min-height:42px;width:280px" aria-label="Поиск заказа">') +
-      tabs + test +
-      (list.length ? ordersTable(list) : '<div class="empty"><h3>' + emptyTxt[0] + '</h3><p>' + emptyTxt[1] + '</p></div>');
+      tabs + test + intakesHtml() +
+      (list.length ? ordersTable(list) : '<div class="empty"><h3>' + emptyTxt[0] + '</h3><p>' + emptyTxt[1] + '</p></div>') +
+      (A().D.cdekReady ? '<div class="o-bar" id="oBar" hidden><span class="o-bar-n" id="oBarN"></span><div class="o-bar-acts"><button class="btn sm" type="button" id="obCreate">Создать отправления</button><button class="btn ghost sm" type="button" data-obprint="barcode">Наклейки PDF</button><button class="btn ghost sm" type="button" data-obprint="waybill">Накладные PDF</button><button class="btn ghost sm" type="button" id="obIntake">Вызвать курьера</button><button class="link" type="button" id="obClear">Снять выбор</button></div></div>' : '');
+    if (A().D.cdekReady) bindOrderBatch(m);
     if ($('#delTest')) bindConfirm($('#delTest'), async function () {
       try { var r = await A().API.adminOrderDelete('test'); await afterSave('Удалено тестовых заказов: ' + r.deleted, '#/admin?s=orders'); } catch (e) { toast(A().errMsg(e), true); }
     });
     var si = $('#oSearch'); si.addEventListener('change', function () { window.ALB_NAV.go('#/admin?s=orders&f=' + f + '&q=' + encodeURIComponent(si.value)); });
   }
+  /* ---------- СДЭК пачкой: отправления, печать одним PDF, вызов курьера ---------- */
+  // Готов к отправке: доставка СДЭК, отправления ещё нет, оплачен (или оплата при получении), не отменён
+  function readyShip(o) { return useCdek(o) && !o.cdek && ['new', 'processing'].indexOf(o.status) !== -1 && (o.payment.method !== 'online' || o.payment.status === 'paid'); }
+  function hasShip(o) { return !!(o.cdek && o.cdek.uuid) && ['canceled', 'returned'].indexOf(o.status) === -1; }
+  function intakesHtml() {
+    var today = new Date().toISOString().slice(0, 10), list = (DATA.intakes || []).filter(function (x) { return x.date >= today && x.status !== 'REMOVED'; });
+    if (!list.length) return '';
+    return '<div class="o-intakes">' + list.map(function (x) { return '<div class="o-intake"><span class="o-intake-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7z"/><circle cx="7" cy="17.5" r="1.6"/><circle cx="17.5" cy="17.5" r="1.6"/></svg></span><div><b>Курьер СДЭК ' + esc(x.date.split('-').reverse().slice(0, 2).join('.')) + ', ' + esc(x.from) + '–' + esc(x.to) + '</b><small>' + (x.number ? 'Заявка № ' + esc(x.number) + ' · ' : '') + esc(x.statusName || '') + ' · ' + x.orders.length + ' ' + plural(x.orders.length, 'посылка', 'посылки', 'посылок') + ' · ' + esc(x.address) + '</small></div><button type="button" class="link" data-iksync="' + esc(x.id) + '">Обновить</button><button type="button" class="link" data-ikdel="' + esc(x.id) + '">Отменить</button></div>'; }).join('') + '</div>';
+  }
+  function pickedIds(m) { return $$('[data-opick]:checked', m).map(function (i) { return i.getAttribute('data-opick'); }); }
+  function bindOrderBatch(m) {
+    var bar = $('#oBar'), all = $('#oPickAll');
+    function upd() {
+      var ids = pickedIds(m), os = ids.map(function (id) { return DATA.orders.find(function (o) { return o.id === id; }); }).filter(Boolean);
+      var ready = os.filter(readyShip).length, shipped = os.filter(hasShip).length;
+      bar.hidden = !ids.length;
+      $('#oBarN').innerHTML = 'Выбрано <b>' + ids.length + '</b>' + (ready ? ' · к отправке ' + ready : '') + (shipped ? ' · с отправлением ' + shipped : '');
+      $('#obCreate').disabled = !ready; $('#obCreate').textContent = ready ? 'Создать отправления · ' + ready : 'Создать отправления';
+      $$('[data-obprint]').forEach(function (b) { b.disabled = !shipped; }); $('#obIntake').disabled = !shipped;
+      if (all) { var boxes = $$('[data-opick]', m); all.checked = boxes.length && boxes.every(function (b) { return b.checked; }); all.indeterminate = !all.checked && ids.length > 0; }
+    }
+    $$('[data-opick]', m).forEach(function (b) { b.addEventListener('change', upd); });
+    if (all) all.addEventListener('change', function () { $$('[data-opick]', m).forEach(function (b) { b.checked = all.checked; }); upd(); });
+    $('#obClear').addEventListener('click', function () { $$('[data-opick]', m).forEach(function (b) { b.checked = false; }); upd(); });
+    $('#obCreate').addEventListener('click', function () { batchCreate(pickedIds(m)); });
+    $('#obIntake').addEventListener('click', function () { intakeModal(pickedIds(m)); });
+    $$('[data-obprint]').forEach(function (b) { b.addEventListener('click', function () { batchPrint(pickedIds(m).filter(function (id) { return hasShip(DATA.orders.find(function (o) { return o.id === id; }) || {}); }), b.getAttribute('data-obprint'), b); }); });
+    $$('[data-iksync]', m).forEach(function (b) { b.addEventListener('click', async function () { try { await A().API.adminPost('cdek-intake/' + b.getAttribute('data-iksync') + '/sync'); await afterSave('Статус заявки обновлён'); } catch (e) { toast(A().errMsg(e), true); } }); });
+    $$('[data-ikdel]', m).forEach(function (b) { bindConfirm(b, async function () { try { await call('DELETE', 'cdek-intake/' + b.getAttribute('data-ikdel')); await afterSave('Заявка на курьера отменена'); } catch (e) { toast(A().errMsg(e), true); } }); });
+    upd();
+  }
+  // Создание отправлений по очереди: прогресс по каждому заказу, ошибка одного не мешает остальным
+  function batchCreate(ids) {
+    var os = ids.map(function (id) { return DATA.orders.find(function (o) { return o.id === id; }); }).filter(function (o) { return o && readyShip(o); });
+    if (!os.length) return;
+    var sp = (DATA.settings.cdek || {}).shipmentPoint;
+    var pk = function (o) { return Pricing.parcelFor(o.items.map(function (i) { return { productId: i.productId, qty: i.qty - (i.refundedQty || 0) }; }), DATA.products, DATA.settings.cdek || {}); };
+    A().openModal('<div class="ob"><span class="eyebrow">СДЭК</span><h3 class="serif" style="font-size:32px;margin:12px 0 6px">Отправления: ' + os.length + '</h3><p class="muted" style="font-size:14px;margin-bottom:16px">Посылки сдаёте в ' + esc(sp ? sp.address : 'пункт отгрузки (укажите его в «Оплата и доставка»)') + '. Упаковка и вес — по карточкам товаров, как при создании по одному.</p>' +
+      '<div class="ob-list">' + os.map(function (o) { var p = pk(o); return '<div class="ob-row" data-obrow="' + esc(o.id) + '"><span class="ob-st" aria-hidden="true"></span><div><b>№ ' + esc(o.number) + ' · ' + esc(o.customer.firstName + ' ' + o.customer.lastName) + '</b><small>' + esc(p.pack) + ', ' + p.weight + ' г · ' + esc((o.delivery.pvz && o.delivery.pvz.address) || (o.delivery.door && o.delivery.door.address) || o.delivery.address || '') + '</small><em class="ob-msg"></em></div></div>'; }).join('') + '</div>' +
+      '<p class="form-error" id="obErr"></p><div class="ob-acts"><button class="btn block" type="button" id="obGo"' + (sp ? '' : ' disabled') + '>Создать ' + os.length + ' ' + plural(os.length, 'отправление', 'отправления', 'отправлений') + '</button></div></div>');
+    $('#obGo').addEventListener('click', async function () {
+      var b = this; b.disabled = true; var ok = [], bad = 0;
+      for (var i = 0; i < os.length; i++) {
+        var o = os[i], row = $('[data-obrow="' + o.id + '"]'), p = pk(o);
+        row.classList.add('run'); $('.ob-msg', row).textContent = 'Создаём…'; b.textContent = 'Создаём ' + (i + 1) + ' из ' + os.length + '…';
+        try { var n = await A().API.adminCdekOrder(o.id, 'POST', 'cdek', { pkg: { weight: p.weight, length: p.length, width: p.width, height: p.height } }); ok.push(o.id); row.className = 'ob-row ok'; $('.ob-msg', row).textContent = 'Создано' + (n && n.cdek && n.cdek.number ? ' · СДЭК ' + n.cdek.number : ' · номер присваивается'); }
+        catch (e) { bad++; row.className = 'ob-row bad'; $('.ob-msg', row).textContent = A().errMsg(e); }
+      }
+      await reload();
+      $('.ob-acts').innerHTML = (ok.length ? '<button class="btn" type="button" id="obLabels">Наклейки на ' + ok.length + ' ' + plural(ok.length, 'посылку', 'посылки', 'посылок') + ' · PDF</button><button class="btn ghost" type="button" id="obWay">Накладные · PDF</button><button class="btn ghost" type="button" id="obCall">Вызвать курьера</button>' : '') + '<button class="link" type="button" id="obDone">Закрыть</button>';
+      $('#obErr').textContent = bad ? 'Не создано: ' + bad + '. Причина — у заказа; исправьте и создайте его отдельно.' : '';
+      if ($('#obLabels')) { $('#obLabels').addEventListener('click', function () { batchPrint(ok, 'barcode', this); }); $('#obWay').addEventListener('click', function () { batchPrint(ok, 'waybill', this); }); $('#obCall').addEventListener('click', function () { intakeModal(ok); }); }
+      $('#obDone').addEventListener('click', function () { A().closePanels(); afterSave(ok.length ? 'Создано отправлений: ' + ok.length : 'Готово', '#/admin?s=orders' + (location.search.indexOf('f=ship') !== -1 ? '&f=ship' : '')); });
+    });
+  }
+  // Один PDF на все выбранные заказы (СДЭК готовит его несколько секунд)
+  async function batchPrint(ids, kind, btn) {
+    if (!ids.length) { toast('У выбранных заказов нет отправлений', true); return; }
+    var w = window.open('', '_blank'), label = btn ? btn.textContent : ''; if (btn) { btn.disabled = true; btn.textContent = 'Готовим PDF…'; }
+    try {
+      var r = await fetch('api/admin/cdek-print?kind=' + kind + '&ids=' + ids.map(encodeURIComponent).join(','), { credentials: 'same-origin' });
+      if (!r.ok || !/pdf/.test(r.headers.get('content-type') || '')) { var j = await r.json().catch(function () { return {}; }); throw new Error(j.error || 'Не удалось получить документ'); }
+      var url = URL.createObjectURL(await r.blob()); if (w) w.location = url; else location.href = url;
+    } catch (e) { if (w) w.close(); toast(e.message, true); }
+    if (btn) { btn.disabled = false; btn.textContent = label; }
+  }
+  // Вызов курьера СДЭК: заберёт посылки выбранных заказов по адресу в выбранный день
+  function intakeModal(ids) {
+    var os = ids.map(function (id) { return DATA.orders.find(function (o) { return o.id === id; }); }).filter(function (o) { return o && hasShip(o); });
+    if (!os.length) { toast('Сначала создайте отправления', true); return; }
+    var c = DATA.settings.cdek || {}, pk = c.pickup || {}, cs = DATA.settings.contacts || {}, sp = c.shipmentPoint || {};
+    var d = new Date(); d.setDate(d.getDate() + 1); if (d.getDay() === 0) d.setDate(d.getDate() + 1);
+    var iso = function (x) { return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); };
+    var times = []; for (var h = 9; h <= 21; h++) times.push((h < 10 ? '0' : '') + h + ':00');
+    var sel = function (id, v) { return '<select class="input" id="' + id + '">' + times.map(function (t) { return '<option' + (t === v ? ' selected' : '') + '>' + t + '</option>'; }).join('') + '</select>'; };
+    A().openModal('<div class="ik"><span class="eyebrow">СДЭК</span><h3 class="serif" style="font-size:32px;margin:12px 0 6px">Вызвать курьера</h3><p class="muted" style="font-size:14px;margin-bottom:16px">Курьер СДЭК заберёт ' + os.length + ' ' + plural(os.length, 'посылку', 'посылки', 'посылок') + ' — не нужно везти их в пункт. Услуга платная, по тарифу вашего договора со СДЭК.</p>' +
+      '<div class="ik-orders">' + os.map(function (o) { return '<span>№ ' + esc(o.number) + (o.cdek.number ? ' · ' + esc(o.cdek.number) : '') + '</span>'; }).join('') + '</div>' +
+      '<div class="ik-grid"><label class="field"><span>День</span><input class="input" type="date" id="ikD" min="' + iso(new Date()) + '" value="' + iso(d) + '"></label><label class="field"><span>С</span>' + sel('ikF', '10:00') + '</label><label class="field"><span>До</span>' + sel('ikT', '18:00') + '</label></div>' +
+      '<label class="field"><span>Адрес, откуда забрать <small class="muted">— ' + esc(sp.city || 'город пункта отгрузки') + '</small></span><input class="input" id="ikA" maxlength="255" placeholder="Улица, дом, подъезд, офис" value="' + esc(pk.address || cs.address || '') + '"></label>' +
+      '<div class="ik-grid two"><label class="field"><span>Кто передаст</span><input class="input" id="ikN" maxlength="100" value="' + esc(pk.name || '') + '" placeholder="Имя"></label><label class="field"><span>Телефон</span><input class="input" id="ikP" type="tel" value="' + esc(pk.phone ? A().fmtPhone(pk.phone) : (cs.phone || '')) + '"></label></div>' +
+      '<label class="field"><span>Комментарий курьеру <small class="muted">— необязательно</small></span><input class="input" id="ikC" maxlength="150" placeholder="Например, домофон 12, 3 этаж"></label>' +
+      '<label class="check"><input type="checkbox" id="ikCall" checked> <span>Пусть курьер позвонит заранее</span></label>' +
+      '<p class="form-error" id="ikErr"></p><button class="btn block" type="button" id="ikGo">Вызвать курьера</button></div>');
+    $('#ikGo').addEventListener('click', async function () {
+      var b = this, err = $('#ikErr'); err.textContent = ''; b.disabled = true; b.textContent = 'Отправляем заявку…';
+      try {
+        var r = await A().API.adminPost('cdek-intake', { ids: os.map(function (o) { return o.id; }), date: $('#ikD').value, from: $('#ikF').value, to: $('#ikT').value, cityCode: sp.cityCode, address: $('#ikA').value, name: $('#ikN').value, phone: $('#ikP').value, comment: $('#ikC').value, needCall: $('#ikCall').checked });
+        A().closePanels(); await afterSave('Курьер вызван' + (r.intake.number ? ': заявка № ' + r.intake.number : '') + ' на ' + r.intake.date.split('-').reverse().slice(0, 2).join('.') + ', ' + r.intake.from + '–' + r.intake.to);
+      } catch (e) { err.textContent = A().errMsg(e); b.disabled = false; b.textContent = 'Вызвать курьера'; }
+    });
+  }
+
   /* ---------- Оплата и возврат ---------- */
   // Всё про деньги заказа в одном месте: кто и сколько заплатил, номер платежа ЮKassa, что уже вернули, и форма возврата
   function dt(s) { return new Date(s).toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }); }
@@ -840,6 +936,69 @@
       },
       duplicate: function (p) { p.id = uid('p'); p.name += ' (копия)'; p.slug = translit(p.name) + '-' + Math.random().toString(36).slice(2, 5); p.active = false; return p; }
     });
+    // «Приход товара»: в списке — для любого товара, в карточке — сразу для этого
+    var hd = $('.adm-head', m);
+    if (hd && q.id !== 'new') { hd.insertAdjacentHTML('beforeend', '<button class="btn ghost rcv-open" type="button" id="rcvOpen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z"/><path d="M3 7.5 12 12l9-4.5M12 12v9"/></svg><span>Приход товара</span></button>'); $('#rcvOpen').addEventListener('click', function () { receiveModal(q.id || ''); }); }
+  }
+  /* ---------- Приход товара ----------
+     Пришла партия: сколько штук каждого цвета и размера и сколько стоила одна вещь.
+     Остатки растут сразу, сумма закупки попадает в «Финансы», себестоимость пересчитывается */
+  function receiveModal(pid) {
+    var prods = DATA.products.slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'ru'); });
+    if (!prods.length) { toast('Сначала добавьте товар', true); return; }
+    var p = prods.find(function (x) { return x.id === pid; }) || prods[0];
+    var fin = DATA.finance || {}, cats = (fin.categories || []).filter(function (c) { return c.kind === 'purchase'; });
+    var today = new Date(); today = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+    var recent = (DATA.receipts || []).slice().reverse().slice(0, 5);
+    A().openModal('<div class="rcv"><span class="eyebrow">Склад</span><h3 class="serif" style="font-size:32px;margin:12px 0 6px">Приход товара</h3><p class="muted rcv-lead">Остатки увеличатся сразу, покупатели из списка «Сообщить о поступлении» получат письмо. Сумма закупки запишется в «Финансы», себестоимость пересчитается.</p>' +
+      '<div class="rcv-top"><label class="field"><span>Товар</span><select class="input" id="rcvP">' + prods.map(function (x) { return '<option value="' + esc(x.id) + '"' + (x.id === p.id ? ' selected' : '') + '>' + esc(x.name) + '</option>'; }).join('') + '</select></label>' +
+        '<label class="field"><span>Дата</span><input class="input" type="date" id="rcvD" value="' + today + '"></label></div>' +
+      '<div id="rcvGrid"></div>' +
+      '<div class="rcv-money"><label class="field"><span>Цена одной вещи, ₽ <small class="muted">— пошив, ткань, фурнитура</small></span><input class="input num" type="number" min="0" step="1" id="rcvU" placeholder="Например, 1200"></label>' +
+        '<label class="field"><span>Категория в «Финансах»</span><select class="input" id="rcvC">' + cats.map(function (c) { return '<option value="' + esc(c.id) + '">' + esc(c.name) + '</option>'; }).join('') + '</select></label></div>' +
+      '<div class="rcv-cost" role="radiogroup" aria-label="Себестоимость"><label><input type="radio" name="rcvM" value="avg" checked><span><b>Средняя по складу</b><small>старые и новые вещи вместе</small></span></label><label><input type="radio" name="rcvM" value="set"><span><b>Новая цена</b><small>себестоимость = цена этой партии</small></span></label><label><input type="radio" name="rcvM" value="keep"><span><b>Не менять</b><small>оставить как есть</small></span></label></div>' +
+      '<label class="field"><span>Комментарий <small class="muted">— необязательно</small></span><input class="input" id="rcvN" maxlength="200" placeholder="Например, партия от швейного цеха «Нить»"></label>' +
+      '<div class="rcv-sum" id="rcvSum"></div><p class="form-error" id="rcvErr"></p><button class="btn block" type="button" id="rcvGo">Принять на склад</button>' +
+      (recent.length ? '<div class="rcv-hist"><b>Последние приходы</b>' + recent.map(function (r) { return '<div class="rcv-h"><span><b>' + esc(r.name) + '</b><small>' + esc(r.date.split('-').reverse().join('.')) + ' · ' + r.qty + ' шт.' + (r.total ? ' · ' + fmt(r.total) : '') + '</small></span><button type="button" class="link" data-rcvx="' + esc(r.id) + '">Отменить</button></div>'; }).join('') + '</div>' : '') + '</div>');
+    var cur = function () { return DATA.products.find(function (x) { return x.id === $('#rcvP').value; }); };
+    function grid() {
+      var pr = cur(), cs = Pricing.colorsOf(pr), cost = Number((fin.costs || {})[pr.id]) || 0;
+      $('#rcvGrid').innerHTML = '<div class="rcv-grid">' + cs.map(function (c) {
+        return '<div class="rcv-color"><div class="rcv-ch"><i style="background:' + esc(c.hex || '#ccc') + '"></i><b>' + esc(c.name || 'Цвет') + '</b></div><div class="rcv-sizes">' + (c.sizes || []).map(function (z) {
+          return '<label class="rcv-sz"><span>' + esc(z.size) + '</span><input class="input num" type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-c="' + esc(c.id) + '" data-s="' + esc(z.size) + '"><small>было ' + (Number(z.stock) || 0) + '</small></label>';
+        }).join('') + '</div></div>';
+      }).join('') + '</div><p class="muted rcv-now">Сейчас себестоимость: ' + (cost ? '<b>' + fmt(cost) + '</b>' : 'не указана') + '</p>';
+      $$('#rcvGrid input').forEach(function (i) { i.addEventListener('input', sum); });
+      sum();
+    }
+    function lines() { return $$('#rcvGrid input').map(function (i) { return { colorId: i.getAttribute('data-c'), size: i.getAttribute('data-s'), qty: Math.max(0, Math.round(Number(i.value) || 0)) }; }).filter(function (l) { return l.qty > 0; }); }
+    function sum() {
+      var q = lines().reduce(function (s, l) { return s + l.qty; }, 0), u = Number($('#rcvU').value) || 0, pr = cur(), mode = ($('input[name="rcvM"]:checked') || {}).value;
+      var units0 = Pricing.colorsOf(pr).reduce(function (s, c) { return s + (c.sizes || []).reduce(function (t, z) { return t + Math.max(0, Number(z.stock) || 0); }, 0); }, 0), c0 = Number((fin.costs || {})[pr.id]) || 0;
+      var c1 = !u || mode === 'keep' ? c0 : mode === 'set' || !c0 || !units0 ? u : Math.round((units0 * c0 + q * u) / (units0 + q));
+      $('#rcvSum').innerHTML = '<div><span>Штук</span><b class="num">' + q + '</b></div><div><span>Сумма закупки</span><b class="num">' + fmt(q * u) + '</b></div><div><span>Себестоимость станет</span><b class="num">' + (c1 ? fmt(c1) : '—') + '</b></div>';
+      $('#rcvGo').textContent = q ? 'Принять на склад · ' + q + ' шт.' : 'Принять на склад';
+    }
+    $('#rcvP').addEventListener('change', grid); $('#rcvU').addEventListener('input', sum); $$('input[name="rcvM"]').forEach(function (r) { r.addEventListener('change', sum); });
+    grid();
+    $('#rcvGo').addEventListener('click', async function () {
+      var b = this, err = $('#rcvErr'), ls = lines(); err.textContent = '';
+      if (!ls.length) { err.textContent = 'Укажите, сколько штук пришло'; return; }
+      if (!cats.length && Number($('#rcvU').value) > 0) { err.textContent = 'В «Финансах» нет категории закупки'; return; }
+      b.disabled = true;
+      try {
+        var r = await A().API.adminPost('finance/receive', { productId: $('#rcvP').value, date: $('#rcvD').value, lines: ls, unitCost: $('#rcvU').value, categoryId: $('#rcvC').value, costMode: ($('input[name="rcvM"]:checked') || {}).value, note: $('#rcvN').value.trim() });
+        A().closePanels(); await afterSave('Принято на склад: ' + r.receipt.qty + ' шт.' + (r.receipt.total ? ', закупка ' + fmt(r.receipt.total) + ' записана в «Финансы»' : ''));
+      } catch (e) { err.textContent = A().errMsg(e); b.disabled = false; }
+    });
+    $$('[data-rcvx]').forEach(function (x) { bindConfirm(x, async function () {
+      try { await call('DELETE', 'finance/receive/' + x.getAttribute('data-rcvx')); A().closePanels(); await afterSave('Приход отменён: остатки и закупка возвращены'); } catch (e) { $('#rcvErr').textContent = A().errMsg(e); }
+    }); });
+  }
+  // DELETE/GET к API панели (у Store — только POST/PUT)
+  async function call(method, path) {
+    var r = await fetch('api/admin/' + path, { method: method, credentials: 'same-origin', headers: { 'Content-Type': 'application/json' } }); var j = await r.json().catch(function () { return {}; });
+    if (!r.ok || j.ok === false) throw new Error(j.error || 'Не получилось'); return j;
   }
   /* Характеристики: варианты отмечаются нажатием (js/specs.js), в карточке — блок «Характеристики» */
   function specsEditorHtml(p) {
@@ -1689,7 +1848,7 @@
     var s = clone(DATA.settings), n = s.ownerNotify = Object.assign({ email: '', events: {} }, s.ownerNotify || {});
     var ev = Object.assign({ order: true, support: true, stock: true }, n.events);
     var main = (s.contacts || {}).email || '', ready = !!A().D.mailReady;
-    var KINDS = [['order', 'Новый заказ', 'Состав, покупатель, доставка и оплата. Заказ с онлайн-оплатой приходит, когда деньги поступили'], ['support', 'Вопросы покупателей', 'Новые обращения и сообщения в поддержку'], ['stock', 'Заканчивается размер', 'Когда после заказа осталось 2 штуки или меньше']];
+    var KINDS = [['order', 'Новый заказ', 'Состав, покупатель, доставка и оплата. Заказ с онлайн-оплатой приходит, когда деньги поступили'], ['support', 'Вопросы покупателей', 'Новые обращения и сообщения в поддержку'], ['stock', 'Заканчивается размер', 'Когда после заказа осталось 2 штуки или меньше'], ['system', 'Проблемы сайта', 'Ночная резервная копия не сделалась или на сервере кончается место']];
     m.innerHTML = '<p class="mh-lead">Новые заказы, вопросы покупателей и заканчивающиеся размеры приходят письмом на вашу почту — сразу, как только что-то произошло.</p>' +
       '<div class="adm-two"><div class="adm-card al-card"><h3 class="adm-h3">Куда присылать</h3>' +
         '<label class="field"><span>Почта для уведомлений</span><input class="input" id="alEmail" type="email" inputmode="email" autocomplete="email" placeholder="' + esc(main || 'shop@example.ru') + '" value="' + esc(n.email || '') + '"></label>' +

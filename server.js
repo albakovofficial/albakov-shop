@@ -55,6 +55,8 @@ db.tickets = db.tickets || [];
 db.giftcards = db.giftcards || [];
 // Финансы (13.46): расходы — отдельные записи; себестоимость и ставки — не в settings, чтобы не уходить на витрину
 db.expenses = db.expenses || [];
+db.receipts = db.receipts || [];
+db.intakes = db.intakes || [];
 db.finance = Finance.cleanSettings(db.finance, db.finance);
 if (db.settings && db.settings.payment && db.settings.payment.parts) delete db.settings.payment.parts; // оплата частями убрана в 13.43
 if (db.settings && db.settings.telegram) delete db.settings.telegram; // уведомления в Telegram заменены письмами (13.43)
@@ -889,7 +891,7 @@ setInterval(() => { if (statDirty) { statDirty = false; save(); } }, 60e3).unref
 /* ---------------- Уведомления владельцу на почту ----------------
    Новые заказы, вопросы покупателей и заканчивающиеся размеры — письмом на основную почту магазина.
    Адрес и что присылать — в панели, раздел «Уведомления на почту». */
-const OWNER_EVENTS = { order: true, support: true, stock: true };
+const OWNER_EVENTS = { order: true, support: true, stock: true, system: true };
 function ownerCfg() { const n = db.settings.ownerNotify || {}; return { email: String(n.email || '').trim(), events: Object.assign({}, OWNER_EVENTS, n.events || {}) }; }
 function ownerTo(kind) {
   const c = ownerCfg(); if (kind && c.events[kind] === false) return '';
@@ -1024,6 +1026,9 @@ function financeApi(p, M, body) {
     Object.assign(costs, Finance.cleanCosts(v, ids));
     db.finance.costs = costs; save(); return { finance: db.finance };
   }
+  // Приход товара: остатки растут, закупка уходит в расходы, себестоимость пересчитывается
+  if (p[2] === 'receive' && !p[3] && M === 'POST') return receiveGoods(body);
+  if (p[2] === 'receive' && p[3] && M === 'DELETE') return receiveCancel(p[3]);
   if (p[2] === 'expenses') {
     if (!p[3] && M === 'POST') {
       const r = Finance.cleanExpense(body, db.finance); if (r.error) fail(400, r.error);
@@ -1036,6 +1041,154 @@ function financeApi(p, M, body) {
   }
   fail(404, 'Не найдено');
 }
+/* ---------- Приход товара ----------
+   Пришла партия: указываете товар, сколько штук каждого цвета и размера и сколько стоила одна вещь.
+   Остатки сразу растут (и уходят письма «Снова в наличии»), сумма закупки записывается операцией
+   в «Финансы» (категория закупки), себестоимость товара пересчитывается — средняя по складу или новая цена. */
+function receiveGoods(b) {
+  const pr = db.products.find((x) => x.id === b.productId); if (!pr) fail(400, 'Выберите товар');
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(b.date || '')) ? b.date : new Date(Date.now() + 3 * 36e5).toISOString().slice(0, 10);
+  const lines = [];
+  (Array.isArray(b.lines) ? b.lines : []).forEach((l) => {
+    const qty = Math.round(Number(l && l.qty) || 0); if (qty <= 0) return;
+    if (qty > 100000) fail(400, 'Слишком большое количество');
+    const c = (pr.colors || []).find((x) => x.id === l.colorId); const sz = c && (c.sizes || []).find((x) => x.size === l.size);
+    if (!sz) fail(400, 'Такого цвета или размера у товара нет — добавьте его в карточке товара');
+    lines.push({ colorId: c.id, color: c.name || '', size: sz.size, qty });
+  });
+  if (!lines.length) fail(400, 'Укажите количество хотя бы для одного размера');
+  const qty = lines.reduce((s, l) => s + l.qty, 0);
+  const unit = Math.round(Math.max(0, Math.min(10000000, Number(b.unitCost) || 0)) * 100) / 100;
+  const units0 = (pr.colors || []).reduce((s, c) => s + (c.sizes || []).reduce((t, z) => t + Math.max(0, Number(z.stock) || 0), 0), 0);
+  const costBefore = Number(db.finance.costs[pr.id]) || 0;
+  const mode = ['avg', 'set', 'keep'].includes(b.costMode) ? b.costMode : 'avg';
+  let costAfter = costBefore;
+  if (unit > 0 && mode !== 'keep') costAfter = mode === 'set' || !(costBefore > 0) || units0 <= 0 ? unit : Math.round((units0 * costBefore + qty * unit) / (units0 + qty) * 100) / 100;
+  // операция в «Финансах»
+  let expense = null;
+  if (unit > 0) {
+    const cats = db.finance.categories || [];
+    const cat = cats.find((c) => c.id === b.categoryId && c.kind === 'purchase') || cats.find((c) => c.kind === 'purchase');
+    if (!cat) fail(400, 'В «Финансах» нет категории закупки — добавьте её в настройках');
+    const note = ('Приход: ' + pr.name + ' — ' + lines.map((l) => (l.color ? l.color + ' ' : '') + l.size + ' × ' + l.qty).join(', ') + (b.note ? '. ' + String(b.note) : '')).slice(0, 300);
+    const r = Finance.cleanExpense({ date, categoryId: cat.id, amount: Math.round(unit * qty * 100) / 100, note }, db.finance); if (r.error) fail(400, r.error);
+    expense = Object.assign({ id: uid('x'), createdAt: new Date().toISOString(), auto: 'receive' }, r.value);
+  }
+  // остатки
+  lines.forEach((l) => { const sz = pr.colors.find((c) => c.id === l.colorId).sizes.find((z) => z.size === l.size); sz.stock = Math.max(0, Number(sz.stock) || 0) + l.qty; });
+  if (expense) db.expenses.push(expense);
+  if (costAfter !== costBefore) db.finance.costs = Object.assign({}, db.finance.costs, { [pr.id]: costAfter });
+  const rec = { id: uid('r'), at: new Date().toISOString(), date, productId: pr.id, name: pr.name, lines, qty, unitCost: unit, total: Math.round(unit * qty * 100) / 100, costMode: mode, costBefore, costAfter, expenseId: expense ? expense.id : '', note: String(b.note || '').slice(0, 200) };
+  db.receipts.push(rec);
+  save();
+  processWaitlist().catch((e) => console.error('Снова в наличии:', e.message));
+  return { receipt: rec, product: pr, finance: db.finance, expense };
+}
+// Отмена прихода (ошиблись при вводе): остатки уменьшаются обратно, операция закупки удаляется
+function receiveCancel(id) {
+  const rec = db.receipts.find((x) => x.id === id); if (!rec) fail(404, 'Приход не найден');
+  const pr = db.products.find((x) => x.id === rec.productId);
+  if (pr) {
+    for (const l of rec.lines) { const c = (pr.colors || []).find((x) => x.id === l.colorId), sz = c && c.sizes.find((z) => z.size === l.size); if (sz && (Number(sz.stock) || 0) < l.qty) fail(400, 'Часть этой партии уже продана (' + (l.color ? l.color + ' ' : '') + l.size + ') — отменить приход целиком нельзя. Поправьте остатки в карточке товара'); }
+    rec.lines.forEach((l) => { const sz = pr.colors.find((x) => x.id === l.colorId).sizes.find((z) => z.size === l.size); sz.stock = Math.max(0, (Number(sz.stock) || 0) - l.qty); });
+    if (Number(db.finance.costs[pr.id]) === rec.costAfter && rec.costAfter !== rec.costBefore) { const c = Object.assign({}, db.finance.costs); if (rec.costBefore > 0) c[pr.id] = rec.costBefore; else delete c[pr.id]; db.finance.costs = c; }
+  }
+  if (rec.expenseId) db.expenses = db.expenses.filter((x) => x.id !== rec.expenseId);
+  db.receipts = db.receipts.filter((x) => x !== rec);
+  save(); return { finance: db.finance, product: pr || null };
+}
+
+/* ---------- СДЭК пачкой: одна печать на несколько заказов, вызов курьера ---------- */
+async function cdekBatchApi(p, M, body, url) {
+  if (!cdek.ready()) fail(400, 'СДЭК не подключён — введите ключи в «Оплата и доставка»');
+  // Наклейки или накладные сразу для нескольких заказов — один PDF
+  if (p[1] === 'cdek-print' && M === 'GET') {
+    const ids = String(url.searchParams.get('ids') || '').split(',').filter(Boolean).slice(0, 100);
+    const os = ids.map((id) => db.orders.find((x) => x.id === id)).filter((o) => o && o.cdek && o.cdek.uuid);
+    if (!os.length) fail(400, 'У выбранных заказов нет отправлений СДЭК');
+    const kind = url.searchParams.get('kind') === 'barcode' ? 'barcode' : 'waybill';
+    let buf; try { buf = await cdek.print(os.map((o) => o.cdek.uuid), kind); } catch (e) { fail(502, 'СДЭК: ' + e.message); }
+    return { __file: { buf, type: 'application/pdf', name: (kind === 'barcode' ? 'naklejki-' : 'nakladnye-') + os.length + '-zakaz.pdf' } };
+  }
+  // Вызов курьера: забрать посылки выбранных заказов по адресу магазина
+  if (p[1] === 'cdek-intake' && !p[2] && M === 'POST') {
+    const ids = (Array.isArray(body.ids) ? body.ids : []).slice(0, 100);
+    const os = ids.map((id) => db.orders.find((x) => x.id === id)).filter((o) => o && o.cdek && o.cdek.uuid && !['canceled', 'returned'].includes(o.status));
+    if (!os.length) fail(400, 'Выберите заказы с созданными отправлениями');
+    const date = String(body.date || ''); if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) fail(400, 'Выберите день');
+    const today = new Date(Date.now() + 3 * 36e5).toISOString().slice(0, 10); if (date < today) fail(400, 'День уже прошёл');
+    const tm = (v) => /^([01]\d|2[0-3]):[0-5]\d$/.test(String(v || '')) ? String(v) : '';
+    const from = tm(body.from) || '10:00', to = tm(body.to) || '18:00';
+    const mins = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3));
+    if (mins(to) - mins(from) < 180) fail(400, 'СДЭК просит окно не короче 3 часов');
+    const pk = { cityCode: Number(body.cityCode) || Number((cdekCfg().shipmentPoint || {}).cityCode) || 0, address: String(body.address || '').trim().slice(0, 255), name: String(body.name || '').trim().slice(0, 100), phone: normPhone(body.phone) };
+    if (!pk.cityCode) fail(400, 'Укажите город');
+    if (pk.address.length < 5) fail(400, 'Укажите адрес, откуда забрать посылки');
+    if (!pk.name) fail(400, 'Укажите, кто передаст посылки');
+    if (pk.phone.length !== 11) fail(400, 'Проверьте телефон');
+    // запоминаем адрес забора для следующего раза
+    db.settings.cdek = Object.assign({}, db.settings.cdek, { pickup: pk });
+    const weight = os.reduce((s, o) => s + ((o.cdek.pkg && o.cdek.pkg.weight) || 500), 0);
+    const req = {
+      intake_date: date, intake_time_from: from, intake_time_to: to,
+      name: 'Одежда, ' + os.length + ' ' + (os.length === 1 ? 'посылка' : os.length < 5 ? 'посылки' : 'посылок'),
+      weight, length: 40, width: 30, height: Math.min(150, 10 * os.length),
+      comment: ('Заказы: ' + os.map((o) => o.cdek.number || ('ALB-' + o.number)).join(', ') + (body.comment ? '. ' + String(body.comment) : '')).slice(0, 255),
+      need_call: !!body.needCall,
+      sender: { company: db.settings.storeName || 'ALBAKOV', name: pk.name, phones: [{ number: '+' + pk.phone }] },
+      from_location: { code: pk.cityCode, address: pk.address }
+    };
+    if (os.length === 1 && os[0].cdek.number) req.cdek_number = Number(os[0].cdek.number) || undefined;
+    let uuid; try { uuid = await cdek.intake(req); } catch (e) { fail(502, 'СДЭК: ' + e.message); }
+    const it = { id: uid('k'), uuid, number: '', status: 'ACCEPTED', statusName: 'Заявка принята', createdAt: new Date().toISOString(), date, from, to, orders: os.map((o) => ({ id: o.id, number: o.number, cdek: o.cdek.number || '' })), address: pk.address, weight };
+    db.intakes.push(it); save();
+    try { await new Promise((r) => setTimeout(r, 1500)); const info = await cdek.intakeInfo(uuid); if (info.error) { db.intakes = db.intakes.filter((x) => x !== it); save(); fail(400, 'СДЭК отклонил заявку: ' + info.error); } Object.assign(it, { number: info.number, status: info.status || it.status, statusName: info.statusName || it.statusName }); save(); } catch (e) { if (e instanceof HttpError) throw e; }
+    os.forEach((o) => hist(o, 'Вызван курьер СДЭК на ' + date + ', ' + from + '–' + to, 'admin'));
+    save(); return { intake: it, intakes: db.intakes };
+  }
+  if (p[1] === 'cdek-intake' && p[2]) {
+    const it = db.intakes.find((x) => x.id === p[2]); if (!it) fail(404, 'Заявка не найдена');
+    if (M === 'POST' && p[3] === 'sync') { try { const info = await cdek.intakeInfo(it.uuid); Object.assign(it, { number: info.number || it.number, status: info.status || it.status, statusName: info.statusName || it.statusName }); save(); } catch (e) { fail(502, 'СДЭК: ' + e.message); } return { intake: it };
+    }
+    if (M === 'DELETE') { try { await cdek.intakeCancel(it.uuid); } catch (e) { fail(502, 'СДЭК: ' + e.message); } it.status = 'REMOVED'; it.statusName = 'Отменена'; save(); return { intake: it }; }
+  }
+  fail(404, 'Не найдено');
+}
+
+/* ---------- Присмотр за сайтом ----------
+   Раз в час: резервные копии (файл состояния от tools/backup.js) и место на диске.
+   Что-то не так — письмо владельцу, не чаще раза в сутки по каждой проблеме. Если сайт совсем не отвечает,
+   написать он не сможет — для этого включён внешний мониторинг Яндекс Метрики. */
+function siteProblems() {
+  const out = [];
+  try {
+    const st = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'backup-status.json'), 'utf8'));
+    const age = (Date.now() - new Date(st.at).getTime()) / 36e5;
+    if (!st.ok) out.push({ key: 'backup-fail', title: 'Резервная копия не сделалась', text: 'Последняя попытка ' + new Date(st.at).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' }) + ' закончилась ошибкой' + (st.error ? ': ' + st.error : '') + '.' });
+    else if (age > 30) out.push({ key: 'backup-old', title: 'Резервные копии не обновлялись ' + Math.round(age / 24 * 10) / 10 + ' дн.', text: 'Копия должна делаться каждую ночь в 03:30. Последняя — ' + new Date(st.at).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' }) + '.' });
+    else if (st.s3 && st.s3.enabled && st.s3.ok === false) out.push({ key: 'backup-s3', title: 'Копия не ушла в хранилище Selectel', text: 'На сервере копия есть, а в облачное хранилище не загрузилась' + (st.s3.error ? ': ' + st.s3.error : '') + '.' });
+  } catch (e) { /* копии ещё не настраивались (например, на тестовой копии) — молчим */ }
+  try {
+    const st = fs.statfsSync(DATA_DIR), free = st.bavail * st.bsize, total = st.blocks * st.bsize;
+    if (free < 1.5e9 || free / total < 0.08) out.push({ key: 'disk', title: 'Заканчивается место на сервере', text: 'Свободно ' + (Math.round(free / 1e8) / 10) + ' ГБ из ' + (Math.round(total / 1e8) / 10) + ' ГБ. Когда место кончится, заказы перестанут сохраняться.' });
+  } catch (e) {}
+  return out;
+}
+function siteAlertMail(problems, test) {
+  const to = ownerTo('system'); if (!to || !mailReady() || !problems.length) return Promise.resolve(false);
+  const m = Mail.renderNotice({ store: db.settings.storeName, logo: brandLogo(), test, subject: problems.length === 1 ? problems[0].title : 'Проблемы на сайте: ' + problems.length,
+    eyebrow: 'Состояние сайта', title: problems.length === 1 ? problems[0].title : 'На сайте есть проблемы', lead: 'Магазин работает, но это лучше поправить в ближайшее время — подробности в панели, раздел «Обзор» → «Состояние сайта».',
+    rows: problems.map((x) => [x.title, x.text, '']), button: 'Открыть панель', url: PUBLIC_URL + '/admin?s=overview' });
+  return sendMail({ to, subject: m.subject, html: m.html, text: m.text }).then(() => true, (e) => { console.error('Письмо о состоянии сайта не отправлено:', e.message); return false; });
+}
+function siteWatch() {
+  const now = Date.now(), sent = db.alertsSent = db.alertsSent || {};
+  const fresh = siteProblems().filter((x) => !(sent[x.key] && now - sent[x.key] < 23 * 36e5));
+  if (!fresh.length) return;
+  siteAlertMail(fresh).then((ok) => { if (ok) { fresh.forEach((x) => { sent[x.key] = now; }); save(); } });
+}
+setTimeout(siteWatch, 5 * 60e3).unref(); setInterval(siteWatch, 60 * 60e3).unref();
+
 function supportAdminApi(p, M, body) {
   if (!p[2] && M === 'GET') return { tickets: db.tickets.slice().sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)) };
   const t = db.tickets.find((x) => x.id === p[2]); if (!t) fail(404, 'Обращение не найдено');
@@ -1604,12 +1757,13 @@ async function api(req, res, url, body) {
       try { d.update = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'update-status.json'), 'utf8')); } catch (e) { d.update = null; }
       d.giftcards = db.giftcards.map((g) => Object.assign({}, g, { state: giftState(g) }));
       d.stats = db.stats || {};
-      d.expenses = db.expenses; d.finance = db.finance;
+      d.expenses = db.expenses; d.finance = db.finance; d.receipts = db.receipts; d.intakes = db.intakes; d.problems = siteProblems();
       d.seo = { indexnow: seoPingOn(), https: /^https:/.test(PUBLIC_URL), url: PUBLIC_URL, last: db.seoPing || null, pages: Seo.urls().length };
       return { data: d };
     }
     if (p[1] === 'health' && M === 'GET') return { health: health() };
     if (p[1] === 'finance') return financeApi(p, M, body);
+    if (p[1] === 'cdek-print' || p[1] === 'cdek-intake') return await cdekBatchApi(p, M, body, url);
     // Отправить все страницы сайта в Яндекс прямо сейчас
     if (p[1] === 'seo-ping' && M === 'POST') {
       if (!/^https:/.test(PUBLIC_URL)) fail(400, 'Сначала включите HTTPS — Яндекс принимает страницы только с https-адресов');
@@ -1687,9 +1841,10 @@ async function api(req, res, url, body) {
     if (p[1] === 'owner-notify' && p[2] === 'test' && M === 'POST') {
       if (!mailReady()) fail(400, 'Сначала настройте почту для отправки: «Письма» → «Почта для отправки»');
       const to = ownerTo(); if (!to) fail(400, 'Укажите почту для уведомлений');
-      const kind = ['order', 'support', 'stock'].includes(body.kind) ? body.kind : 'order';
+      const kind = ['order', 'support', 'stock', 'system'].includes(body.kind) ? body.kind : 'order';
       let sent;
-      if (kind === 'stock') sent = await stockMail(null, [['Футболка Оверсайз', 'Чёрный · M', 'осталось 1 шт.'], ['Худи Базовое', 'Серый · L', 'закончился']]);
+      if (kind === 'system') sent = await siteAlertMail([{ key: 'test', title: 'Резервные копии не обновлялись 2 дн.', text: 'Пример письма: так придёт предупреждение, если ночная копия базы не сделалась или на сервере кончается место.' }], true);
+      else if (kind === 'stock') sent = await stockMail(null, [['Футболка Оверсайз', 'Чёрный · M', 'осталось 1 шт.'], ['Худи Базовое', 'Серый · L', 'закончился']]);
       else if (kind === 'support') {
         const m = Mail.renderSupport({ kind: 'shop', store: db.settings.storeName, logo: brandLogo(), name: 'Анна (пример)', number: '57', topic: 'Размер и посадка', text: 'Здравствуйте! Подскажите, какой размер взять при росте 170 см? — Это проверочное письмо, отвечать не нужно.', url: PUBLIC_URL + '/admin?s=support', contacts: '' });
         sent = await sendMail({ to, subject: 'Проверка · ' + m.subject, html: m.html, text: m.text }).then(() => true, (e) => fail(400, 'Письмо не отправилось: ' + e.message));

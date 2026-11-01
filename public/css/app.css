@@ -3052,20 +3052,6 @@ a:hover .cat-go { background: var(--ink); color: #fff; transform: rotate(-45deg)
 @media (max-width: 760px) { .trk-grid { grid-template-columns: minmax(0, 1fr); } }
 
 /* ---------- Админка: Telegram и аналитика (13.42) ---------- */
-.tg-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 22px; }
-.tg-step { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; }
-.tg-n { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: var(--surface); box-shadow: var(--ring); font-size: 14px; font-weight: 500; }
-.tg-step.done .tg-n { background: var(--ink); color: #fff; box-shadow: none; }
-.tg-step b { font-weight: 500; font-size: 16px; }
-.tg-step p { margin: 6px 0 10px; font-size: 14px; line-height: 1.6; color: var(--muted); }
-.tg-row { display: flex; gap: 8px; }
-.tg-row .input { flex: 1; min-width: 0; font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
-.tg-events { display: grid; gap: 4px; }
-.tg-ev { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 4px; border-bottom: 1px solid var(--line); cursor: pointer; }
-.tg-ev:last-child { border-bottom: 0; }
-.tg-ev > span:first-child { display: grid; gap: 2px; }
-.tg-ev b { font-weight: 500; font-size: 15px; }
-.tg-ev small { font-size: 13px; color: var(--muted); }
 
 .an-kpi .adm-stat b { font-size: 34px; }
 .an-d { font-size: 12.5px; color: var(--muted); }
@@ -3231,8 +3217,6 @@ a:hover .cat-go { background: var(--ink); color: #fff; transform: rotate(-45deg)
 .an-kpi { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 @media (max-width: 900px) { .an-kpi { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .adm-card .copyable { white-space: nowrap; font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; padding: 1px 6px; border-radius: 6px; background: rgba(13, 14, 16, .05); }
-.tg-tests { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-.tg-note { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 12.5px; line-height: 1.55; color: var(--muted); }
 
 /* ---------- 13.43: телефон — ровная прокрутка без мельканий и зависаний ----------
    1) Прокрутку страницы двигаем сами и мгновенно (плавной остаётся только кнопка «Наверх»).
@@ -3303,3 +3287,15 @@ body::after { content: none; display: none; }
 .ec-compact .btn.ec-go { justify-content: space-between; padding-left: 22px; }
 @media (hover: none), (pointer: coarse), (max-width: 900px) { .ec-bag { animation: none; } }
 @media (max-width: 560px) { .ec-acts { flex-direction: column; width: 100%; } .ec-acts .btn { width: 100%; justify-content: center; } .btn.ec-go { justify-content: space-between; padding-left: 22px; } }
+
+/* Уведомления на почту (13.43) */
+.al-card .field { margin-top: 4px; }
+.al-hint { margin: 8px 0 14px; font-size: 13px; line-height: 1.6; color: var(--muted); }
+.al-test { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--line); }
+.al-tests { display: flex; flex-wrap: wrap; gap: 8px; }
+.al-events { display: grid; gap: 4px; }
+.al-ev { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
+.al-ev:last-child { border-bottom: 0; }
+.al-ev > span:first-child { display: grid; gap: 3px; }
+.al-ev b { font-weight: 500; font-size: 15px; }
+.al-ev small { font-size: 13px; line-height: 1.5; color: var(--muted); }

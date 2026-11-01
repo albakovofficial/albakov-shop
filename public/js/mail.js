@@ -311,6 +311,16 @@
     return { subject: subject, html: shell(ctx, { subject: subject, preheader: String(ctx.text).slice(0, 90), body: body, footer: footer, shop: shop }), text: text };
   }
 
+  /* Служебное письмо владельцу (остатки и т. п.). ctx: { store, logo, subject, eyebrow, title, lead, rows: [[название, подпись, справа]], button, url, test } */
+  function renderNotice(ctx) {
+    var subject = (ctx.test ? 'Проверка · ' : '') + ctx.subject;
+    var body = hero(ctx.eyebrow, ctx.title, esc(ctx.lead) + (ctx.test ? '<br><br>Это проверочное письмо из панели — так будут выглядеть настоящие уведомления.' : '')) +
+      gap(28) + sec(listRows((ctx.rows || []).map(function (r) { return [esc(r[0]), esc(r[1] || ''), esc(r[2] || '')]; }))) +
+      (ctx.url ? gap(30) + sec(btn(ctx.button || 'Открыть панель', ctx.url)) : '');
+    var text = ctx.title + '\n\n' + (ctx.rows || []).map(function (r) { return '• ' + r.filter(Boolean).join(' · '); }).join('\n') + (ctx.url ? '\n\n' + ctx.url : '');
+    return { subject: subject, html: shell(ctx, { subject: subject, preheader: ctx.lead, body: body, footer: '', shop: true }), text: text };
+  }
+
   /* Заказ передан в доставку. ctx: { store, logo, name, number, carrier, track, trackUrl, url, contacts } */
   function renderTracking(ctx) {
     var subject = 'Заказ № ' + ctx.number + ' отправлен — трек-номер ' + ctx.track;
@@ -354,7 +364,7 @@
     return { subject: subject, html: shell(ctx, { subject: subject, preheader: 'Номер СДЭК для возврата: ' + ctx.track, body: body, footer: footer }), text: text };
   }
 
-  var api = { DEFAULTS: DEFAULTS, renderGift: renderGift, renderCartReminder: renderCartReminder, renderReturnShip: renderReturnShip, renderRefund: renderRefund, renderTracking: renderTracking, renderSupport: renderSupport, DEFAULT_NOTIFY: DEFAULT_NOTIFY, PLACEHOLDERS: PLACEHOLDERS, tplOf: tplOf, readyRequests: readyRequests, render: render, renderOrder: renderOrder, renderCode: renderCode, renderWelcome: renderWelcome };
+  var api = { DEFAULTS: DEFAULTS, renderNotice: renderNotice, renderGift: renderGift, renderCartReminder: renderCartReminder, renderReturnShip: renderReturnShip, renderRefund: renderRefund, renderTracking: renderTracking, renderSupport: renderSupport, DEFAULT_NOTIFY: DEFAULT_NOTIFY, PLACEHOLDERS: PLACEHOLDERS, tplOf: tplOf, readyRequests: readyRequests, render: render, renderOrder: renderOrder, renderCode: renderCode, renderWelcome: renderWelcome };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Mail = api;
 })(this);

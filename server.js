@@ -52,6 +52,8 @@ db.waitlist = db.waitlist || [];
 db.tickets = db.tickets || [];
 db.giftcards = db.giftcards || [];
 if (db.settings && db.settings.payment && db.settings.payment.parts) delete db.settings.payment.parts; // оплата частями убрана в 13.43
+if (db.settings && db.settings.telegram) delete db.settings.telegram; // уведомления в Telegram заменены письмами (13.43)
+if (db.secrets && db.secrets.telegram) delete db.secrets.telegram;
 if (!db.secrets.adminHash) {
   const pw = process.env.ADMIN_PASSWORD || crypto.randomBytes(6).toString('base64url');
   db.secrets.adminHash = hashPassword(pw);
@@ -499,7 +501,7 @@ async function createPayment(order) {
 function applyPayment(order, p) {
   if (!order || !p) return;
   if (p.test) order.test = true;
-  if (p.status === 'succeeded' && p.paid) { if (order.payment.status !== 'paid') { order.payment.status = 'paid'; sendOrderMails(order); tgPaid(order); giftActivate(order); } }
+  if (p.status === 'succeeded' && p.paid) { if (order.payment.status !== 'paid') { order.payment.status = 'paid'; sendOrderMails(order); giftActivate(order); } }
   else if (p.status === 'canceled') {
     // оплата не прошла: возвращаем товар и промокод, если заказ ещё не был отменён вручную
     if (order.status !== 'canceled') {
@@ -695,9 +697,8 @@ async function placeOrder(req, b) {
   syncBonus(order);
   if (idem) recentOrders.set(idem, { id: order.id, t: Date.now() });
   save();
-  if (order.payment.method !== 'online') { sendOrderMails(order); tgOrder(order); } // при онлайн-оплате письмо уйдёт после оплаты
-  else tgOrder(order);
-  tgLowStock(q.lines);
+  if (order.payment.method !== 'online') sendOrderMails(order); // при онлайн-оплате письмо уйдёт после оплаты
+  stockMail(q.lines);
   console.log(`Новый заказ № ${order.number} на ${order.total} ₽`);
   return { order: orderView(order), token: order.token, payUrl, user: publicUser(user) };
 }
@@ -740,7 +741,7 @@ function sendOrderMails(order) {
   const jobs = [];
   const mc = Mail.renderOrder(Object.assign({ kind: 'customer', url: `${PUBLIC_URL}/order/${order.id}` }, base));
   jobs.push(sendMail({ to: order.customer.email, subject: mc.subject, html: mc.html, text: mc.text }).then(() => { order.mailedAt = new Date().toISOString(); save(); }));
-  const shopTo = cs.email || mailCfg().fromEmail;
+  const shopTo = order.test ? '' : ownerTo('order');
   if (shopTo) {
     const ms = Mail.renderOrder(Object.assign({ kind: 'shop', url: `${PUBLIC_URL}/admin?s=orders&id=${order.id}` }, base));
     jobs.push(sendMail({ to: shopTo, subject: ms.subject, html: ms.html, text: ms.text }));
@@ -831,87 +832,23 @@ setInterval(() => { cartReminders().catch((e) => console.error(e)); }, Number(pr
 let statDirty = false;
 setInterval(() => { if (statDirty) { statDirty = false; save(); } }, 60e3).unref();
 
-/* ---------------- Уведомления владельцу в Telegram ----------------
-   Бот магазина пишет в личный чат владельца: новые и оплаченные заказы, вопросы в поддержку, заканчивающиеся размеры.
-   Токен бота хранится в секретах, номер чата — в настройках. Ошибки Telegram не мешают работе магазина. */
-const tgEsc = (s) => String(s == null ? '' : s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
-function tgCfg() { const t = (db.settings.telegram || {}); return { token: (db.secrets.telegram || {}).token || '', chatId: t.chatId || '', enabled: t.enabled !== false, events: Object.assign({ order: true, paid: true, support: true, stock: true }, t.events || {}) }; }
-// Российские провайдеры не пускают серверы в дата-центрах к api.telegram.org, поэтому запросы идут через
-// ретранслятор на Cloudflare (Worker пересылает только нужные методы бота). Если ретранслятор недоступен —
-// пробуем напрямую. Рабочий путь запоминаем, чтобы следующие уведомления уходили сразу.
-const TG_RELAY_DEFAULT = 'https://albakov-tg.albakovv-official.workers.dev';
-function tgBases() {
-  const own = String(process.env.TG_API_BASE || (db.settings.telegram || {}).relay || TG_RELAY_DEFAULT).trim().replace(/\/+$/, '');
-  const list = [own, 'https://api.telegram.org'].filter((x, i, a) => /^https:\/\//.test(x) && a.indexOf(x) === i);
-  if (tgGood && list.indexOf(tgGood) > 0) list.unshift(list.splice(list.indexOf(tgGood), 1)[0]);
-  return list;
-}
-let tgGood = '';
-function tgNetMsg(e) {
-  const c = (e && e.cause && (e.cause.code || e.cause.name)) || (e && e.name) || '';
-  if (c === 'AbortError' || /TIMEOUT/i.test(c)) return 'нет ответа за 8 секунд';
-  if (/ENOTFOUND|EAI_AGAIN/.test(c)) return 'адрес не найден (DNS)';
-  if (/ECONNREFUSED|ECONNRESET|EPIPE|UND_ERR_SOCKET|ETIMEDOUT|EHOSTUNREACH|ENETUNREACH/.test(c)) return 'соединение сброшено провайдером';
-  return c || (e && e.message) || 'нет связи';
-}
-async function tgApi(method, body, token) {
-  const tk = token || tgCfg().token; if (!tk) throw new Error('Бот не подключён');
-  const errs = [];
-  for (const base of tgBases()) {
-    const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), 8000);
-    let r;
-    try { r = await fetch(base + '/bot' + tk + '/' + method, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}), signal: ctrl.signal }); }
-    catch (e) { errs.push((base.indexOf('api.telegram.org') !== -1 ? 'напрямую' : 'через ретранслятор') + ': ' + tgNetMsg(e)); continue; }
-    finally { clearTimeout(timer); }
-    tgGood = base;
-    const j = await r.json().catch(() => ({}));
-    if (!j.ok) {
-      if (r.status === 401 || r.status === 404) throw new Error('Telegram не узнал токен — скопируйте его из @BotFather ещё раз целиком');
-      throw new Error(j.description || ('Telegram ответил ' + r.status));
-    }
-    return j.result;
-  }
-  const err = new Error('сервер магазина не смог связаться с Telegram (' + errs.join('; ') + ')'); err.net = true; throw err;
-}
-function tgSend(kind, text, buttons) {
-  const c = tgCfg(); if (!c.token || !c.chatId || !c.enabled || (kind && !c.events[kind])) return Promise.resolve(null);
-  const body = { chat_id: c.chatId, text, parse_mode: 'HTML', disable_web_page_preview: true };
-  if (buttons && buttons.length && /^https:/.test(PUBLIC_URL)) body.reply_markup = { inline_keyboard: [buttons.map((b) => ({ text: b[0], url: b[1] }))] };
-  return tgApi('sendMessage', body).catch((e) => { console.error('Telegram:', e.message); return null; });
-}
-function tgOrderText(o, title) {
-  const d = o.delivery || {}, c = o.customer || {}, PAYL = { online: 'онлайн', cod: 'при получении', bonus: 'бонусами', exchange: 'обмен' };
-  return title + ' <b>№ ' + tgEsc(o.number) + '</b> — ' + tgEsc(Pricing.format(o.total)) + '\n\n' +
-    o.items.map((i) => '• ' + tgEsc(i.name) + ' · ' + tgEsc([i.color, i.size].filter(Boolean).join(' · ')) + ' × ' + i.qty + (i.preorder ? ' (предзаказ)' : '')).join('\n') + '\n\n' +
-    '👤 ' + tgEsc([c.firstName, c.lastName].filter(Boolean).join(' ')) + '\n📞 +' + tgEsc(c.phone) + '\n' +
-    '🚚 ' + tgEsc(d.name || '') + (d.city || d.address ? ' · ' + tgEsc([d.city, d.address].filter(Boolean).join(', ')) : '') + '\n' +
-    '💳 ' + (o.payment.status === 'paid' ? 'оплачено ' : '') + tgEsc(PAYL[o.payment.method] || o.payment.method) + (o.promoCode ? '\n🏷 промокод ' + tgEsc(o.promoCode) : '') + (o.comment ? '\n💬 ' + tgEsc(o.comment) : '');
-}
-function tgState() { const c = tgCfg(); return { connected: !!c.token, bot: (db.secrets.telegram || {}).bot || '', chatId: c.chatId, chatName: (db.settings.telegram || {}).chatName || '' }; }
-// Ищем личный чат владельца с ботом: последнее сообщение боту (после «Запустить»)
-async function tgFindChat() {
-  let ups;
-  try { ups = await tgApi('getUpdates', { limit: 50, allowed_updates: ['message'] }); }
-  catch (e) { if (!/webhook/i.test(e.message)) throw e; await tgApi('deleteWebhook', {}); ups = await tgApi('getUpdates', { limit: 50, allowed_updates: ['message'] }); }
-  const msg = (ups || []).map((u) => u.message).filter((m) => m && m.chat && m.chat.type === 'private').pop();
-  if (!msg) return null;
-  db.settings.telegram = Object.assign({ enabled: true }, db.settings.telegram, { chatId: String(msg.chat.id), chatName: [msg.chat.first_name, msg.chat.last_name].filter(Boolean).join(' ') || msg.chat.username || '' });
-  save();
-  await tgSend('', '✅ Готово! Сюда будут приходить уведомления магазина ' + tgEsc(db.settings.storeName || 'ALBAKOV') + ': заказы, оплаты, вопросы покупателей и заканчивающиеся размеры.');
-  return msg.chat;
-}
-function tgOrder(o) { if (o.test) return; tgSend('order', tgOrderText(o, '🛍 Новый заказ'), [['Открыть заказ', PUBLIC_URL + '/admin?s=orders&id=' + o.id]]); }
-function tgPaid(o) { if (o.test) return; tgSend('paid', tgOrderText(o, '💳 Оплачен заказ'), [['Открыть заказ', PUBLIC_URL + '/admin?s=orders&id=' + o.id]]); }
-function tgSupport(t) {
-  const last = t.messages[t.messages.length - 1] || {};
-  tgSend('support', '💬 <b>' + (t.messages.length > 1 ? 'Новое сообщение' : 'Новое обращение') + ' № ' + tgEsc(t.number) + '</b> · ' + tgEsc(t.topic) + (t.orderNumber ? ' · заказ № ' + tgEsc(t.orderNumber) : '') + '\n\n' + tgEsc(t.name) + ': «' + tgEsc(String(last.text || '').slice(0, 700)) + '»',
-    [['Ответить', PUBLIC_URL + '/admin?s=support&id=' + t.id]]);
+/* ---------------- Уведомления владельцу на почту ----------------
+   Новые заказы, вопросы покупателей и заканчивающиеся размеры — письмом на основную почту магазина.
+   Адрес и что присылать — в панели, раздел «Уведомления на почту». */
+const OWNER_EVENTS = { order: true, support: true, stock: true };
+function ownerCfg() { const n = db.settings.ownerNotify || {}; return { email: String(n.email || '').trim(), events: Object.assign({}, OWNER_EVENTS, n.events || {}) }; }
+function ownerTo(kind) {
+  const c = ownerCfg(); if (kind && c.events[kind] === false) return '';
+  return c.email || (db.settings.contacts || {}).email || mailCfg().fromEmail || '';
 }
 // После заказа: размеры, где осталось 0–2 штуки
-function tgLowStock(lines) {
-  const low = [];
-  lines.forEach((l) => { const s = sizeEntry(l.productId, l.colorId, l.size); if (s && s.stock <= 2 && !l.preorder) low.push('• ' + tgEsc(l.name) + ' · ' + tgEsc([l.color, l.size].filter(Boolean).join(' · ')) + ' — ' + (s.stock > 0 ? 'осталось ' + s.stock + ' шт.' : 'закончился')); });
-  if (low.length) tgSend('stock', '⚠️ <b>Заканчивается</b>\n\n' + low.join('\n'), [['Товары', PUBLIC_URL + '/admin?s=products']]);
+function stockMail(lines, sample) {
+  const low = sample || [];
+  if (!sample) lines.forEach((l) => { const sz = sizeEntry(l.productId, l.colorId, l.size); if (sz && sz.stock <= 2 && !l.preorder) low.push([l.name, [l.color, l.size].filter(Boolean).join(' · '), sz.stock > 0 ? 'осталось ' + sz.stock + ' шт.' : 'закончился']); });
+  const to = ownerTo('stock'); if (!low.length || !to || !mailReady()) return Promise.resolve(false);
+  const m = Mail.renderNotice({ store: db.settings.storeName, logo: brandLogo(), test: !!sample, subject: 'Заканчивается: ' + low.map((x) => x[0] + ' ' + x[1]).slice(0, 2).join(', ') + (low.length > 2 ? ' и ещё ' + (low.length - 2) : ''),
+    eyebrow: 'Остатки', title: low.length === 1 ? 'Заканчивается размер' : 'Заканчиваются размеры', lead: 'После последнего заказа на складе осталось совсем немного — пора пополнить или снять с продажи.', rows: low, button: 'Открыть товары', url: PUBLIC_URL + '/admin?s=products' });
+  return sendMail({ to, subject: m.subject, html: m.html, text: m.text }).then(() => true, (e) => { console.error('Письмо об остатках не отправлено:', e.message); return false; });
 }
 
 /* ---------------- Подсказки адреса ---------------- */
@@ -979,7 +916,7 @@ function ticketForUser(t) {
 function supportMail(t, kind) {
   if (!mailReady()) return;
   const cs = db.settings.contacts || {}, last = t.messages[t.messages.length - 1];
-  const to = kind === 'customer' ? t.email : (cs.email || mailCfg().fromEmail);
+  const to = kind === 'customer' ? t.email : ownerTo('support');
   if (!to) return;
   const url = kind === 'customer' ? `${PUBLIC_URL}/account?tab=support&id=${t.id}` : `${PUBLIC_URL}/admin?s=support&id=${t.id}`;
   const m = Mail.renderSupport({ kind, store: db.settings.storeName, logo: brandLogo(), name: t.name, number: t.number, topic: t.topic, orderNumber: t.orderNumber, text: last.text, url, contacts: [cs.phone, cs.email].filter(Boolean).join(' · ') });
@@ -998,7 +935,7 @@ function supportApi(req, p, M, body, u) {
     const t = { id: uid('t'), number: String(db.ticketSeq), userId: u.id, name: [u.firstName, u.lastName].filter(Boolean).join(' '), email: u.email, phone: u.phone,
       topic: SUPPORT_TOPICS.includes(body.topic) ? body.topic : (o ? 'Заказ' : 'Другое'), orderId: o ? o.id : '', orderNumber: o ? o.number : '',
       status: 'open', createdAt: now, updatedAt: now, unreadUser: false, unreadShop: true, messages: [{ id: uid('m'), from: 'user', text, at: now }] };
-    db.tickets.push(t); save(); supportMail(t, 'shop'); tgSupport(t);
+    db.tickets.push(t); save(); supportMail(t, 'shop');
     return { ticket: ticketForUser(t) };
   }
   const t = p[1] && mine().find((x) => x.id === p[1]);
@@ -1009,7 +946,7 @@ function supportApi(req, p, M, body, u) {
     const text = ticketText(body.text); if (!text) fail(400, 'Сообщение пустое');
     const now = new Date().toISOString();
     t.messages.push({ id: uid('m'), from: 'user', text, at: now }); t.status = 'open'; t.unreadShop = true; t.unreadUser = false; t.updatedAt = now;
-    save(); supportMail(t, 'shop'); tgSupport(t);
+    save(); supportMail(t, 'shop');
     return { ticket: ticketForUser(t) };
   }
   fail(404, 'Неизвестный запрос');
@@ -1074,7 +1011,7 @@ function requestTicket(o, r) {
   const t = { id: uid('t'), number: String(db.ticketSeq), userId: u.id, name: [u.firstName, u.lastName].filter(Boolean).join(' '), email: u.email, phone: u.phone,
     topic: 'Возврат и обмен', orderId: o.id, orderNumber: o.number, status: 'open', createdAt: now, updatedAt: now, unreadUser: false, unreadShop: true,
     messages: [{ id: uid('m'), from: 'user', text: requestText(o, r), at: now }] };
-  db.tickets.push(t); r.ticketId = t.id; supportMail(t, 'shop'); tgSupport(t);
+  db.tickets.push(t); r.ticketId = t.id; supportMail(t, 'shop');
 }
 // Ответ магазина в переписке по заявке (и письмо покупателю)
 function requestReply(r, text) {
@@ -1489,7 +1426,7 @@ async function api(req, res, url, body) {
     let payUrl = null;
     try { payUrl = await createPayment(order); }
     catch (e) { db.giftcards = db.giftcards.filter((x) => x.id !== g.id); db.orders = db.orders.filter((x) => x.id !== order.id); save(); throw e; }
-    save(); tgOrder(order);
+    save();
     return { order: orderView(order), token: order.token, payUrl };
   }
   // «Где мой заказ» без входа: номер заказа и телефон из него → секретная ссылка на страницу заказа
@@ -1564,7 +1501,6 @@ async function api(req, res, url, body) {
       try { d.backup = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'backup-status.json'), 'utf8')); } catch (e) { d.backup = null; }
       // Автообновление из GitHub (файл пишет deploy/autoupdate.sh)
       try { d.update = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'update-status.json'), 'utf8')); } catch (e) { d.update = null; }
-      d.telegram = tgState();
       d.giftcards = db.giftcards.map((g) => Object.assign({}, g, { state: giftState(g) }));
       d.stats = db.stats || {};
       return { data: d };
@@ -1634,34 +1570,24 @@ async function api(req, res, url, body) {
       if (p[3] === 'resend') { if (giftState(g) !== 'active') fail(400, 'Сертификат не активен'); if (!(await sendGift(g))) fail(400, mailReady() ? 'Письмо не отправилось — проверьте почту получателя' : 'Почта для отправки не настроена'); return { gift: g }; }
       fail(404, 'Неизвестное действие');
     }
-    // Telegram: подключить бота, найти чат владельца, проверить
-    if (p[1] === 'telegram' && !p[2] && M === 'POST') {
-      const token = String(body.token || '').trim();
-      if (!token) { delete db.secrets.telegram; db.settings.telegram = Object.assign({}, db.settings.telegram, { chatId: '', chatName: '' }); save(); return { telegram: tgState() }; }
-      if (!/^\d{5,15}:[A-Za-z0-9_-]{30,60}$/.test(token)) fail(400, 'Токен не похож на токен бота: он выглядит как 123456789:AAE…');
-      let me; try { me = await tgApi('getMe', {}, token); } catch (e) { fail(400, e.net ? 'Не получилось проверить токен: ' + e.message + '. Попробуйте через минуту' : e.message); }
-      db.secrets.telegram = { token, bot: me.username || '' }; save();
-      if (!tgCfg().chatId) await tgFindChat().catch(() => null); // владелец уже нажал «Запустить» — чат найдётся сразу
-      return { telegram: tgState(), settings: db.settings };
-    }
-    if (p[1] === 'telegram' && p[2] === 'find' && M === 'POST') {
-      let chat; try { chat = await tgFindChat(); } catch (e) { fail(400, e.message); }
-      if (!chat) fail(404, 'Сообщений боту пока нет. Откройте бота в Telegram, нажмите «Запустить» или напишите ему что-нибудь — и повторите');
-      return { telegram: tgState(), settings: db.settings };
-    }
-    // Проверка: прислать пример любого уведомления — заказ, оплата, обращение, остатки или просто «связь есть»
-    if (p[1] === 'telegram' && p[2] === 'test' && M === 'POST') {
-      if (!tgCfg().chatId) fail(400, 'Сначала найдите чат');
-      const kind = ['order', 'paid', 'support', 'stock'].includes(body.kind) ? body.kind : 'ping';
-      const o = db.orders.filter((x) => !x.test && x.kind !== 'gift').slice(-1)[0] || { number: '1042', total: 12900, items: [{ name: 'Футболка Оверсайз', color: 'Чёрный', size: 'M', qty: 2 }], customer: { firstName: 'Анна', lastName: 'Иванова', phone: '79001234567' }, delivery: { name: 'СДЭК, пункт выдачи', city: 'Москва' }, payment: { method: 'online', status: 'new' } };
-      const tag = '🧪 <i>Проверка — это пример, не настоящее событие</i>\n\n';
-      const text = kind === 'order' ? tag + tgOrderText(o, '🛍 Новый заказ')
-        : kind === 'paid' ? tag + tgOrderText(Object.assign({}, o, { payment: Object.assign({}, o.payment, { status: 'paid' }) }), '💳 Оплачен заказ')
-        : kind === 'support' ? tag + '💬 <b>Новое обращение № 57</b> · Размер и посадка\n\nАнна: «Здравствуйте! Подскажите, какой размер взять при росте 170 см?»'
-        : kind === 'stock' ? tag + '⚠️ <b>Заканчивается</b>\n\n• Футболка Оверсайз · Чёрный · M — осталось 1 шт.\n• Худи Базовое · Серый · L — закончился'
-        : '✅ Связь с магазином ' + tgEsc(db.settings.storeName || 'ALBAKOV') + ' есть — уведомления приходят сюда.';
-      const r = await tgApi('sendMessage', { chat_id: tgCfg().chatId, parse_mode: 'HTML', text, disable_web_page_preview: true }).catch((e) => fail(400, e.message));
-      return { sent: !!r };
+    // Уведомления на почту: прислать пример, чтобы проверить адрес и посмотреть, как выглядит письмо
+    if (p[1] === 'owner-notify' && p[2] === 'test' && M === 'POST') {
+      if (!mailReady()) fail(400, 'Сначала настройте почту для отправки: «Письма» → «Почта для отправки»');
+      const to = ownerTo(); if (!to) fail(400, 'Укажите почту для уведомлений');
+      const kind = ['order', 'support', 'stock'].includes(body.kind) ? body.kind : 'order';
+      let sent;
+      if (kind === 'stock') sent = await stockMail(null, [['Футболка Оверсайз', 'Чёрный · M', 'осталось 1 шт.'], ['Худи Базовое', 'Серый · L', 'закончился']]);
+      else if (kind === 'support') {
+        const m = Mail.renderSupport({ kind: 'shop', store: db.settings.storeName, logo: brandLogo(), name: 'Анна (пример)', number: '57', topic: 'Размер и посадка', text: 'Здравствуйте! Подскажите, какой размер взять при росте 170 см? — Это проверочное письмо, отвечать не нужно.', url: PUBLIC_URL + '/admin?s=support', contacts: '' });
+        sent = await sendMail({ to, subject: 'Проверка · ' + m.subject, html: m.html, text: m.text }).then(() => true, (e) => fail(400, 'Письмо не отправилось: ' + e.message));
+      } else {
+        const o = db.orders.filter((x) => !x.test && x.kind !== 'gift' && x.total > 0).slice(-1)[0] || { id: 'example', number: '1042', total: 12900, createdAt: new Date().toISOString(), items: [{ name: 'Футболка Оверсайз', color: 'Чёрный', size: 'M', qty: 2, price: 6450 }], customer: { firstName: 'Анна', lastName: 'Иванова', phone: '79001234567', email: 'anna@example.com' }, delivery: { name: 'СДЭК, пункт выдачи', city: 'Москва', price: 0 }, payment: { method: 'cod', status: 'new' } };
+        const cs = db.settings.contacts || {};
+        const ms = Mail.renderOrder({ kind: 'shop', url: `${PUBLIC_URL}/admin?s=orders&id=${o.id}`, store: db.settings.storeName, logo: brandLogo(), order: Object.assign({}, o, { items: o.items.map((i) => Object.assign({}, i, { image: absUrl(i.image) })) }), money: Pricing.format, payLabel: o.payment.status === 'paid' ? 'оплачено онлайн' : 'оплата при получении', contacts: [cs.phone, cs.email].filter(Boolean).join(' · ') });
+        sent = await sendMail({ to, subject: 'Проверка · ' + ms.subject, html: ms.html, text: ms.text }).then(() => true, (e) => fail(400, 'Письмо не отправилось: ' + e.message));
+      }
+      if (!sent) fail(400, 'Письмо не отправилось — проверьте настройки почты');
+      return { sent: true, to };
     }
     if (p[1] === 'payment-secret' && M === 'POST') {
       if (typeof body.secret === 'string') { if (body.secret && !/^(live|test)_[\w-]{10,}$/.test(body.secret)) fail(400, 'Ключ должен начинаться с live_ или test_'); db.secrets.yookassaSecret = body.secret; save(); }

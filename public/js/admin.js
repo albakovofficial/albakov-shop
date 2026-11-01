@@ -10,7 +10,7 @@
 
   var SECTIONS = [
     ['overview', 'Обзор'], ['orders', 'Заказы'], ['support', 'Поддержка'], ['products', 'Товары'], ['categories', 'Категории'], ['sizeCharts', 'Размерные сетки'],
-    ['promotions', 'Акции'], ['promocodes', 'Промокоды'], ['bonus', 'Бонусы'], ['exchange', 'Обмен и возвраты'], ['customers', 'Покупатели'], ['notify', 'Сообщить о поступлении'], ['mail', 'Письма'], ['telegram', 'Уведомления в Telegram'], ['analytics', 'Аналитика'], ['gifts', 'Подарочные сертификаты'], ['sections', 'Разделы: женщинам / мужчинам'], ['brand', 'Логотип и название'], ['slider', 'Слайдер на главной'], ['home', 'Главная страница'], ['pages', 'Страницы'],
+    ['promotions', 'Акции'], ['promocodes', 'Промокоды'], ['bonus', 'Бонусы'], ['exchange', 'Обмен и возвраты'], ['customers', 'Покупатели'], ['notify', 'Сообщить о поступлении'], ['mail', 'Письма'], ['alerts', 'Уведомления на почту'], ['analytics', 'Аналитика'], ['gifts', 'Подарочные сертификаты'], ['sections', 'Разделы: женщинам / мужчинам'], ['brand', 'Логотип и название'], ['slider', 'Слайдер на главной'], ['home', 'Главная страница'], ['pages', 'Страницы'],
     ['menu', 'Меню, контакты, соцсети'], ['payment', 'Оплата и доставка'], ['settings', 'Настройки']
   ];
   var TAX = [[1, 'ОСН — общая система'], [2, 'УСН «Доходы»'], [3, 'УСН «Доходы минус расходы»'], [5, 'ЕСХН'], [6, 'Патентная система']];
@@ -197,7 +197,7 @@
       '</nav><div class="adm-side-foot"><a href="#/" class="muted">← В магазин</a><button class="muted" id="admOut">Выйти</button></div></aside><section class="adm-main" id="admMain"></section></div>';
     $('#admOut').addEventListener('click', async function () { await API.adminLogout(); DATA = null; window.ALB_NAV.go('#/'); await A().refresh(); });
     var main = $('#admMain');
-    var fn = { overview: overview, orders: orders, support: supportSection, products: products, categories: categories, sizeCharts: sizeCharts, promotions: promotions, promocodes: promocodes, bonus: bonusSection, exchange: exchangeSection, customers: customers, notify: notifySection, mail: mailSection, telegram: telegramSection, analytics: analyticsSection, gifts: giftsSection, sections: sectionsSettings, brand: brandSection, slider: sliderSection, home: homeSettings, pages: pages, menu: menuSettings, payment: paymentSettings, settings: generalSettings }[s] || overview;
+    var fn = { overview: overview, orders: orders, support: supportSection, products: products, categories: categories, sizeCharts: sizeCharts, promotions: promotions, promocodes: promocodes, bonus: bonusSection, exchange: exchangeSection, customers: customers, notify: notifySection, mail: mailSection, alerts: alertsSection, analytics: analyticsSection, gifts: giftsSection, sections: sectionsSettings, brand: brandSection, slider: sliderSection, home: homeSettings, pages: pages, menu: menuSettings, payment: paymentSettings, settings: generalSettings }[s] || overview;
     fn(main, q);
   }
   function waitBadge() { var n = (DATA.waitlist || []).filter(function (w) { return w.status === 'waiting' || w.status === 'failed'; }).length; return n ? ' <span class="adm-badge muted-badge">' + n + '</span>' : ''; }
@@ -1229,38 +1229,37 @@
     });
   }
 
-  /* ================= Уведомления в Telegram ================= */
-  function telegramSection(m) {
-    var t = DATA.telegram || {}, s = clone(DATA.settings), tg = s.telegram = Object.assign({ enabled: true, events: {} }, s.telegram || {});
-    var ev = Object.assign({ order: true, paid: true, support: true, stock: true }, tg.events);
-    var step = function (n, done, title, body) { return '<li class="tg-step' + (done ? ' done' : '') + '"><span class="tg-n">' + (done ? '✓' : n) + '</span><div><b>' + title + '</b>' + body + '</div></li>'; };
-    m.innerHTML = head('Уведомления в Telegram', '', 'Новые заказы, оплаты, вопросы покупателей и заканчивающиеся размеры — сразу вам в Telegram. Подключается один раз за пару минут.') +
-      '<div class="adm-two"><div class="adm-card"><ol class="tg-steps">' +
-        step(1, t.connected, 'Создайте бота', t.connected
-          ? '<p>Подключён бот <a class="link" href="https://t.me/' + esc(t.bot) + '" target="_blank" rel="noopener">@' + esc(t.bot) + '</a>. <button class="link" id="tgOff" type="button">Отключить</button></p>'
-          : '<p>Бот уже создан? Откройте в Telegram <a class="link" href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a> → <b>/mybots</b> → ваш бот → <b>API Token</b> и скопируйте токен — строку вида <span class="copyable">123456789:AAE…</span>. Нового бота создаёт команда <b>/newbot</b>. Вставьте токен сюда:</p>' +
-            '<div class="tg-row"><input class="input" id="tgToken" placeholder="Токен бота" autocomplete="off" spellcheck="false"><button class="btn" id="tgSave" type="button">Подключить</button></div>') +
-        step(2, !!t.chatId, 'Напишите боту', t.chatId
-          ? '<p>Уведомления приходят в чат: <b>' + esc(t.chatName || t.chatId) + '</b>. <button class="link" id="tgFind" type="button">Найти заново</button></p>'
-          : '<p>' + (t.connected ? 'Откройте <a class="link" href="https://t.me/' + esc(t.bot) + '" target="_blank" rel="noopener">@' + esc(t.bot) + '</a>, нажмите «Запустить» — и вернитесь сюда.' : 'После шага 1.') + '</p>' + (t.connected ? '<button class="btn ghost" id="tgFind" type="button">Найти мой чат</button>' : '')) +
-        step(3, !!t.chatId, 'Проверьте', t.chatId ? '<p>Пришлём пример — посмотрите, как выглядит каждое уведомление.</p><div class="tg-tests">' +
-            [['ping', 'Связь'], ['order', 'Новый заказ'], ['paid', 'Оплата'], ['support', 'Вопрос покупателя'], ['stock', 'Остатки']].map(function (x) { return '<button class="btn ghost sm" type="button" data-tg-test="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div>' : '<p>После шага 2.</p>') +
-      '</ol><p class="form-error" id="tgErr"></p>' +
-      '<p class="tg-note">Telegram ограничен в России, и серверы магазина не могут обращаться к нему напрямую. Уведомления идут через ваш ретранслятор на Cloudflare — он пересылает только сообщения бота и ничего не хранит.</p></div>' +
-      '<div class="adm-card"><h3 class="adm-h3">Что присылать</h3><div class="tg-events">' +
-        [['enabled', 'Уведомления включены', 'Главный выключатель'], ['order', 'Новый заказ', 'Состав, покупатель, доставка, оплата'], ['paid', 'Заказ оплачен', 'Когда пришла онлайн-оплата'], ['support', 'Вопросы покупателей', 'Новые обращения и сообщения в поддержку'], ['stock', 'Заканчивается размер', 'Когда после заказа осталось 2 штуки или меньше']].map(function (x) {
-          var on = x[0] === 'enabled' ? tg.enabled !== false : ev[x[0]];
-          return '<label class="tg-ev"><span><b>' + x[1] + '</b><small>' + x[2] + '</small></span><span class="adm-switch"><input type="checkbox" data-tg="' + x[0] + '"' + (on ? ' checked' : '') + '><span></span></span></label>';
-        }).join('') + '</div></div></div>';
-    var err = $('#tgErr');
-    var busy = function (b, on) { if (b) b.disabled = on; };
-    var sv = $('#tgSave'); if (sv) sv.addEventListener('click', async function () { busy(sv, true); err.textContent = ''; try { var r = await A().API.adminPost('telegram', { token: $('#tgToken').value }); await afterSave(r && r.telegram && r.telegram.chatId ? 'Бот подключён, чат найден — проверьте Telegram' : 'Бот подключён'); } catch (e) { err.textContent = A().errMsg(e); busy(sv, false); } });
-    var off = $('#tgOff'); if (off) off.addEventListener('click', async function () { if (!confirm('Отключить уведомления в Telegram?')) return; await A().API.adminPost('telegram', { token: '' }); await afterSave('Бот отключён'); });
-    var fd = $('#tgFind'); if (fd) fd.addEventListener('click', async function () { busy(fd, true); err.textContent = ''; try { await A().API.adminPost('telegram/find'); await afterSave('Чат найден — проверьте Telegram'); } catch (e) { err.textContent = A().errMsg(e); busy(fd, false); } });
-    $$('[data-tg-test]', m).forEach(function (ts) { ts.addEventListener('click', async function () { busy(ts, true); err.textContent = ''; try { await A().API.adminPost('telegram/test', { kind: ts.getAttribute('data-tg-test') }); toast('Отправили «' + ts.textContent + '» — проверьте Telegram'); } catch (e) { err.textContent = A().errMsg(e); } busy(ts, false); }); });
-    $$('[data-tg]', m).forEach(function (i) { i.addEventListener('change', async function () {
-      var k = i.getAttribute('data-tg'); if (k === 'enabled') tg.enabled = i.checked; else { ev[k] = i.checked; tg.events = ev; }
-      try { await A().API.adminSave('settings', s); DATA.settings = s; toast('Сохранено'); } catch (e) { toast(A().errMsg(e), true); }
+  /* ================= Уведомления на почту ================= */
+  // Владельцу на основную почту: новые заказы, вопросы покупателей, заканчивающиеся размеры
+  function alertsSection(m) {
+    var s = clone(DATA.settings), n = s.ownerNotify = Object.assign({ email: '', events: {} }, s.ownerNotify || {});
+    var ev = Object.assign({ order: true, support: true, stock: true }, n.events);
+    var main = (s.contacts || {}).email || '', ready = !!A().D.mailReady;
+    var KINDS = [['order', 'Новый заказ', 'Состав, покупатель, доставка и оплата. Заказ с онлайн-оплатой приходит, когда деньги поступили'], ['support', 'Вопросы покупателей', 'Новые обращения и сообщения в поддержку'], ['stock', 'Заканчивается размер', 'Когда после заказа осталось 2 штуки или меньше']];
+    m.innerHTML = head('Уведомления на почту', '', 'Новые заказы, вопросы покупателей и заканчивающиеся размеры приходят письмом на вашу почту — сразу, как только что-то произошло.') +
+      (ready ? '' : '<div class="adm-alert"><b>Почта для отправки не настроена.</b> Без неё письма не уходят — подключите её в разделе <a class="link" href="#/admin?s=notify&tab=mail">«Письма» → «Почта для отправки»</a>.</div>') +
+      '<div class="adm-two"><div class="adm-card al-card"><h3 class="adm-h3">Куда присылать</h3>' +
+        '<label class="field"><span>Почта для уведомлений</span><input class="input" id="alEmail" type="email" inputmode="email" autocomplete="email" placeholder="' + esc(main || 'shop@example.ru') + '" value="' + esc(n.email || '') + '"></label>' +
+        '<p class="al-hint">' + (main ? 'Пусто — письма уходят на основную почту магазина <b>' + esc(main) + '</b> из раздела «Меню, контакты».' : 'Укажите адрес, на который присылать уведомления.') + '</p>' +
+        '<button class="btn" id="alSave" type="button">Сохранить</button>' +
+        '<div class="al-test"><h3 class="adm-h3">Проверить</h3><p class="al-hint">Пришлём пример письма — посмотрите, как оно выглядит и не попадает ли в спам.</p><div class="al-tests">' +
+          KINDS.map(function (x) { return '<button class="btn ghost sm" type="button" data-al-test="' + x[0] + '"' + (ready ? '' : ' disabled') + '>' + x[1] + '</button>'; }).join('') + '</div></div>' +
+        '<p class="form-error" id="alErr"></p></div>' +
+      '<div class="adm-card"><h3 class="adm-h3">Что присылать</h3><div class="al-events">' +
+        KINDS.map(function (x) { return '<label class="al-ev"><span><b>' + x[1] + '</b><small>' + x[2] + '</small></span><span class="adm-switch"><input type="checkbox" data-al="' + x[0] + '"' + (ev[x[0]] !== false ? ' checked' : '') + '><span></span></span></label>'; }).join('') +
+      '</div></div></div>';
+    var err = $('#alErr');
+    async function persist(msg) { n.events = ev; try { await A().API.adminSave('settings', s); DATA.settings = s; toast(msg || 'Сохранено'); return true; } catch (e) { err.textContent = A().errMsg(e); return false; } }
+    $('#alSave').addEventListener('click', function () {
+      var v = $('#alEmail').value.trim(); err.textContent = '';
+      if (v && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v)) { err.textContent = 'Проверьте адрес почты'; $('#alEmail').classList.add('invalid'); return; }
+      $('#alEmail').classList.remove('invalid'); n.email = v; persist(v ? 'Уведомления будут приходить на ' + v : 'Уведомления будут приходить на основную почту');
+    });
+    $$('[data-al]', m).forEach(function (i) { i.addEventListener('change', function () { ev[i.getAttribute('data-al')] = i.checked; persist(); }); });
+    $$('[data-al-test]', m).forEach(function (b) { b.addEventListener('click', async function () {
+      b.disabled = true; err.textContent = '';
+      try { var r = await A().API.adminPost('owner-notify/test', { kind: b.getAttribute('data-al-test') }); toast('Отправили «' + b.textContent + '» на ' + r.to); } catch (e) { err.textContent = A().errMsg(e); }
+      b.disabled = false;
     }); });
   }
 

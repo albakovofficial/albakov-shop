@@ -1559,6 +1559,45 @@
       var s = clone(DATA.settings); s.metrika = { id: id, webvisor: $('#mkWeb').checked };
       try { await A().API.adminSave('settings', s); await afterSave(id ? 'Метрика подключена' : 'Метрика отключена'); } catch (e) { $('#mkErr').textContent = A().errMsg(e); }
     });
+    seoCard(m);
+  }
+
+  /* Поиск: Яндекс Вебмастер, Google Search Console, IndexNow (13.47) */
+  // Код подтверждения: можно вставить и весь тег <meta name="yandex-verification" content="…"> — берём только код
+  function verifyCode(v) { v = String(v || '').trim(); var mm = /content\s*=\s*["']([^"']+)["']/i.exec(v); return (mm ? mm[1] : v).trim(); }
+  function seoCard(m) {
+    var sc = DATA.settings.seo || {}, info = DATA.seo || {}, url = info.url || location.origin, last = info.last;
+    var step = function (n, done, html) { return '<li class="seo-step' + (done ? ' done' : '') + '"><span class="seo-n">' + (done ? '✓' : n) + '</span><div>' + html + '</div></li>'; };
+    var box = document.createElement('div');
+    box.className = 'adm-card seo-card'; box.style.marginTop = '16px';
+    box.innerHTML = '<h3 class="adm-h3">Поиск: Яндекс и Google</h3>' +
+      '<p class="muted" style="font-size:14px;max-width:75ch;margin-bottom:18px">Сайт уже готов для поисковиков: у каждой страницы свой заголовок, описание и разметка товара, есть карта сайта. Но Яндекс и Google сами о новом магазине не узнают — его нужно добавить в их кабинеты. Это делается один раз.</p>' +
+      '<div class="seo-facts"><div><span>Карта сайта</span><a class="link" href="' + esc(url) + '/sitemap.xml" target="_blank" rel="noopener">' + esc(url.replace(/^https?:\/\//, '')) + '/sitemap.xml</a><small>' + (info.pages || 0) + ' ' + plural(info.pages || 0, 'страница', 'страницы', 'страниц') + '</small></div>' +
+        '<div><span>Фид товаров для Яндекса</span><a class="link" href="' + esc(url) + '/yml.xml" target="_blank" rel="noopener">' + esc(url.replace(/^https?:\/\//, '')) + '/yml.xml</a><small>для Яндекс Товаров и Директа</small></div>' +
+        '<div><span>Оповещение Яндекса</span><b class="' + (info.indexnow ? 'ok' : 'warn') + '">' + (info.indexnow ? 'включено' : info.https ? 'выключено' : 'нужен HTTPS') + '</b><small>' + (last ? (last.ok ? 'отправлено ' + last.count + ' ' + plural(last.count, 'адрес', 'адреса', 'адресов') + ' · ' : esc(last.error) + ' · ') + new Date(last.at).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'ещё ничего не отправляли') + '</small></div></div>' +
+      '<ol class="seo-steps">' +
+        step(1, !!sc.yandex, '<b>Яндекс Вебмастер.</b> Откройте <a class="link" href="https://webmaster.yandex.ru/sites/add/" target="_blank" rel="noopener">webmaster.yandex.ru</a>, добавьте адрес <span class="copyable">' + esc(url) + '</span>, выберите способ «Мета-тег», скопируйте код (или весь тег) в поле ниже, сохраните и нажмите в Вебмастере «Проверить».') +
+        step(2, false, '<b>Карта сайта в Яндексе.</b> В Вебмастере: «Индексирование» → «Файлы Sitemap» → добавьте <span class="copyable">' + esc(url) + '/sitemap.xml</span>. Там же в «Переобход страниц» можно отправить главную.') +
+        step(3, false, '<b>Регион.</b> В Вебмастере: «Информация о сайте» → «Региональность» → Россия. Без региона Яндекс хуже показывает магазин в выдаче.') +
+        step(4, !!sc.google, '<b>Google Search Console.</b> Откройте <a class="link" href="https://search.google.com/search-console" target="_blank" rel="noopener">search.google.com/search-console</a>, ресурс «Префикс URL» → <span class="copyable">' + esc(url) + '</span>, способ «Тег HTML», код — в поле ниже, сохраните и нажмите «Подтвердить». Потом «Файлы Sitemap» → <span class="copyable">sitemap.xml</span>.') +
+        step(5, false, '<b>Карточка в Яндекс Бизнесе</b> (по желанию): <a class="link" href="https://yandex.ru/sprav/add" target="_blank" rel="noopener">yandex.ru/sprav</a> — магазин появится на Картах и справа в выдаче.') +
+      '</ol>' +
+      '<div class="adm-form" style="margin-top:8px"><label class="field"><span>Код Яндекс Вебмастера</span><input class="input" id="seoYa" placeholder="Например: 1a2b3c4d5e6f7a8b" value="' + esc(sc.yandex || '') + '"></label>' +
+        '<label class="field"><span>Код Google Search Console</span><input class="input" id="seoGo" placeholder="Например: AbCdEf…" value="' + esc(sc.google || '') + '"></label>' +
+        '<label class="check" style="grid-column:1/-1"><input type="checkbox" id="seoIn"' + (sc.indexnow !== false ? ' checked' : '') + '> <span>Сразу сообщать Яндексу о новых и изменённых товарах и страницах (IndexNow)<br><small class="muted">Робот приходит за ними в течение дня, а не через недели. Bing получает те же адреса.</small></span></label></div>' +
+      '<div class="adm-actions" style="margin-top:12px"><button class="btn" id="seoSave" type="button">Сохранить</button><button class="btn ghost" id="seoPing" type="button">Отправить все страницы в Яндекс</button></div><p class="form-error" id="seoErr"></p>';
+    m.appendChild(box);
+    $('#seoSave', box).addEventListener('click', async function () {
+      var ya = verifyCode($('#seoYa', box).value), go = verifyCode($('#seoGo', box).value), bad = function (c) { return c && !/^[A-Za-z0-9_-]{6,120}$/.test(c); };
+      if (bad(ya) || bad(go)) { $('#seoErr', box).textContent = 'Код — это латинские буквы и цифры. Скопируйте его из кабинета ещё раз'; return; }
+      var s = clone(DATA.settings); s.seo = Object.assign({}, s.seo, { yandex: ya, google: go, indexnow: $('#seoIn', box).checked });
+      try { await A().API.adminSave('settings', s); await afterSave('Сохранено. Теперь нажмите «Проверить» в кабинете поисковика'); } catch (e) { $('#seoErr', box).textContent = A().errMsg(e); }
+    });
+    $('#seoPing', box).addEventListener('click', async function (e) {
+      var b = e.currentTarget; b.disabled = true; $('#seoErr', box).textContent = '';
+      try { var r = await A().API.adminPost('seo-ping'); await afterSave('Яндекс получил ' + r.last.count + ' ' + plural(r.last.count, 'адрес', 'адреса', 'адресов')); }
+      catch (er) { $('#seoErr', box).textContent = A().errMsg(er); b.disabled = false; }
+    });
   }
 
   /* ================= Подарочные сертификаты ================= */

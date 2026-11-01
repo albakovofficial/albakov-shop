@@ -3527,3 +3527,19 @@ body::after { content: none; display: none; }
   .fn-pl .final td, .fn-split div, .fn-spark i, .fn-pl .sum td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   body::after, body::before { display: none !important; }
 }
+
+/* Поиск: Яндекс и Google (13.47) */
+.seo-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 20px; }
+.seo-facts > div { display: grid; gap: 4px; align-content: start; padding: 14px 16px; border-radius: var(--r-md); background: #f6f7f8; font-size: 14px; min-width: 0; }
+.seo-facts span { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
+.seo-facts a { overflow-wrap: anywhere; justify-self: start; }
+.seo-facts b { font-weight: 500; } .seo-facts b.ok { color: #3e6847; } .seo-facts b.warn { color: #7a5c16; }
+.seo-facts small { font-size: 12.5px; color: var(--dim); }
+.seo-steps { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 0; }
+.seo-step { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); font-size: 14px; line-height: 1.6; color: var(--muted); }
+.seo-step:first-child { border-top: 0; }
+.seo-step b { color: var(--text); font-weight: 500; }
+.seo-n { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 12.5px; font-weight: 500; background: #f0f1f3; color: var(--text); }
+.seo-step.done .seo-n { background: #eef4ef; color: #3e6847; }
+.seo-step .copyable { overflow-wrap: anywhere; }
+@media (max-width: 900px) { .seo-facts { grid-template-columns: minmax(0, 1fr); } }

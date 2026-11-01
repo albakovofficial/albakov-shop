@@ -2715,6 +2715,8 @@
   function showGateway() {
     var g = gatewayCfg(), s = D.settings;
     if ($('.gate')) return;
+    // Поисковым роботам экран выбора не показываем: они должны видеть саму витрину, а не окно поверх неё
+    if (/bot|crawl|spider|slurp|lighthouse|yandex|google|bing|mail\.ru|headless|preview/i.test(navigator.userAgent || '')) return;
     var panel = function (key, art) {
       var c = g[key] || {}, img = c.image || Art.make(art);
       return '<button class="gate-panel' + (gClosed(key) ? ' is-soon' : '') + '" data-gate="' + key + '"><img src="' + esc(img) + '" alt=""><span class="gate-copy"><span class="gate-title">' + esc(c.title || GENDERS[key]) + '</span>' +

@@ -3667,3 +3667,57 @@ body::after { content: none; display: none; }
   .o-bar { bottom: 8px; padding: 12px; }
   .o-bar-acts { width: 100%; }
 }
+
+/* ---------- 13.51: карточка товара — цвета, остаток, пакет на телефоне, выбор размера снизу ---------- */
+.card .sub.low { color: #c2410c; font-weight: 500; }
+.card-swatches { gap: 2px; margin-left: -4px; }
+.card-swatches i { position: relative; cursor: pointer; margin: 4px; transition: transform .2s var(--ease), box-shadow .2s; }
+.card-swatches i::before { content: ""; position: absolute; inset: -6px; } /* палец попадает в маленький кружок */
+.card-swatches i:hover { transform: scale(1.2); }
+.card-swatches i.on { box-shadow: inset 0 0 0 1px rgba(20, 20, 22, .16), 0 0 0 2px var(--bg), 0 0 0 3px var(--text); }
+.card-swatches i.none { opacity: .35; }
+.card-swatches i:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
+.qa-btn { display: none; }
+@media (hover: none) {
+  .qa-btn { position: absolute; z-index: 3; right: 8px; bottom: 8px; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: rgba(255, 255, 255, .9); color: #141619; box-shadow: 0 6px 16px -8px rgba(18, 20, 23, .45); -webkit-tap-highlight-color: transparent; }
+  .qa-btn:active { transform: scale(.92); }
+}
+.p-sku { font-size: 13px; color: var(--muted); letter-spacing: .02em; }
+.p-sku b { font-weight: 500; color: var(--text); font-variant-numeric: tabular-nums; }
+/* Выбор размера */
+.qs { display: grid; gap: 22px; }
+.qs-top { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 14px; align-items: center; padding-right: 36px; }
+.qs-top img { width: 76px; height: 96px; object-fit: cover; border-radius: 12px; background: var(--surface); }
+.qs-top > div { display: grid; gap: 6px; }
+.qs-name { font-weight: 500; font-size: 16px; }
+.qs-sku { font-size: 12px; color: var(--muted); }
+.qs-row { display: grid; gap: 10px; }
+.qs-l { font-size: 13px; color: var(--muted); } .qs-l b { color: var(--text); font-weight: 500; }
+.qs-colors, .qs-sizes { display: flex; flex-wrap: wrap; gap: 8px; }
+.qs-color { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; border: 1px solid transparent; background: none; cursor: pointer; }
+.qs-color i { width: 26px; height: 26px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(20, 20, 22, .16); }
+.qs-color.on { border-color: var(--text); }
+.qs-color:disabled { opacity: .35; cursor: default; }
+.qs-size { min-width: 56px; height: 48px; padding: 0 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--paper); font: inherit; font-size: 15px; cursor: pointer; display: inline-grid; place-items: center; line-height: 1.1; color: var(--text); }
+.qs-size small { font-size: 10px; color: #c2410c; }
+.qs-size:hover:not(:disabled) { border-color: var(--text); }
+.qs-size:disabled { color: var(--dim); text-decoration: line-through; background: var(--surface); cursor: default; }
+.qs-more { font-size: 14px; justify-self: start; }
+@media (max-width: 760px) {
+  .modal:has(.qs) { align-items: end; padding: 0; }
+  .modal:has(.qs) .modal-box { width: 100%; border-radius: 24px 24px 0 0; padding: 22px 18px calc(22px + env(safe-area-inset-bottom, 0px)); max-height: 88vh; }
+  .modal:has(.qs) .modal-box { transform: translateY(40px); }
+  .modal.open:has(.qs) .modal-box { transform: none; }
+}
+/* Цены в одном ряду карточек — на одной линии, даже если у соседней нет кружков цвета */
+.card { grid-template-rows: auto 1fr; align-content: stretch; }
+.card .meta { display: flex; flex-direction: column; align-items: flex-start; }
+.card .meta > .card-buy { margin-top: auto; }
+/* Узкие телефоны (360 и меньше — многие Android): шапка помещается в экран, страница не шире экрана */
+@media (max-width: 400px) {
+  .header .wrap { gap: 6px; }
+  .header .tools { gap: 0; }
+  .header .tools .icon-btn, .header .burger { width: 38px; min-width: 38px; }
+  .header .logo { min-width: 0; }
+  .header .logo img, .header .logo svg { max-width: 100%; height: auto; }
+}

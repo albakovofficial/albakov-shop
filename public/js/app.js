@@ -297,20 +297,38 @@
     var n = Pricing.bonusFor(price, D.settings);
     return n > 0 ? '<span class="' + (cls || 'card-bonus') + '"><i class="b-ic" aria-hidden="true">Б</i>+' + bonusNum(n) + ' ' + bonusWord(n) + '</span>' : '';
   }
-  function card(p) {
-    var pr = priceOf(p), stock = totalStock(p), cat = catById(p.categoryId), cs = Pricing.colorsOf(p), c0 = shownColor(p);
+  // Карточка в каталоге. cid — выбранный цвет (переключается кружками прямо в карточке)
+  function card(p, cid) {
+    var pr = priceOf(p), stock = totalStock(p), cat = catById(p.categoryId), cs = Pricing.colorsOf(p);
+    var c0 = (cid && cs.find(function (c) { return c.id === cid; })) || shownColor(p);
     var img0 = (c0.images && c0.images[0]) || Art.make(c0.art), img1 = c0.images && c0.images[1];
     var preOn = p.preorder && Pricing.preorderLeft(p) > 0;
     var tags = stock === 0 ? [preOn ? '<span class="badge badge-pre">Предзаказ</span>' : '<span class="badge badge-out">Нет в наличии</span>'] : badgeHtml(p, pr);
-    var sub = cs.length > 1 ? (cat ? esc(cat.name) : '') : esc([cat && cat.name, c0.name].filter(Boolean).join(' · '));
-    var qa = (c0.sizes || []).filter(function (x) { return x.stock > 0; });
-    var quick = qa.length ? '<span class="qa"><span class="qa-label">' + (qa.length === 1 && c0.sizes.length === 1 ? '' : 'Быстро добавить') + '</span><span class="qa-sizes">' + qa.map(function (x) { return '<span class="qa-size" role="button" data-qa="' + esc(p.id) + '|' + esc(c0.id) + '|' + esc(x.size) + '">' + (qa.length === 1 && c0.sizes.length === 1 ? 'В корзину' : esc(x.size)) + '</span>'; }).join('') + '</span></span>' : '';
-    return '<a class="card" href="#/product/' + esc(p.slug) + (c0 !== cs[0] ? '?color=' + esc(c0.id) : '') + '"><div class="ph"><div class="tags">' + tags.join('') + '</div>' + favBtn(p.id) + quick +
-      '<img src="' + esc(img0) + '" alt="' + esc(p.name) + '" loading="lazy">' +
+    var cStock = Pricing.stockOf(c0);
+    // Под названием: мало осталось — важнее категории
+    var sub = cStock > 0 && cStock <= 3 ? '<span class="sub low">' + (cStock === 1 ? 'Последняя вещь' : 'Осталось ' + cStock + ' шт.') + (cs.length > 1 ? ' · ' + esc(c0.name.toLowerCase()) : '') + '</span>'
+      : '<span class="sub">' + (cs.length > 1 ? (cat ? esc(cat.name) : '') : esc([cat && cat.name, c0.name].filter(Boolean).join(' · '))) + '</span>';
+    var qa = (c0.sizes || []).filter(function (x) { return x.stock > 0; }), one = qa.length === 1 && c0.sizes.length === 1;
+    var quick = qa.length ? '<span class="qa"><span class="qa-label">' + (one ? '' : 'Быстро добавить') + '</span><span class="qa-sizes">' + qa.map(function (x) { return '<span class="qa-size" role="button" tabindex="0" data-qa="' + esc(p.id) + '|' + esc(c0.id) + '|' + esc(x.size) + '">' + (one ? 'В корзину' : esc(x.size)) + '</span>'; }).join('') + '</span></span>' +
+      // На телефоне наведения нет — кнопка с пакетом открывает выбор размера
+      '<span class="qa-btn" role="button" tabindex="0" aria-label="Выбрать размер и добавить в корзину" data-qsheet="' + esc(p.id) + '|' + esc(c0.id) + '">' + bagIcon() + '</span>' : '';
+    return '<a class="card" data-card="' + esc(p.id) + '" href="#/product/' + esc(p.slug) + (c0 !== cs[0] ? '?color=' + esc(c0.id) : '') + '"><div class="ph"><div class="tags">' + tags.join('') + '</div>' + favBtn(p.id) + quick +
+      '<img src="' + esc(img0) + '" alt="' + esc(p.name + (cs.length > 1 ? ', ' + c0.name.toLowerCase() : '')) + '" loading="lazy">' +
       (img1 ? '<img class="alt" src="' + esc(img1) + '" alt="" loading="lazy">' : '') + '</div>' +
-      '<div class="meta"><span class="name">' + esc(p.name) + '</span><span class="sub">' + sub + '</span>' +
-      (cs.length > 1 ? '<span class="card-swatches" title="' + esc(cs.map(function (c) { return c.name; }).join(', ')) + '">' + cs.slice(0, 5).map(function (c) { return '<i style="' + swatchStyle(c) + '"></i>'; }).join('') + (cs.length > 5 ? '<em>+' + (cs.length - 5) + '</em>' : '') + '<span class="sr">' + cs.length + ' ' + plural(cs.length, 'цвет', 'цвета', 'цветов') + '</span></span>' : '') +
-      '<span class="card-buy">' + priceHtml(pr) + '</span>' + bonusLine(pr.price) + '</div></a>';
+      '<div class="meta"><span class="name">' + esc(p.name) + '</span>' + sub +
+      (cs.length > 1 ? '<span class="card-swatches" role="group" aria-label="Цвета">' + cs.slice(0, 5).map(function (c) { return '<i role="button" tabindex="0" class="' + (c === c0 ? 'on' : '') + (Pricing.stockOf(c) ? '' : ' none') + '" style="' + swatchStyle(c) + '" data-sw="' + esc(p.id) + '|' + esc(c.id) + '" title="' + esc(c.name) + '" aria-label="' + esc(c.name) + '" aria-pressed="' + (c === c0) + '"></i>'; }).join('') + (cs.length > 5 ? '<em>+' + (cs.length - 5) + '</em>' : '') + '</span>' : '') +
+      '<span class="card-buy">' + priceHtml(pr) + '</span></div></a>';
+  }
+  function bagIcon() { return '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8h14l-1 12H6L5 8z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/><path d="M12 11v5M9.5 13.5h5"/></svg>'; }
+  // Выбор размера снизу экрана (телефон): цвет, размеры в наличии, «В корзину»
+  function quickSheet(pid, cid) {
+    var p = D.products.find(function (x) { return x.id === pid; }); if (!p) return;
+    var cs = Pricing.colorsOf(p), c = cs.find(function (x) { return x.id === cid; }) || shownColor(p), pr = priceOf(p);
+    var img = (c.images && c.images[0]) || Art.make(c.art);
+    openModal('<div class="qs"><div class="qs-top"><img src="' + esc(img) + '" alt=""><div><b class="qs-name">' + esc(p.name) + '</b>' + priceHtml(pr) + (p.sku ? '<span class="qs-sku">Арт. ' + esc(p.sku) + '</span>' : '') + '</div></div>' +
+      (cs.length > 1 ? '<div class="qs-row"><span class="qs-l">Цвет: <b>' + esc(c.name) + '</b></span><div class="qs-colors">' + cs.map(function (x) { return '<button type="button" class="qs-color' + (x === c ? ' on' : '') + '" data-qsheet="' + esc(p.id) + '|' + esc(x.id) + '" aria-label="' + esc(x.name) + '" aria-pressed="' + (x === c) + '"' + (Pricing.stockOf(x) ? '' : ' disabled') + '><i style="' + swatchStyle(x) + '"></i></button>'; }).join('') + '</div></div>' : '') +
+      '<div class="qs-row"><span class="qs-l">Размер</span><div class="qs-sizes">' + (c.sizes || []).map(function (x) { return x.stock > 0 ? '<button type="button" class="qs-size" data-qa="' + esc(p.id) + '|' + esc(c.id) + '|' + esc(x.size) + '">' + esc(x.size) + (x.stock <= 2 ? '<small>' + (x.stock === 1 ? 'последний' : 'мало') + '</small>' : '') + '</button>' : '<button type="button" class="qs-size" disabled>' + esc(x.size) + '</button>'; }).join('') + '</div></div>' +
+      '<a class="link qs-more" href="#/product/' + esc(p.slug) + (c !== cs[0] ? '?color=' + esc(c.id) : '') + '">Подробнее о товаре и таблица размеров →</a></div>');
   }
   function priceHtml(pr) { return '<span class="price">' + (pr.oldPrice ? '<span class="now sale">' + fmt(pr.price) + '</span><s>' + fmt(pr.oldPrice) + '</s>' : '<span class="now">' + fmt(pr.price) + '</span>') + '</span>'; }
 
@@ -992,7 +1010,7 @@
         if (st.min && pr.price < +st.min) return false;
         if (st.max && pr.price > +st.max) return false;
         if (st.sale && !pr.onSale) return false;
-        if (st.q) { var t = (p.name + ' ' + (p.description || '') + ' ' + colorNames(p) + ' ' + (c ? c.name : '')).toLowerCase(); if (t.indexOf(st.q.toLowerCase()) === -1) return false; }
+        if (st.q) { var t = (p.name + ' ' + (p.sku || '') + ' ' + (p.description || '') + ' ' + colorNames(p) + ' ' + (c ? c.name : '')).toLowerCase(); if (t.indexOf(st.q.toLowerCase()) === -1) return false; }
         return true;
       });
       if (st.tag === 'hit' && st.sort === 'popular') list = hitList(list);
@@ -1055,7 +1073,7 @@
 
     v.innerHTML = '<div class="wrap"><div class="page-head" style="padding-bottom:20px"><div class="crumbs"><a href="#/">Главная</a><span>/</span><a href="#/catalog">Каталог</a>' + (cat ? '<span>/</span><a href="#/catalog?cat=' + esc(cat.slug) + '">' + esc(cat.name) + '</a>' : '') + '</div></div>' +
       '<div class="product"><div id="galleryBox"></div>' +
-      '<div class="pinfo"><div style="display:grid;gap:14px">' + (function () { var b = badgeHtml(p, pr); return b.length ? '<div class="badges-row">' + b.join('') + '</div>' : ''; })() + '<h1>' + esc(p.name) + '</h1>' + specsSummaryHtml(p) + priceHtml(pr) +
+      '<div class="pinfo"><div style="display:grid;gap:14px">' + (function () { var b = badgeHtml(p, pr); return b.length ? '<div class="badges-row">' + b.join('') + '</div>' : ''; })() + '<h1>' + esc(p.name) + '</h1>' + (p.sku ? '<span class="p-sku">Арт. <b class="copyable">' + esc(p.sku) + '</b></span>' : '') + specsSummaryHtml(p) + priceHtml(pr) +
         (Pricing.bonusFor(pr.price, D.settings) > 0 ? '<div class="p-bonus">' + bonusLine(pr.price, 'p-bonus-n') + '<span class="muted">за покупку · 1 бонус = 1 ₽. Начислим на бонусный счёт ' + (bonusCfg().creditOn === 'done' ? 'после получения заказа' : 'после оплаты') + ', потратить можно на следующие покупки — хоть все сразу' + (API.user ? '' : '. Нужен <a class="link" href="#/account">личный кабинет</a>') + '</span></div>' : '') +
         (pr.promotion ? '<span class="promo-note">Акция «' + esc(pr.promotion.title) + '»' + (pr.promotion.endsAt ? ' до ' + esc(fmtDate(pr.promotion.endsAt)) : '') + '</span>' : '') +
         (pre ? '<div class="pre-box"><div class="pre-top"><b>Предзаказ</b>' + (p.preorderShip ? '<span>отправим ' + esc(preDate()) + '</span>' : '') + '</div>' +
@@ -2709,11 +2727,11 @@
 
   /* ---------- Поиск ---------- */
   function openSearch() {
-    openModal('<h3 class="serif" style="font-size:34px;margin-bottom:20px">Поиск</h3><form id="sForm"><input class="input" id="sInput" placeholder="Например, пальто или кашемир" autocomplete="off" aria-label="Поиск"></form><div id="sRes" style="display:grid;gap:12px;margin-top:20px"></div>');
+    openModal('<h3 class="serif" style="font-size:34px;margin-bottom:20px">Поиск</h3><form id="sForm"><input class="input" id="sInput" placeholder="Название, цвет или артикул" autocomplete="off" aria-label="Поиск"></form><div id="sRes" style="display:grid;gap:12px;margin-top:20px"></div>');
     var i = $('#sInput'); setTimeout(function () { i.focus(); }, 50);
     i.addEventListener('input', function () {
       var t = i.value.trim().toLowerCase();
-      var res = t.length < 2 ? [] : D.products.filter(onSale).filter(function (p) { var cat = catById(p.categoryId); return (p.name + ' ' + colorNames(p) + ' ' + (cat ? cat.name : '') + ' ' + (p.description || '') + ' ' + (window.Specs ? Specs.list(p).map(function (x) { return x.value; }).join(' ') : '')).toLowerCase().indexOf(t) !== -1; });
+      var res = t.length < 2 ? [] : D.products.filter(onSale).filter(function (p) { var cat = catById(p.categoryId); return (p.name + ' ' + (p.sku || '') + ' ' + colorNames(p) + ' ' + (cat ? cat.name : '') + ' ' + (p.description || '') + ' ' + (window.Specs ? Specs.list(p).map(function (x) { return x.value; }).join(' ') : '')).toLowerCase().indexOf(t) !== -1; });
       var more = res.length > 6; res = res.slice(0, 6);
       $('#sRes').innerHTML = res.map(function (p) { return '<a class="mini-line" href="#/product/' + esc(p.slug) + '"><img src="' + esc(imgOf(p)) + '" alt=""><div>' + esc(p.name) + '<div class="sub">' + esc(Pricing.colorsOf(p).map(function (c) { return c.name; }).join(', ')) + '</div></div><span class="num">' + fmt(priceOf(p).price) + '</span></a>'; }).join('') + (more ? '<a class="link sh-more" style="margin-top:14px" href="#/catalog?q=' + encodeURIComponent(i.value.trim()) + '"><span>Все результаты</span><i aria-hidden="true">' + ARROW + '</i></a>' : '') || (t.length >= 2 ? '<p class="muted">Ничего не нашлось</p>' : '');
     });
@@ -2938,6 +2956,15 @@
         if (fp) toast(on ? '«' + fp.name + '» — в избранном' : 'Убрали из избранного');
         return;
       }
+      var sw = e.target.closest('[data-sw]');
+      if (sw) {
+        e.preventDefault(); e.stopPropagation();
+        var ks = sw.getAttribute('data-sw').split('|'), sp = D.products.find(function (x) { return x.id === ks[0]; }), ce = sw.closest('.card');
+        if (sp && ce) { var tmp = document.createElement('div'); tmp.innerHTML = card(sp, ks[1]); var nc = tmp.firstChild; ce.replaceWith(nc); var f = nc.querySelector('[data-sw="' + ks[0] + '|' + ks[1] + '"]'); if (f && e.detail === 0) f.focus(); }
+        return;
+      }
+      var qsh = e.target.closest('[data-qsheet]');
+      if (qsh) { e.preventDefault(); e.stopPropagation(); var kq = qsh.getAttribute('data-qsheet').split('|'); quickSheet(kq[0], kq[1]); return; }
       var qa = e.target.closest('[data-qa]');
       if (qa) {
         e.preventDefault(); e.stopPropagation();
@@ -2945,6 +2972,7 @@
         var sz = pr && Pricing.colorOf(pr, k[1]).sizes.find(function (x) { return x.size === k[2]; }), inCart = (Cart.find(k[0], k[1], k[2]) || { qty: 0 }).qty;
         if (!sz || inCart + 1 > sz.stock) { toast('Больше этого размера нет в наличии', true); return; }
         Cart.add(k[0], k[1], k[2], 1); qa.classList.add('added');
+        if (qa.closest('.qs')) closePanels();
         toast('«' + pr.name + '», ' + Pricing.colorOf(pr, k[1]).name.toLowerCase() + ', ' + k[2] + ' — в корзине');
         return;
       }
@@ -2961,6 +2989,8 @@
       }
     });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closePanels(); });
+    // Кружки цвета, размеры и пакет в карточке — кнопки и с клавиатуры
+    document.addEventListener('keydown', function (e) { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('span[data-qa], i[data-sw], span[data-qsheet]')) { e.preventDefault(); e.target.click(); } });
     // Оформление: изменить количество или убрать товар прямо в блоке «Ваш заказ»
     document.addEventListener('click', function (e) {
       var rm = e.target.closest('[data-co-rm]'), qb = e.target.closest('[data-co-q]');

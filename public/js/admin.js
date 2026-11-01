@@ -663,7 +663,7 @@
       '<span>Вернули ' + fmt(o.refunded) + ' из ' + fmt(o.total) + ' · ' + esc(o.customer.lastName + ' ' + o.customer.firstName) + ' · последний возврат ' + esc(dt(lastRf.at)) + '</span></div><b class="num rf-banner-sum">−' + fmt(o.refunded) + '</b></div>' : '';
     m.innerHTML = '<a class="link muted" href="#/admin?s=orders" style="font-size:14px">← Все заказы</a>' + head((o.status === 'returned' ? 'Возврат · заказ № ' : 'Заказ № ') + o.number, '', esc(new Date(o.createdAt).toLocaleString('ru-RU'))) + banner +
       '<div class="adm-two"><div class="adm-card" style="display:grid;gap:14px"><h3 class="adm-h3">Состав</h3>' +
-        o.items.map(function (i) { return '<div class="mini-line"><img src="' + esc(i.image || Art.make(i.art)) + '" alt=""><div>' + esc(i.name) + '<div class="sub">' + (i.color ? 'Цвет ' + esc(i.color) + ' · ' : '') + 'Размер ' + esc(i.size) + ' · ' + i.qty + ' шт. × ' + fmt(i.price) + (i.refundedQty ? ' · <span class="rf-back">возвращено ' + i.refundedQty + ' шт.</span>' : '') + '</div></div><span class="num">' + fmt(i.price * i.qty) + '</span></div>'; }).join('') +
+        o.items.map(function (i) { var ip = DATA.products.find(function (x) { return x.id === i.productId; }); return '<div class="mini-line"><img src="' + esc(i.image || Art.make(i.art)) + '" alt=""><div>' + esc(i.name) + '<div class="sub">' + (ip && ip.sku ? 'Арт. ' + esc(ip.sku) + ' · ' : '') + (i.color ? 'Цвет ' + esc(i.color) + ' · ' : '') + 'Размер ' + esc(i.size) + ' · ' + i.qty + ' шт. × ' + fmt(i.price) + (i.refundedQty ? ' · <span class="rf-back">возвращено ' + i.refundedQty + ' шт.</span>' : '') + '</div></div><span class="num">' + fmt(i.price * i.qty) + '</span></div>'; }).join('') +
         '<div class="sum-row"><span>Товары</span><span>' + fmt(o.subtotal) + '</span></div>' +
         (o.promoDiscount ? '<div class="sum-row disc"><span>Промокод ' + esc(o.promoCode) + '</span><span>−' + fmt(o.promoDiscount) + '</span></div>' : '') +
         '<div class="sum-row"><span>' + esc(d.name || 'Доставка') + '</span><span>' + fmt(d.price || 0) + '</span></div>' +
@@ -797,7 +797,7 @@
       row: function (p) {
         var c = DATA.categories.find(function (x) { return x.id === p.categoryId; }), st = productStock(p), pr = Pricing.productPrice(p, DATA.promotions);
         var cs = Pricing.colorsOf(p);
-        return ['<img class="adm-thumb" src="' + esc(A().imgOf(p)) + '" alt="">', esc(p.name), esc({ women: 'Женщинам', men: 'Мужчинам' }[p.gender] || 'Унисекс'), esc(c ? c.name : '—'),
+        return ['<img class="adm-thumb" src="' + esc(A().imgOf(p)) + '" alt="">', esc(p.name) + (p.sku ? '<div class="muted num" style="font-size:12px">' + esc(p.sku) + '</div>' : ''), esc({ women: 'Женщинам', men: 'Мужчинам' }[p.gender] || 'Унисекс'), esc(c ? c.name : '—'),
           '<span class="card-swatches" title="' + esc(cs.map(function (x) { return x.name; }).join(', ')) + '">' + cs.map(function (x) { return '<i style="background:' + esc(x.hex || 'var(--surface-2)') + '"></i>'; }).join('') + '</span>',
           '<span class="num">' + fmt(pr.price) + (pr.oldPrice ? ' <s class="muted">' + fmt(pr.oldPrice) + '</s>' : '') + '</span>', '<span class="num' + (st === 0 ? ' bad' : st < 4 ? ' warn' : '') + '">' + st + '</span>', onOff(p.active !== false)];
       },
@@ -805,6 +805,7 @@
         return [
           { section: 'Основное' },
           { k: 'name', label: 'Название', wide: true },
+          { k: 'sku', label: 'Артикул', hint: 'Заполнится сам: ALB-0001, ALB-0002… Можно указать свой — латиница, цифры, дефис' },
           { k: 'categoryId', label: 'Категория', type: 'select', options: catOpts() },
           { k: 'gender', label: 'Для кого', type: 'select', options: [['women', 'Женщинам'], ['men', 'Мужчинам'], ['unisex', 'Унисекс — в обоих разделах']] },
           { k: 'sizeChartId', label: 'Размерная сетка', type: 'select', options: [['', 'Без таблицы размеров']].concat(DATA.sizeCharts.map(function (c) { return [c.id, c.name]; })) },
@@ -934,7 +935,7 @@
         if (all.some(function (x) { return x.id !== p.id && x.slug === p.slug; })) return 'Такой адрес страницы уже занят другим товаром';
         return '';
       },
-      duplicate: function (p) { p.id = uid('p'); p.name += ' (копия)'; p.slug = translit(p.name) + '-' + Math.random().toString(36).slice(2, 5); p.active = false; return p; }
+      duplicate: function (p) { p.id = uid('p'); p.sku = ''; p.name += ' (копия)'; p.slug = translit(p.name) + '-' + Math.random().toString(36).slice(2, 5); p.active = false; return p; }
     });
     // «Приход товара»: в списке — для любого товара, в карточке — сразу для этого
     var hd = $('.adm-head', m);

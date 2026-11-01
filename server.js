@@ -50,6 +50,23 @@ db.sessions = db.sessions || {};
 if (!db.orderNumbering) { db.orderSeq = 0; db.orderNumbering = 1; }
 // Статистика посещений (13.50.2): один раз обнуляем — до 13.50.1 в неё могли попадать заходы владельца
 if (db.statsReset !== 2) { db.stats = {}; db.statsReset = 2; }
+/* Артикулы (13.51): у каждого товара свой — ALB-0001, ALB-0002…; можно задать свой в панели */
+function cleanSku(v) { return String(v || '').trim().toUpperCase().replace(/\s+/g, '-').replace(/[^A-ZА-ЯЁ0-9._\/-]/g, '').slice(0, 32); }
+function nextSku(list) {
+  const n = list.reduce((m, x) => { const r = /^ALB-(\d+)$/.exec(x.sku || ''); return r ? Math.max(m, Number(r[1])) : m; }, 0) + 1;
+  return 'ALB-' + String(n).padStart(4, '0');
+}
+// Проверяет и дополняет артикулы: пустой — следующий номер, занятый другим товаром — ошибка
+function fixSkus(items, all, strict) {
+  items.forEach((it) => {
+    it.sku = cleanSku(it.sku);
+    if (!it.sku) return;
+    const twin = all.find((x) => x !== it && x.id !== it.id && cleanSku(x.sku) === it.sku);
+    if (twin) { if (strict) fail(400, 'Артикул ' + it.sku + ' уже у товара «' + twin.name + '»'); it.sku = ''; }
+  });
+  items.forEach((it) => { if (!it.sku) it.sku = nextSku(all.concat(items)); });
+}
+fixSkus(db.products.slice().sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || ''))), db.products, false);
 Pricing.migrateData(db, SEED); // цвета товаров, логотип — для данных, созданных до обновления
 db.secrets = db.secrets || {};
 db.waitlist = db.waitlist || [];
@@ -2089,9 +2106,10 @@ async function api(req, res, url, body) {
         db[p[1]] = arr.filter((x) => !drop.has(x.id));
         save(); return { deleted: before - db[p[1]].length };
       }
-      if (!p[2] && M === 'PUT') { if (!Array.isArray(body.value)) fail(400, 'Нужен список'); if (p[1] === 'products') body.value.forEach(Pricing.migrateProduct); db[p[1]] = body.value; save(); seoChanged(p[1]); return p[1] === 'products' ? { notify: await processWaitlist() } : {}; }
+      if (!p[2] && M === 'PUT') { if (!Array.isArray(body.value)) fail(400, 'Нужен список'); if (p[1] === 'products') { body.value.forEach(Pricing.migrateProduct); fixSkus(body.value, body.value, true); } db[p[1]] = body.value; save(); seoChanged(p[1]); return p[1] === 'products' ? { notify: await processWaitlist() } : {}; }
       if (p[2] && M === 'PUT') {
         const item = body.value; if (!item || item.id !== p[2]) fail(400, 'Неверные данные');
+        if (p[1] === 'products') fixSkus([item], arr, true);
         if (p[1] === 'products') { const was = arr.find((x) => x.id === item.id); item.preorderSold = was ? (was.preorderSold || 0) : 0; if (Array.isArray(item.look)) item.look = item.look.filter((id) => id !== item.id && db.products.some((x) => x.id === id)).slice(0, 4); Pricing.migrateProduct(item); if (item.specs) { item.specs = Specs.clean(item.specs); if (!Object.keys(item.specs).length) delete item.specs; } }
         const i = arr.findIndex((x) => x.id === item.id);
         if (i === -1) arr.push(item); else arr[i] = item;

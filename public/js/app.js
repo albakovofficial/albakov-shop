@@ -64,7 +64,8 @@
     return WOMEN_CAT.test(c.name) ? 'women' : MEN_CAT.test(c.name) ? 'men' : 'unisex';
   }
   function catInG(c) { var g = curGender(), cg = catGender(c); return !g || cg === 'unisex' || cg === g; }
-  function sortedCats() { return D.categories.filter(catInG).sort(function (a, b) { return (a.order || 0) - (b.order || 0); }); }
+  // Категории для меню, подвала и фильтров — только те, где в текущем разделе есть товары (пустые не показываем)
+  function sortedCats() { var ps = gProducts(); return D.categories.filter(function (c) { return catInG(c) && ps.some(function (p) { return p.categoryId === c.id; }); }).sort(function (a, b) { return (a.order || 0) - (b.order || 0); }); }
   var STATUS = { new: 'Новый', processing: 'Собирается', shipped: 'Передан в доставку', done: 'Выполнен', canceled: 'Отменён', returned: 'Возврат' };
   var PAY = { pending: 'Ожидает оплаты', paid: 'Оплачен', canceled: 'Оплата отменена', refunded: 'Деньги возвращены' };
 
@@ -173,7 +174,16 @@
   }
   // Ссылки из настроек: только адреса сайта, https, почта и телефон — «javascript:» и подобное отбрасываем
   function safeUrl(u) { u = String(u || '').trim(); return /^(https?:\/\/|#|\/|mailto:|tel:)/i.test(u) || /^[\w.-]+(\/|$|\?|#)/.test(u) && !/^[\w.+-]+:/.test(u) ? u : '#/'; }
-  function navLinks() { return (D.settings.nav || []).map(function (n) { return '<a href="' + esc(safeUrl(n.link)) + '">' + esc(n.label) + '</a>'; }).join(''); }
+  // Пункт меню ведёт в пустой раздел (нет новинок, хитов, товаров категории или скидок) — прячем его, пока там пусто
+  function navEmpty(link) {
+    var m = /^#?\/?catalog\?(?:.*&)?(tag|cat)=([^&]+)/.exec(String(link || '').replace(/^\//, '#/').replace(/^#\//, ''));
+    var ps = gProducts();
+    if (m && m[1] === 'tag') return m[2] === 'new' ? !ps.some(function (p) { return (p.tags || []).indexOf('new') !== -1; }) : m[2] === 'hit' ? !hitList(ps).length : false;
+    if (m && m[1] === 'cat') { var c = D.categories.find(function (x) { return x.slug === decodeURIComponent(m[2]); }); return !!c && !ps.some(function (p) { return p.categoryId === c.id; }); }
+    if (/^#?\/?sale$/.test(String(link || '').replace(/^#\//, '/'))) return !activePromos().length && !ps.some(function (p) { return priceOf(p).onSale; });
+    return false;
+  }
+  function navLinks() { return (D.settings.nav || []).filter(function (n) { return !navEmpty(n.link); }).map(function (n) { return '<a href="' + esc(safeUrl(n.link)) + '">' + esc(n.label) + '</a>'; }).join(''); }
   /* Соцсети: подпись «Социальные сети», под ней ссылки с цветными значками */
   var SOC_ICON = {
     telegram: '<svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="16" fill="#2AABEE"/><path fill="#fff" d="M7.4 15.6l15.5-6c.7-.3 1.4.2 1.1 1.3l-2.6 12.4c-.2.9-.7 1.1-1.4.7l-4-2.9-1.9 1.9c-.2.2-.4.4-.8.4l.3-4.1 7.4-6.7c.3-.3-.1-.4-.5-.2l-9.1 5.8-3.9-1.2c-.9-.3-.9-.9.2-1.4z"/></svg>',
@@ -422,6 +432,7 @@
     if (fn !== adminPage) statPage();
     if (routeN++ && window.Metrika && fn !== adminPage) setTimeout(function () { Metrika.hit(location.pathname + location.search); }, 50);
     pageMeta(name, p, r.q);
+    if ($('.nf', v)) document.title = 'Страница не найдена — ' + (D.settings.storeName || 'ALBAKOV'); // 404, в том числе для удалённого товара
     document.body.classList.toggle('hero-under', !!$('#view > .slider:first-child'));
     var fab = $('#fab'); if (fab) { fab.hidden = fn === adminPage || (name === 'account' && r.q.tab === 'support'); fabSet(false); }
     syncHeaderH();
@@ -1524,6 +1535,18 @@
     return q;
   }
   function earnRow(q) { return q.bonusEarn > 0 ? '<div class="sum-row bonus-earn"><span><i class="b-ic" aria-hidden="true">Б</i>' + (API.user ? 'Начислим за заказ' : 'Бонусы за заказ') + (q.bonusOnline > 0 ? ' <small class="muted">· из них +' + bonusNum(q.bonusOnline) + ' за онлайн-оплату</small>' : '') + '</span><span>+' + bonusNum(q.bonusEarn) + ' ' + bonusWord(q.bonusEarn) + '</span></div>' : ''; }
+  /* Шкала «до бесплатной доставки»: порог — самый низкий «Бесплатно от» среди способов доставки из панели */
+  var TRUCK_IC = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6.5h11v9H3z"/><path d="M14 9.5h3.6l3.4 3.4v2.6h-7"/><circle cx="7" cy="17.5" r="1.8"/><circle cx="17.5" cy="17.5" r="1.8"/></svg>';
+  function freeShipBar(sum) {
+    var ms = (((D.settings.delivery || {}).methods) || []).filter(function (m) { return Number(m.freeFrom) > 0; });
+    if (!ms.length) return '';
+    var m = ms.reduce(function (a, b) { return Number(b.freeFrom) < Number(a.freeFrom) ? b : a; }), from = Number(m.freeFrom);
+    var where = m.pickupPoint ? ' в пункт выдачи' : m.cdekDoor ? ' курьером' : '';
+    var left = Math.max(0, from - sum), pc = Math.min(100, Math.round(sum / from * 100));
+    return '<div class="fsb' + (left ? '' : ' done') + '" role="status"><div class="fsb-top"><span class="fsb-ic">' + (left ? TRUCK_IC : FIT_OK) + '</span><span class="fsb-t">' +
+      (left ? 'Ещё <b>' + fmt(left) + '</b> — и доставка' + where + ' бесплатно' : '<b>Доставка' + where + ' — бесплатно</b>') + '</span></div>' +
+      '<div class="fsb-bar" aria-hidden="true"><i style="width:' + pc + '%"></i></div>' + (left ? '<span class="fsb-note">Бесплатно от ' + fmt(from) + '</span>' : '') + '</div>';
+  }
   // В корзине одна вещь в двух размерах — подскажем подобрать размер, чтобы не возвращать лишнее
   function bracketHint(q) {
     var seen = {}, hit = null;
@@ -1539,7 +1562,7 @@
     if (!q.lines.length) { body.innerHTML = emptyCartHtml(true); foot.hidden = true; return; }
     foot.hidden = false;
     body.innerHTML = bracketHint(q) + q.lines.map(lineHtml).join('');
-    foot.innerHTML = (q.saleDiscount ? '<div class="sum-row disc"><span>Скидка</span><span>−' + fmt(q.saleDiscount) + '</span></div>' : '') +
+    foot.innerHTML = freeShipBar(q.subtotal) + (q.saleDiscount ? '<div class="sum-row disc"><span>Скидка</span><span>−' + fmt(q.saleDiscount) + '</span></div>' : '') +
       '<div class="sum-row total"><span>Итого</span><span>' + fmt(q.subtotal) + '</span></div>' + earnRow(q) + '<p class="muted" style="font-size:13px">' + (API.user && API.user.bonus && q.bonus.enabled ? 'Доставка, промокод и оплата бонусами — на следующем шаге' : 'Доставка и промокод — на следующем шаге') + '</p>' +
       '<a class="btn block" href="#/checkout">Оформить заказ</a><a class="btn ghost block" href="#/cart">Перейти в корзину</a>' + remindHtml();
   }
@@ -1573,7 +1596,7 @@
       if (!q.lines.length) { $('#cpLines').innerHTML = emptyCartHtml(false); drawRecent($('#cpRecent')); $('#cpSum').hidden = true; $('#cpLines').parentNode.classList.add('is-empty'); return; }
       $('#cpSum').hidden = false; $('#cpLines').parentNode.classList.remove('is-empty'); if ($('#cpRecent')) $('#cpRecent').innerHTML = '';
       $('#cpLines').innerHTML = bracketHint(q) + q.lines.map(lineHtml).join('');
-      $('#cpSum').innerHTML = '<div class="sum-row"><span>' + q.count + ' ' + plural(q.count, 'товар', 'товара', 'товаров') + '</span><span>' + fmt(q.baseTotal) + '</span></div>' +
+      $('#cpSum').innerHTML = freeShipBar(q.subtotal) + '<div class="sum-row"><span>' + q.count + ' ' + plural(q.count, 'товар', 'товара', 'товаров') + '</span><span>' + fmt(q.baseTotal) + '</span></div>' +
         (q.saleDiscount ? '<div class="sum-row disc"><span>Скидка по акциям</span><span>−' + fmt(q.saleDiscount) + '</span></div>' : '') +
         '<div class="sum-row total"><span>Итого</span><span>' + fmt(q.subtotal) + '</span></div>' + earnRow(q) +
         (API.user && API.user.bonus && q.bonus.enabled ? '<p class="muted" style="font-size:13px">На бонусном счёте ' + bonusNum(API.user.bonus) + ' ' + bonusWord(API.user.bonus) + ' — спишете при оформлении</p>' : '') + '<a class="btn block" href="#/checkout">Оформить заказ</a>' + remindHtml();
@@ -2788,7 +2811,17 @@
     var c = D.settings.contacts || {};
     return '<h2>Контакты</h2><p>' + [c.phone && '<span class="copyable">' + esc(c.phone) + '</span>', c.email && '<span class="copyable">' + esc(c.email) + '</span>', esc(c.address || ''), esc(c.hours || '')].filter(Boolean).join('<br>') + '</p>';
   }
-  function notFound(v) { v.innerHTML = '<div class="wrap"><div class="empty" style="padding:120px 0"><span class="eyebrow">404</span><h3>Страница не найдена</h3><a class="btn ghost" href="#/">На главную</a></div></div>'; }
+  /* 404 в стиле сайта: крупные цифры, понятный текст, куда пойти дальше */
+  function notFound(v) {
+    var cats = sortedCats().slice(0, 5);
+    v.innerHTML = '<div class="wrap"><section class="nf">' +
+      '<div class="nf-art" aria-hidden="true"><span class="nf-ring"></span><span class="nf-num">4<i>0</i>4</span></div>' +
+      '<div class="nf-copy"><span class="eyebrow">Ошибка 404</span><h1 class="nf-title">Такой страницы нет</h1>' +
+        '<p class="nf-text">Возможно, ссылка устарела или в адресе опечатка. Вещь могла закончиться — загляните в каталог, там всё, что есть сейчас.</p>' +
+        '<div class="nf-acts"><a class="btn nf-go" href="#/catalog"><span>Перейти в каталог</span><span class="bn-ic" aria-hidden="true">' + ARROW + '</span></a><a class="btn ghost" href="#/">На главную</a><button type="button" class="link nf-search" data-act="search">Поиск по сайту</button></div>' +
+        (cats.length ? '<div class="nf-cats">' + cats.map(function (c) { return '<a href="#/catalog?cat=' + esc(c.slug) + '">' + esc(c.name) + '</a>'; }).join('') + '</div>' : '') +
+      '</div></section></div>';
+  }
 
   /* ---------- Поиск ---------- */
   function openSearch() {

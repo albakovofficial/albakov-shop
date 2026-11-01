@@ -62,7 +62,6 @@
     async saveCart(lines) { await call('PUT', 'api/me/cart', { lines: lines }); },
     async savePrefs(o) { this.user = (await call('PUT', 'api/me/prefs', o)).user; return this.user; },
     async saveFavorites(list) { this.user = (await call('PUT', 'api/me/favorites', { list: list })).user; return this.user; },
-    async saveAddresses(list) { this.user = (await call('PUT', 'api/me/addresses', { list: list })).user; return this.user; },
     async updateProfile(f) { this.user = (await call('PUT', 'api/me', f)).user; return this.user; },
     async myBonus() { var r = await call('GET', 'api/me'); this.user = r.user; return r; },
     async bonusSeen() { this.user = (await call('POST', 'api/me/bonus-seen')).user; return this.user; },

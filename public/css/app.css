@@ -2948,45 +2948,8 @@ a:hover .cat-go { background: var(--ink); color: #fff; transform: rotate(-45deg)
 .fav-empty p { color: var(--muted); line-height: 1.6; }
 
 /* адреса в кабинете */
-.addr-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 22px; }
-.addr-head h3 { font-family: var(--serif); font-weight: 200; font-size: clamp(28px, 3vw, 38px); letter-spacing: -.03em; }
-.addr-head p { margin-top: 6px; max-width: 52ch; font-size: 14px; }
-.addr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 12px; }
-.addr-card { display: grid; gap: 12px; align-content: start; padding: 20px 22px; border-radius: var(--r-lg); background: #fff; box-shadow: var(--ring); transition: box-shadow .3s, transform .4s var(--ease); }
-.addr-card:hover { transform: translateY(-2px); box-shadow: var(--ring), var(--lift); }
-.addr-card.is-default { box-shadow: inset 0 0 0 1.5px var(--ink), 0 18px 36px -28px rgba(18, 20, 23, .45); }
-.addr-top { display: flex; align-items: center; gap: 12px; }
-.addr-top b { font-weight: 500; font-size: 16px; }
-.addr-ic { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 13px; background: var(--surface); box-shadow: var(--ring); }
-.addr-card.is-default .addr-ic { background: var(--ink); color: #fff; box-shadow: none; }
-.addr-ic svg, .addr-kinds svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linejoin: round; }
-.addr-def { margin-left: auto; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: .04em; color: #fff; background: var(--acc-grad); }
-.addr-line { font-size: 15px; line-height: 1.55; color: var(--text); }
-.addr-note { font-size: 13px; color: var(--muted); }
-.addr-act { display: flex; flex-wrap: wrap; gap: 6px 16px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 13px; }
-.addr-del { color: var(--danger); border-bottom-color: rgba(158, 59, 48, .3); }
-.addr-empty { margin: 0; justify-self: start; }
-.addr-kinds { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.addr-kinds input { position: absolute; opacity: 0; pointer-events: none; }
-.addr-kinds span { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px; border-radius: 14px; background: var(--surface); box-shadow: var(--ring); font-size: 14px; cursor: pointer; transition: background .2s, color .2s; }
-.addr-kinds input:checked + span { background: var(--ink); color: #fff; box-shadow: 0 8px 18px -10px rgba(13, 14, 16, .7); }
-.addr-kinds input:focus-visible + span { outline: 2px solid var(--acc); outline-offset: 2px; }
 
 /* адреса при оформлении */
-.addr-saved { display: grid; gap: 10px; }
-.addr-saved[hidden] { display: none; }
-.addr-saved-t { font-size: 12px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
-.addr-chips { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding: 2px; margin: -2px; }
-.addr-chips::-webkit-scrollbar { display: none; }
-.addr-chip { flex: none; display: grid; gap: 3px; max-width: 260px; padding: 12px 16px; border-radius: 16px; text-align: left; background: #fff; box-shadow: var(--ring); transition: box-shadow .2s, background .2s; }
-.addr-chip:hover { box-shadow: inset 0 0 0 1px rgba(18, 20, 23, .2); }
-.addr-chip.on { background: var(--ink); color: #fff; box-shadow: 0 10px 22px -14px rgba(13, 14, 16, .8); }
-.addr-chip b { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; }
-.addr-chip b i { font-style: normal; font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: 2px 7px; border-radius: 999px; background: var(--acc-grad); color: #fff; }
-.addr-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--muted); }
-.addr-chip.on span { color: rgba(255, 255, 255, .7); }
-.addr-chip-add { background: transparent; border: 1.5px dashed rgba(18, 20, 23, .2); box-shadow: none; }
-.co-save[hidden] { display: none; }
 
 /* кабинет: шесть вкладок — на телефоне листаются */
 @media (max-width: 760px) {
@@ -3298,12 +3261,10 @@ body::after { content: none; display: none; }
 }
 
 /* Подсказки адреса (13.43) */
-.ad-hint { display: block; min-height: 16px; margin-top: 6px; font-size: 12.5px; color: var(--muted); }
 .field .pvz-combo { margin-top: 0; }
 .pvz-sug { border-radius: 16px; box-shadow: 0 18px 40px -18px rgba(13, 14, 16, .35); border-color: rgba(13, 14, 16, .1); max-height: 300px; overflow-y: auto; overscroll-behavior: contain; }
 .pvz-sug li.on, .pvz-sug li:hover { background: var(--surface); }
 .pvz-sug li b { font-weight: 500; }
-.modal .pvz-sug { z-index: 60; }
 
 /* ---------- Пустая корзина (13.43) ---------- */
 .ec { position: relative; isolation: isolate; overflow: hidden; display: grid; justify-items: center; gap: 14px; max-width: 640px; margin: 0 auto; padding: clamp(40px, 6vw, 72px) clamp(22px, 4vw, 56px) clamp(36px, 5vw, 56px); text-align: center; border-radius: var(--r-xl); background: radial-gradient(80% 70% at 50% 0%, rgba(255, 154, 92, .14), transparent 70%), linear-gradient(180deg, #fff, #fafafa); box-shadow: var(--ring), 0 40px 80px -60px rgba(13, 14, 16, .35); }

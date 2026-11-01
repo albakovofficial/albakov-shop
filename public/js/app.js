@@ -223,7 +223,7 @@
         col('Магазин', sortedCats().map(function (x) { return '<li><a href="#/catalog?cat=' + esc(x.slug) + '">' + esc(x.name) + '</a></li>'; }).join('') + '<li><a href="#/catalog?tag=new">Новинки</a></li><li><a href="#/sale">Акции</a></li>' + (D.giftCfg && D.giftCfg.enabled !== false ? '<li><a href="#/gift">Подарочные сертификаты</a></li>' : '')) +
         col('Покупателям', '<li><a href="#/track">Где мой заказ</a></li>' + pages('help') + '<li><a href="#/sizes">Таблица размеров</a></li>' + pages('brand') +
           '<li data-inst="installed-hide"' + (window.Install && Install.isInstalled() ? ' hidden' : '') + '><button class="foot-btn" data-act="install">Приложение на телефон</button></li>') +
-        col('Личный кабинет', '<li><a href="#/account?tab=orders">Мои заказы</a></li><li><a href="#/favorites">Избранное</a></li><li><a href="#/account?tab=addresses">Адреса доставки</a></li>' + (bonusCfg().enabled ? '<li><a href="#/account?tab=bonus">Бонусы</a></li>' : '') + '<li><a href="#/account?tab=support">Поддержка</a></li>') +
+        col('Личный кабинет', '<li><a href="#/account?tab=orders">Мои заказы</a></li><li><a href="#/favorites">Избранное</a></li>' + (bonusCfg().enabled ? '<li><a href="#/account?tab=bonus">Бонусы</a></li>' : '') + '<li><a href="#/account?tab=support">Поддержка</a></li>') +
         '<div class="fcol fcol-contacts"><h4>Контакты</h4><ul class="f-contacts">' +
           (c.phone ? '<li><span class="f-ic">' + FI.phone + '</span><a href="tel:' + esc(c.phone.replace(/[^\d+]/g, '')) + '" class="copyable">' + esc(c.phone) + '</a></li>' : '') +
           (c.email ? '<li><span class="f-ic">' + FI.mail + '</span><a href="mailto:' + esc(c.email) + '" class="copyable">' + esc(c.email) + '</a></li>' : '') +
@@ -1508,13 +1508,11 @@
         '<label class="field"><span>Электронная почта</span><input class="input" id="co-email" type="email" autocomplete="email" placeholder="mail@example.ru" value="' + esc(u.email || '') + '"></label></div>') +
       coStep(2, 'deliv', 'Доставка', 'Выберите способ и укажите, куда привезти',
         '<div class="options" id="delivOpts"></div>' +
-        '<div class="addr-saved" id="addrSaved" hidden></div>' +
         '<div class="co-addr" id="addrBox"><div class="row2">' +
         '<label class="field"><span>Город или посёлок</span><input class="input" id="co-city" autocomplete="address-level2" placeholder="Москва"></label>' +
         '<label class="field"><span id="co-addr-l">Адрес</span><input class="input" id="co-addr" autocomplete="street-address" placeholder="Улица, дом, квартира"></label></div>' +
         '<p class="pvz-hint" id="addrHint" hidden>Указывайте свой населённый пункт и область: Мурино, Кудрово и Девяткино — это Ленинградская область, а не Санкт-Петербург.</p></div>' +
         pvzHtml() +
-        (API.user ? '<label class="check co-save" id="coSaveRow" hidden><input type="checkbox" id="co-save" checked> <span>Сохранить адрес в личном кабинете</span></label>' : '') +
         '<details class="co-comment"' + '><summary>Добавить комментарий к заказу</summary><textarea class="textarea" id="co-comment" rows="2" placeholder="Например, удобное время для звонка"></textarea></details>') +
       coStep(3, 'pay', 'Оплата', 'Оплатите заказ сразу после подтверждения',
         '<div class="options" id="payOpts">' +
@@ -1534,28 +1532,6 @@
         '<p class="form-error" id="coErr"></p><button class="btn block" id="coSubmit" type="submit">' + (st.payment === 'online' ? 'Оплатить заказ' : 'Подтвердить заказ') + '</button></aside></form></div>';
     phoneMask($('#co-phone'));
 
-    // Сохранённые адреса покупателя: одно нажатие — и адрес подставлен
-    var ADDR_KIND = { home: 'Дом', work: 'Работа', other: 'Адрес' };
-    function savedList() { return (API.user && API.user.addresses) || []; }
-    function drawSaved() {
-      var box = $('#addrSaved'), row = $('#coSaveRow'), list = savedList();
-      var manual = !$('#addrBox').hidden, door = doorMode();
-      var usable = list.filter(function (a) { return manual || (door && a.cdekCity); });
-      box.hidden = !(usable.length && (manual || door));
-      if (row) row.hidden = !(manual || door);
-      if (box.hidden) return;
-      box.innerHTML = '<span class="addr-saved-t">Мои адреса</span><div class="addr-chips">' + usable.map(function (a) {
-        return '<button type="button" class="addr-chip' + (st.savedId === a.id ? ' on' : '') + '" data-addr="' + esc(a.id) + '"><b>' + esc(a.label || ADDR_KIND[a.kind] || 'Адрес') + (a.isDefault ? '<i>основной</i>' : '') + '</b><span>' + esc(a.city + ', ' + a.address) + '</span></button>';
-      }).join('') + '<a class="addr-chip addr-chip-add" href="#/account?tab=addresses"><b>+ Управлять</b><span>в личном кабинете</span></a></div>';
-    }
-    function useSaved(a) {
-      st.savedId = a.id;
-      if (!$('#addrBox').hidden) { $('#co-city').value = a.city; $('#co-addr').value = a.address; ['co-city', 'co-addr'].forEach(function (id) { $('#' + id).classList.remove('invalid'); $('#' + id).dispatchEvent(new Event('input', { bubbles: true })); }); }
-      else if (doorMode() && a.cdekCity) { st.addr = a.address; pickCity({ code: a.cdekCity.code, city: a.cdekCity.city, region: a.cdekCity.region }); }
-      var sv = $('#co-save'); if (sv) sv.checked = false;
-      if (a.note) { var cm2 = $('#co-comment'); if (cm2 && !cm2.value) { cm2.value = a.note; cm2.closest('details').open = true; } }
-      drawSaved(); coProgress();
-    }
     function drawOpts() {
       $('#delivOpts').innerHTML = methods.map(function (m) { return '<label class="option ico' + (st.deliveryId === m.id ? ' on' : '') + '"><input type="radio" name="deliv" value="' + esc(m.id) + '"' + (st.deliveryId === m.id ? ' checked' : '') + '>' + optIc(m.needsAddress === false ? 'pin' : 'delivery') + '<span><b>' + esc(m.name) + '</b><small>' + esc(m.desc || '') + (m.freeFrom ? ' · бесплатно от ' + fmt(m.freeFrom) : '') + '</small></span><span class="num opt-price" data-dp="' + esc(m.id) + '"></span></label>'; }).join('');
       $$('#payOpts .option').forEach(function (o) { var i = $('input', o); i.checked = i.value === st.payment; o.classList.toggle('on', i.checked); });
@@ -1575,7 +1551,7 @@
       if ($('#codHint')) $('#codHint').textContent = cm === 'door' ? 'Наличными или картой курьеру' : pm ? 'Наличными или картой в пункте выдачи СДЭК' : 'Наличными или картой при получении';
       $('#cs-pay .cstep-head p').textContent = st.payment === 'cod' ? 'Оплатите заказ при получении — наличными или картой' : 'Оплатите заказ сразу после подтверждения';
       if ($('#coSecure')) $('#coSecure').hidden = st.payment !== 'online' || st.free;
-      drawSaved(); submitLabel(); coProgress();
+      submitLabel(); coProgress();
     }
     function submitLabel() { var b = $('#coSubmit'); if (b && !b.disabled) b.textContent = st.payment === 'online' && !st.free ? 'Оплатить заказ' : 'Подтвердить заказ'; }
     // Шаг отмечается галочкой, когда в нём всё заполнено
@@ -1744,9 +1720,8 @@
         '<div class="pvz-list" id="pvzList" role="radiogroup" aria-label="Пункты выдачи">' + list + '</div>';
     }
     drawOpts(); drawSum();
-    $('#addrSaved').addEventListener('click', function (e) { var b = e.target.closest('[data-addr]'); if (!b) return; var a = savedList().find(function (x) { return x.id === b.getAttribute('data-addr'); }); if (a) useSaved(a); });
-    // основной адрес подставляем сразу, если поля пустые
-    (function () { var d = savedList().find(function (a) { return a.isDefault; }); if (d && !$('#addrBox').hidden && !$('#co-city').value && !$('#co-addr').value) useSaved(d); })();
+    // Доставка по адресу без подбора СДЭК: улица и дом — тоже с подсказками
+    streetCombo($('#co-addr'), function () { return { city: $('#co-city').value.trim() }; });
     ['#co-first', '#co-phone', '#co-email', '#co-city', '#co-addr'].forEach(function (q) { $(q).addEventListener('input', coProgress); });
     $('#delivOpts').addEventListener('change', function (e) { st.deliveryId = e.target.value; drawOpts(); drawSum(); });
     $('#coBonus').addEventListener('change', function (e) { if (e.target.id === 'co-bonus') { st.useBonus = e.target.checked; drawSum(); } });
@@ -1786,7 +1761,7 @@
       var btn = $('#coSubmit'); btn.disabled = true; btn.textContent = st.payment === 'online' && !st.free ? 'Переходим к оплате…' : 'Оформляем…';
       try {
         if (!st.idem) st.idem = Array.from(crypto.getRandomValues(new Uint8Array(16)), function (x) { return ('0' + x.toString(16)).slice(-2); }).join('');
-        var r = await API.placeOrder({ gift: st.gift && st.q && st.q.gift && st.q.gift.ok ? st.gift : '', idem: st.idem, saveAddress: !!($('#co-save') && $('#co-save').checked), lines: coSrc().get(), code: st.code, deliveryId: st.deliveryId, payment: st.payment, useBonus: st.useBonus, customer: f, city: needAddr ? $('#co-city').value.trim() : '', address: needAddr ? $('#co-addr').value.trim() : doorMode() ? (st.addr || '').trim() : '', pvz: pvzMode() && st.pvz ? st.pvz.code : '', cityCode: cdekMode() && st.city ? st.city.code : '', pvzType: st.pvz ? st.pvz.type : '', comment: $('#co-comment').value.trim(), consent: true });
+        var r = await API.placeOrder({ gift: st.gift && st.q && st.q.gift && st.q.gift.ok ? st.gift : '', idem: st.idem, lines: coSrc().get(), code: st.code, deliveryId: st.deliveryId, payment: st.payment, useBonus: st.useBonus, customer: f, city: needAddr ? $('#co-city').value.trim() : '', address: needAddr ? $('#co-addr').value.trim() : doorMode() ? (st.addr || '').trim() : '', pvz: pvzMode() && st.pvz ? st.pvz.code : '', cityCode: cdekMode() && st.city ? st.city.code : '', pvzType: st.pvz ? st.pvz.type : '', comment: $('#co-comment').value.trim(), consent: true });
         if (window.Metrika && !r.repeated) { Metrika.ec('purchase', r.order.items.map(function (i) { var pp = D.products.find(function (x) { return x.id === i.productId; }); return pp ? ecItem(pp, i.color, i.size, i.qty, i.price) : { id: i.productId, name: i.name, price: i.price, quantity: i.qty }; }), { id: r.order.number, revenue: r.order.total }); Metrika.goal('order', { order_price: r.order.total, currency: 'RUB' }); }
         if (buy) BuyNow.clear(); else Cart.clear();
         if (r.payUrl) { location.href = r.payUrl; return; }
@@ -1931,11 +1906,11 @@
     var u = API.user, bOn = bonusCfg().enabled || (u.bonus || 0) > 0;
     var tab = q.tab || 'orders';
     if (tab === 'bonus' && !bOn) tab = 'orders';
-    if (['orders', 'favorites', 'addresses', 'bonus', 'support', 'profile'].indexOf(tab) === -1) tab = 'orders';
+    if (['orders', 'favorites', 'bonus', 'support', 'profile'].indexOf(tab) === -1) tab = 'orders';
     var since = '';
     // «с октября 2026»: месяц в родительном падеже — берём его из полной даты
     try { since = new Date(u.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }).replace(/^\d+\s/, '').replace(/ г\.$/, ''); } catch (e) {}
-    var tabs = [['orders', 'Заказы'], ['favorites', 'Избранное'], ['addresses', 'Адреса'], bOn ? ['bonus', 'Бонусы'] : null, ['support', 'Поддержка'], ['profile', 'Профиль']].filter(Boolean);
+    var tabs = [['orders', 'Заказы'], ['favorites', 'Избранное'], bOn ? ['bonus', 'Бонусы'] : null, ['support', 'Поддержка'], ['profile', 'Профиль']].filter(Boolean);
     var focus = tab === 'support' && (q.id || q.new === '1');
     v.innerHTML = '<div class="wrap acc' + (focus ? ' acc-focus' : '') + '">' +
       '<section class="acc-hero">' +
@@ -1973,78 +1948,10 @@
     if (tab === 'profile') profileTab(body, u);
     if (tab === 'support') supportTab(body, q);
     if (tab === 'favorites') { body.innerHTML = '<div class="fav-box" data-compact></div>'; bindFavList($('.fav-box', body)); }
-    if (tab === 'addresses') addressesTab(body);
     var onTab = $('.acc-tabs a.on', v); if (onTab && onTab.scrollIntoView) { var nav = onTab.parentNode; nav.scrollLeft = onTab.offsetLeft - (nav.clientWidth - onTab.offsetWidth) / 2; }
   }
 
   /* ---------- Адреса доставки ---------- */
-  var ADDR_KINDS = [['home', 'Дом'], ['work', 'Работа'], ['other', 'Другое']];
-  var ADDR_IC = {
-    home: '<svg viewBox="0 0 24 24"><path d="M4 11 12 4l8 7v9h-5v-6H9v6H4z"/></svg>',
-    work: '<svg viewBox="0 0 24 24"><rect x="3.5" y="7.5" width="17" height="12" rx="2"/><path d="M9 7.5V5.5h6v2M3.5 12.5h17"/></svg>',
-    other: '<svg viewBox="0 0 24 24"><path d="M12 21s-6.5-6-6.5-11a6.5 6.5 0 0 1 13 0c0 5-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/></svg>'
-  };
-  function addressesTab(body) {
-    var list = function () { return ((API.user && API.user.addresses) || []).slice(); };
-    async function save(next, msg) {
-      try { await API.saveAddresses(next); toast(msg); draw(); } catch (ex) { toast(errMsg(ex), true); }
-    }
-    function draw() {
-      var L = list();
-      body.innerHTML = '<div class="addr-head"><div><h3>Адреса доставки</h3><p class="muted">Подставляются при оформлении заказа одним нажатием. Можно сохранить до 10 адресов.</p></div>' +
-        (L.length < 10 ? '<button type="button" class="btn" id="addrAdd">+ Добавить адрес</button>' : '') + '</div>' +
-        (L.length ? '<div class="addr-grid">' + L.map(function (a) {
-          return '<article class="addr-card' + (a.isDefault ? ' is-default' : '') + '"><div class="addr-top"><span class="addr-ic" aria-hidden="true">' + (ADDR_IC[a.kind] || ADDR_IC.other) + '</span>' +
-            '<b>' + esc(a.label || (ADDR_KINDS.find(function (k) { return k[0] === a.kind; }) || [0, 'Адрес'])[1]) + '</b>' + (a.isDefault ? '<span class="addr-def">Основной</span>' : '') + '</div>' +
-            '<p class="addr-line">' + esc(a.city) + '<br>' + esc(a.address) + '</p>' + (a.note ? '<p class="addr-note">' + esc(a.note) + '</p>' : '') +
-            '<div class="addr-act"><button type="button" class="link" data-edit="' + esc(a.id) + '">Изменить</button>' + (a.isDefault ? '' : '<button type="button" class="link" data-def="' + esc(a.id) + '">Сделать основным</button>') + '<button type="button" class="link addr-del" data-del="' + esc(a.id) + '">Удалить</button></div></article>';
-        }).join('') + '</div>' : '<div class="fav-empty addr-empty"><span class="fav-empty-ic" aria-hidden="true">' + ADDR_IC.other + '</span><h3>Адресов пока нет</h3><p>Добавьте адрес — при следующем заказе он подставится сам. Адрес курьерской доставки также можно сохранить прямо при оформлении.</p></div>');
-      var add = $('#addrAdd', body); if (add) add.addEventListener('click', function () { edit(null); });
-    }
-    body.addEventListener('click', function (e) {
-      var b = e.target.closest('[data-edit],[data-def],[data-del]'); if (!b) return;
-      var L = list();
-      if (b.hasAttribute('data-edit')) edit(L.find(function (a) { return a.id === b.getAttribute('data-edit'); }));
-      if (b.hasAttribute('data-def')) save(L.map(function (a) { return Object.assign({}, a, { isDefault: a.id === b.getAttribute('data-def') }); }), 'Основной адрес изменён');
-      if (b.hasAttribute('data-del')) { var prev = L; save(L.filter(function (a) { return a.id !== b.getAttribute('data-del'); }), 'Адрес удалён'); }
-    });
-    function edit(a) {
-      var isNew = !a; a = a || { kind: 'home', label: '', city: '', address: '', note: '', isDefault: !list().length };
-      openModal('<span class="eyebrow">Адрес доставки</span><h3 class="serif" style="font-size:34px;margin:14px 0 20px">' + (isNew ? 'Новый адрес' : 'Изменить адрес') + '</h3>' +
-        '<form class="form addr-form" id="adForm" novalidate><div class="addr-kinds" role="radiogroup" aria-label="Тип адреса">' + ADDR_KINDS.map(function (k) { return '<label><input type="radio" name="ad-kind" value="' + k[0] + '"' + (a.kind === k[0] ? ' checked' : '') + '><span>' + ADDR_IC[k[0]] + k[1] + '</span></label>'; }).join('') + '</div>' +
-        '<label class="field"><span>Название <small class="muted">— необязательно</small></span><input class="input" id="ad-label" maxlength="40" placeholder="Например, Дача или Офис на Невском" value="' + esc(a.label || '') + '"></label>' +
-        '<label class="field"><span>Город или посёлок</span><input class="input" id="ad-city" autocomplete="address-level2" placeholder="Москва" value="' + esc(a.city) + '"></label>' +
-        '<label class="field"><span>Улица, дом, квартира</span><input class="input" id="ad-addr" autocomplete="street-address" placeholder="ул. Петровка, 21, кв. 5" value="' + esc(a.address) + '"></label>' +
-        '<label class="field"><span>Подсказка курьеру <small class="muted">— необязательно</small></span><input class="input" id="ad-note" maxlength="200" placeholder="Подъезд, этаж, домофон" value="' + esc(a.note || '') + '"></label>' +
-        '<label class="check"><input type="checkbox" id="ad-def"' + (a.isDefault ? ' checked' : '') + '> <span>Основной адрес — подставлять при оформлении</span></label>' +
-        '<p class="form-error" id="adErr"></p><button class="btn block">' + (isNew ? 'Сохранить адрес' : 'Сохранить изменения') + '</button></form>');
-      var picked = a.cdekCity && a.cdekCity.city === a.city ? a.cdekCity : null, cityIn = $('#ad-city');
-      if (D.cdekReady) {
-        cityIn.placeholder = 'Начните вводить, например «Мурино»';
-        bindCombo({ input: cityIn, empty: 'Ничего не нашли — проверьте название',
-          fetch: function (v) { return API.cdekCities(v); },
-          item: function (c) { return '<b>' + esc(c.city) + '</b><span>' + esc(c.region || 'Россия') + '</span>'; },
-          onType: function () { picked = null; cityHint(); },
-          pick: function (c) { picked = { code: c.code, city: c.city, region: c.region || '' }; cityIn.value = c.city; cityIn.classList.remove('invalid'); cityHint(); $('#ad-addr').focus(); } });
-      }
-      function cityHint() { var h = $('#adCityHint'); if (h) h.textContent = picked ? (picked.region || 'Россия') : D.cdekReady ? 'Выберите из списка — область подставится сама' : ''; }
-      (cityIn.closest('.pvz-combo') || cityIn).insertAdjacentHTML('afterend', '<small class="ad-hint" id="adCityHint"></small>'); cityHint();
-      streetCombo($('#ad-addr'), function () { return picked || { city: cityIn.value.trim() }; });
-      setTimeout(function () { $(isNew ? '#ad-city' : '#ad-addr').focus(); }, 60);
-      $('#adForm').addEventListener('submit', async function (e) {
-        e.preventDefault();
-        var f = { id: a.id, kind: ($('input[name="ad-kind"]:checked') || {}).value || 'other', label: $('#ad-label').value.trim(), city: $('#ad-city').value.trim(), address: $('#ad-addr').value.trim(), note: $('#ad-note').value.trim(), isDefault: $('#ad-def').checked, cdekCity: picked && picked.city === $('#ad-city').value.trim() ? picked : null };
-        if (D.cdekReady && !f.cdekCity && f.city) { $('#ad-city').classList.add('invalid'); $('#adErr').textContent = 'Выберите город из списка подсказок — так курьер точно найдёт адрес'; $('#ad-city').focus(); return; }
-        $('#ad-city').classList.toggle('invalid', !f.city); $('#ad-addr').classList.toggle('invalid', f.address.length < 3);
-        if (!f.city || f.address.length < 3) { $('#adErr').textContent = 'Укажите город и адрес'; return; }
-        var L = list(); if (f.isDefault) L = L.map(function (x) { return Object.assign({}, x, { isDefault: false }); });
-        L = isNew ? L.concat([f]) : L.map(function (x) { return x.id === a.id ? f : x; });
-        try { await API.saveAddresses(L); closePanels(); toast(isNew ? 'Адрес сохранён' : 'Адрес изменён'); draw(); } catch (ex) { $('#adErr').textContent = errMsg(ex); }
-      });
-    }
-    draw();
-  }
-
   /* Поле с подсказками (город из базы СДЭК, улица и дом): стрелки, Enter, Esc, нажатие пальцем.
      opts: input, fetch(q) → Promise<items>, item(x) → html, pick(x), min — с какой длины искать */
   function bindCombo(o) {

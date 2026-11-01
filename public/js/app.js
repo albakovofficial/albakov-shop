@@ -2891,6 +2891,15 @@
     var c;
     try { c = await Store.connect(); }
     catch (e) {
+      // Данные не загрузились, но сервер уже прислал текст страницы (lib/seo.js) — показываем его, а не пустой экран:
+      // и покупатель видит товары, и поисковый робот не примет страницу за пустую
+      if (root.querySelector('.pre')) {
+        document.documentElement.className = document.documentElement.className.replace(/\bjs\b/g, '');
+        root.insertAdjacentHTML('afterbegin', '<div class="offline-bar">Не удалось загрузить магазин полностью. <button type="button" id="reloadBtn">Обновить</button></div>');
+        document.getElementById('reloadBtn').addEventListener('click', function () { location.reload(); });
+        splashOut();
+        return;
+      }
       root.innerHTML = '<div class="offline"><img src="img/logo-wordmark.png" alt="' + 'ALBAKOV' + '"><h1>Магазин временно недоступен</h1><p>Не удалось связаться с сервером. Проверьте интернет и обновите страницу — обычно это занимает минуту.</p><button class="btn" id="reloadBtn">Обновить страницу</button></div>';
       document.getElementById('reloadBtn').addEventListener('click', function () { location.reload(); });
       splashOut();

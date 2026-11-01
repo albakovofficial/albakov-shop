@@ -9,6 +9,7 @@ const Pricing = require('./public/js/pricing.js');
 const SEED = require('./public/js/seed.js');
 const Specs = require('./public/js/specs.js'); // характеристики одежды — общий список для панели, витрины и поиска
 const Mail = require('./public/js/mail.js');
+const Finance = require('./public/js/finance.js'); // раздел «Финансы»: настройки, себестоимость, расходы
 const smtp = require('./lib/smtp.js');
 const Store = require('./lib/db.js');
 const CdekLib = require('./lib/cdek.js');
@@ -51,6 +52,9 @@ db.secrets = db.secrets || {};
 db.waitlist = db.waitlist || [];
 db.tickets = db.tickets || [];
 db.giftcards = db.giftcards || [];
+// Финансы (13.46): расходы — отдельные записи; себестоимость и ставки — не в settings, чтобы не уходить на витрину
+db.expenses = db.expenses || [];
+db.finance = Finance.cleanSettings(db.finance, db.finance);
 if (db.settings && db.settings.payment && db.settings.payment.parts) delete db.settings.payment.parts; // оплата частями убрана в 13.43
 if (db.settings && db.settings.telegram) delete db.settings.telegram; // уведомления в Telegram заменены письмами (13.43)
 if (db.secrets && db.secrets.telegram) delete db.secrets.telegram;
@@ -183,6 +187,7 @@ const CDEK_WAIT = ['', 'ACCEPTED', 'CREATED', 'INVALID', 'REMOVED'];
 async function applyCdek(o, info) {
   if (!o.cdek || !info) return;
   Object.assign(o.cdek, { number: info.number || o.cdek.number || '', status: info.status || o.cdek.status, statusName: info.statusName || o.cdek.statusName, statusAt: info.statusAt || o.cdek.statusAt, error: info.error || '' });
+  if (info.cost > 0) o.fin = Object.assign({}, o.fin, { cdekCost: info.cost }); // сколько СДЭК берёт с магазина — для «Финансов»
   let mail = false;
   if (o.cdek.number && !CDEK_WAIT.includes(o.cdek.status) && (!o.tracking || o.tracking.number !== o.cdek.number)) {
     o.tracking = { carrier: 'СДЭК', number: o.cdek.number, url: CDEK_TRACK + encodeURIComponent(o.cdek.number), at: new Date().toISOString() };
@@ -191,7 +196,7 @@ async function applyCdek(o, info) {
   }
   if (o.cdek.status === 'DELIVERED' && o.status !== 'done' && o.status !== 'returned') { o.status = 'done'; o.doneAt = o.doneAt || info.statusAt || new Date().toISOString(); }
   // при получении покупатель заплатил СДЭК — отмечаем оплату (деньги придут от СДЭК по договору)
-  if (o.cdek.status === 'DELIVERED' && o.payment.method === 'cod' && o.payment.status === 'pending') { o.payment.status = 'paid'; o.payment.collectedBy = 'cdek'; }
+  if (o.cdek.status === 'DELIVERED' && o.payment.method === 'cod' && o.payment.status === 'pending') { o.payment.status = 'paid'; o.payment.collectedBy = 'cdek'; o.payment.paidAt = info.statusAt || new Date().toISOString(); }
   syncBonus(o); save();
   if (mail && mailReady()) { try { await sendTrackingMail(o); o.tracking.mailedAt = new Date().toISOString(); save(); } catch (e) { console.error('Письмо с трек-номером не отправлено:', e.message); } }
 }
@@ -241,7 +246,7 @@ async function syncReturns(o) {
   for (const r of o.returns || []) {
     if (!r.uuid || r.status === 'DELIVERED' || r.status === 'REMOVED') continue;
     const info = await cdek.order(r.uuid);
-    Object.assign(r, { number: info.number || r.number, status: info.status || r.status, statusName: info.statusName || r.statusName, statusAt: info.statusAt || r.statusAt, error: info.error || '' });
+    Object.assign(r, { number: info.number || r.number, status: info.status || r.status, statusName: info.statusName || r.statusName, statusAt: info.statusAt || r.statusAt, error: info.error || '' }, info.cost > 0 ? { cost: info.cost } : {});
     if (r.number && !r.mailedAt && mailReady()) { try { await sendReturnShipMail(o, r); r.mailedAt = new Date().toISOString(); } catch (e) { console.error('Письмо о возврате не отправлено:', e.message); } }
   }
   save();
@@ -424,7 +429,8 @@ function recordRefund(r) {
   if (!r || r.status !== 'succeeded') return;
   const o = db.orders.find((x) => x.payment.providerId === r.payment_id); if (!o) return;
   o.refunds = o.refunds || [];
-  if (o.refunds.some((x) => x.id === r.id)) return;
+  // уже записан (оформлен из панели): только обновляем статус, второй раз сумму не добавляем
+  const known = o.refunds.find((x) => x.id === r.id); if (known) { if (known.status !== r.status) { known.status = r.status; save(); } return; }
   o.refunds.push({ id: r.id, status: r.status, amount: Number(r.amount.value), at: r.created_at || new Date().toISOString(), reason: 'Оформлен в кабинете ЮKassa', items: [], delivery: false, external: true });
   o.refunded = refundedK(o) / 100;
   if (refundedK(o) >= Math.round(o.total * 100)) { o.payment.status = 'refunded'; if (o.status !== 'returned') { o.statusBefore = o.status; o.status = 'returned'; } }
@@ -505,7 +511,11 @@ function hist(o, text, by) { (o.history = o.history || []).push({ at: new Date()
 function applyPayment(order, p) {
   if (!order || !p) return;
   if (p.test) order.test = true;
-  if (p.status === 'succeeded' && p.paid) { if (order.payment.status !== 'paid') { order.payment.status = 'paid'; hist(order, 'Оплата получена онлайн'); sendOrderMails(order); giftActivate(order); } }
+  if (p.status === 'succeeded' && p.paid) {
+    // способ оплаты нужен для комиссии в «Финансах»: у СБП она ниже
+    if (p.payment_method && p.payment_method.type) order.payment.type = String(p.payment_method.type).slice(0, 30);
+    if (order.payment.status !== 'paid') { order.payment.status = 'paid'; order.payment.paidAt = p.captured_at || new Date().toISOString(); hist(order, 'Оплата получена онлайн'); sendOrderMails(order); giftActivate(order); }
+  }
   else if (p.status === 'canceled') {
     // оплата не прошла: возвращаем товар и промокод, если заказ ещё не был отменён вручную
     if (order.status !== 'canceled') {
@@ -684,6 +694,8 @@ async function placeOrder(req, b) {
     bonusUsed: q.bonusUsed, bonusEarn: user ? q.bonusEarn : 0,
     giftCode: q.giftUsed ? q.gift.code : undefined, giftUsed: q.giftUsed || undefined
   };
+  // Себестоимость на момент заказа: если потом поменять цену пошива, прошлые месяцы в «Финансах» не изменятся
+  order.fin = { costs: order.items.map((it) => Number(db.finance.costs[it.productId]) || 0) };
   if (q.giftUsed) { const g = findGift(q.gift.code); g.balance -= q.giftUsed; (g.log = g.log || []).push({ at: order.createdAt, orderId: order.id, number: order.number, amount: -q.giftUsed, type: 'spend' }); }
   // Весь заказ оплачен бонусами — платить деньгами нечего
   if (order.total === 0) order.payment = { method: order.giftUsed ? 'gift' : 'bonus', status: 'paid', provider: null };
@@ -836,6 +848,9 @@ const REMIND_AFTER = Number(process.env.CART_REMIND_AFTER_MIN || 180) * 60e3; //
 setInterval(() => { cartReminders().catch((e) => console.error(e)); }, Number(process.env.CART_REMIND_EVERY_SEC || 900) * 1000).unref();
 
 let statDirty = false;
+// Кто уже засчитан сегодня (только в памяти: номера браузеров не сохраняются и обнуляются каждый день)
+const statSeen = { day: '', keys: new Set() };
+const STAT_SALT = crypto.randomBytes(16).toString('hex');
 setInterval(() => { if (statDirty) { statDirty = false; save(); } }, 60e3).unref();
 
 /* ---------------- Уведомления владельцу на почту ----------------
@@ -956,6 +971,37 @@ function supportApi(req, p, M, body, u) {
     return { ticket: ticketForUser(t) };
   }
   fail(404, 'Неизвестный запрос');
+}
+/* ---------- Финансы: настройки, себестоимость, операции вручную (отчёт считает панель — public/js/finance.js) ---------- */
+function financeApi(p, M, body) {
+  // Ставки налога и комиссий, категории расходов
+  if (p[2] === 'settings' && M === 'PUT') {
+    const prev = db.finance, next = Finance.cleanSettings(body.value, prev);
+    // категорию с операциями удалить нельзя — иначе расходы потеряются из отчёта
+    const used = new Set(db.expenses.map((e) => e.categoryId));
+    const gone = prev.categories.filter((c) => used.has(c.id) && !next.categories.some((x) => x.id === c.id));
+    if (gone.length) fail(400, 'В категории «' + gone[0].name + '» есть операции — сначала перенесите или удалите их');
+    db.finance = next; save(); return { finance: db.finance };
+  }
+  // Себестоимость: { id товара: ₽ }, пустое значение — убрать
+  if (p[2] === 'costs' && M === 'PUT') {
+    const v = body.costs; if (!v || typeof v !== 'object') fail(400, 'Нет данных');
+    const ids = db.products.map((x) => x.id), costs = Object.assign({}, db.finance.costs);
+    Object.keys(v).forEach((id) => { if (ids.includes(id)) delete costs[id]; });
+    Object.assign(costs, Finance.cleanCosts(v, ids));
+    db.finance.costs = costs; save(); return { finance: db.finance };
+  }
+  if (p[2] === 'expenses') {
+    if (!p[3] && M === 'POST') {
+      const r = Finance.cleanExpense(body, db.finance); if (r.error) fail(400, r.error);
+      const e = Object.assign({ id: uid('x'), createdAt: new Date().toISOString() }, r.value);
+      db.expenses.push(e); save(); return { expense: e };
+    }
+    const e = p[3] && db.expenses.find((x) => x.id === p[3]); if (!e) fail(404, 'Операция не найдена');
+    if (M === 'PUT') { const r = Finance.cleanExpense(body, db.finance); if (r.error) fail(400, r.error); Object.assign(e, r.value, { updatedAt: new Date().toISOString() }); save(); return { expense: e }; }
+    if (M === 'DELETE') { db.expenses = db.expenses.filter((x) => x !== e); save(); return {}; }
+  }
+  fail(404, 'Не найдено');
 }
 function supportAdminApi(p, M, body) {
   if (!p[2] && M === 'GET') return { tickets: db.tickets.slice().sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)) };
@@ -1213,7 +1259,7 @@ function welcomeInfo() { const b = Pricing.bonusConf(db.settings); return { bonu
 
 function orderView(o) { const c = Object.assign({}, o); delete c.token; c.requestState = requestState(o); c.doneAt = doneAtOf(o) || undefined; return c; }
 // Покупателю — без служебного: заметка магазина и история изменений видны только в панели
-function customerView(o) { const c = orderView(o); delete c.adminNote; delete c.history; return c; }
+function customerView(o) { const c = orderView(o); delete c.adminNote; delete c.history; delete c.fin; return c; }
 
 /* ---------------- Маршруты API ---------------- */
 async function api(req, res, url, body) {
@@ -1392,6 +1438,12 @@ async function api(req, res, url, body) {
     throttle(req, 'stat', 400);
     const e = String(body.e || ''); if (!['v', 'p', 'c', 'k'].includes(e)) fail(400, 'Неизвестное событие');
     const day = new Date(Date.now() + 3 * 36e5).toISOString().slice(0, 10); // по Москве
+    // Повторы за день не считаем: браузер шлёт свой случайный номер; без номера — отпечаток адреса и браузера (только в памяти, с солью)
+    const sid = /^[a-z0-9]{12,40}$/.test(String(body.id || '')) ? String(body.id) : 'h' + crypto.createHash('sha256').update(STAT_SALT + clientIp(req) + '|' + String(req.headers['user-agent'] || '')).digest('hex').slice(0, 24);
+    if (statSeen.day !== day) { statSeen.day = day; statSeen.keys = new Set(); }
+    const sk = sid + ':' + e;
+    if (statSeen.keys.has(sk) || statSeen.keys.size > 300000) return {};
+    statSeen.keys.add(sk);
     db.stats = db.stats || {};
     const d = db.stats[day] = db.stats[day] || { v: 0, p: 0, c: 0, k: 0, src: {}, dev: { m: 0, d: 0 } };
     d[e]++;
@@ -1519,9 +1571,11 @@ async function api(req, res, url, body) {
       try { d.update = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'update-status.json'), 'utf8')); } catch (e) { d.update = null; }
       d.giftcards = db.giftcards.map((g) => Object.assign({}, g, { state: giftState(g) }));
       d.stats = db.stats || {};
+      d.expenses = db.expenses; d.finance = db.finance;
       return { data: d };
     }
     if (p[1] === 'health' && M === 'GET') return { health: health() };
+    if (p[1] === 'finance') return financeApi(p, M, body);
     if (p[1] === 'support') return supportAdminApi(p, M, body);
     // Следующий номер заказа (Настройки → Нумерация заказов)
     if (p[1] === 'order-seq' && M === 'GET') return { next: (Number(db.orderSeq) || 0) + 1 };
@@ -1695,7 +1749,7 @@ async function api(req, res, url, body) {
         save();
         // номер СДЭК присваивает через пару секунд
         for (let i = 0; i < 4 && !o.cdek.number; i++) { await new Promise((r) => setTimeout(r, 1500)); try { await syncCdek(o); } catch (e) { /* дождёмся уведомления */ } }
-        if (o.cdek.error) { const err = o.cdek.error; delete o.cdek; save(); fail(400, 'СДЭК отклонил заявку: ' + err); }
+        if (o.cdek.error) { const err = o.cdek.error; delete o.cdek; if (o.fin) delete o.fin.cdekCost; save(); fail(400, 'СДЭК отклонил заявку: ' + err); }
         return { order: orderView(o) };
       }
       if (p[3] === 'return-ship' && M === 'POST') { const r = await createReturnShip(o, body); return { order: orderView(o), ret: r }; }
@@ -1715,7 +1769,7 @@ async function api(req, res, url, body) {
         if (!o.cdek) fail(400, 'Отправления нет');
         if (!CDEK_WAIT.includes(o.cdek.status)) fail(400, 'Посылка уже у СДЭК — отменить можно только через СДЭК');
         try { await cdek.cancel(o.cdek.uuid); } catch (e) { fail(502, 'СДЭК: ' + e.message); }
-        delete o.cdek; if (o.status === 'processing') o.status = 'new'; save();
+        delete o.cdek; if (o.fin) delete o.fin.cdekCost; if (o.status === 'processing') o.status = 'new'; save(); // отменённая заявка — СДЭК за неё не берёт
         return { order: orderView(o) };
       }
       if (p[3] === 'cdek-print' && M === 'GET') {
@@ -1747,7 +1801,7 @@ async function api(req, res, url, body) {
         if (o.status !== body.status) hist(o, 'Статус: ' + (ST_RU[o.status] || o.status) + ' → ' + (ST_RU[body.status] || body.status) + (body.status === 'canceled' ? ' (товар вернулся на склад)' : ''), 'admin');
         o.status = body.status;
       }
-      if (body.paymentStatus && pays.includes(body.paymentStatus)) { if (o.payment.status !== body.paymentStatus) hist(o, 'Оплата: ' + (PAY_RU[body.paymentStatus] || body.paymentStatus), 'admin'); o.payment.status = body.paymentStatus; giftActivate(o); }
+      if (body.paymentStatus && pays.includes(body.paymentStatus)) { if (o.payment.status !== body.paymentStatus) { hist(o, 'Оплата: ' + (PAY_RU[body.paymentStatus] || body.paymentStatus), 'admin'); if (body.paymentStatus === 'paid' && !o.payment.paidAt) o.payment.paidAt = new Date().toISOString(); } o.payment.status = body.paymentStatus; giftActivate(o); }
       // Трек-номер СДЭК: сохраняем, ставим «Передан в доставку» и пишем покупателю
       let tracked = false;
       if (typeof body.track === 'string') {

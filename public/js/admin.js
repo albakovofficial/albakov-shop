@@ -10,7 +10,7 @@
 
   var SECTIONS = [
     ['overview', 'Обзор'], ['orders', 'Заказы'], ['support', 'Поддержка'], ['products', 'Товары'], ['categories', 'Категории'], ['sizeCharts', 'Размерные сетки'],
-    ['promotions', 'Акции'], ['promocodes', 'Промокоды'], ['bonus', 'Бонусы'], ['exchange', 'Обмен и возвраты'], ['customers', 'Покупатели'], ['notify', 'Сообщить о поступлении'], ['mail', 'Письма'], ['alerts', 'Уведомления на почту'], ['analytics', 'Аналитика'], ['gifts', 'Подарочные сертификаты'], ['sections', 'Разделы: женщинам / мужчинам'], ['brand', 'Логотип и название'], ['slider', 'Слайдер на главной'], ['home', 'Главная страница'], ['pages', 'Страницы'],
+    ['promotions', 'Акции'], ['promocodes', 'Промокоды'], ['bonus', 'Бонусы'], ['exchange', 'Обмен и возвраты'], ['customers', 'Покупатели'], ['notify', 'Сообщить о поступлении'], ['mail', 'Письма'], ['alerts', 'Уведомления на почту'], ['analytics', 'Аналитика'], ['finance', 'Финансы'], ['gifts', 'Подарочные сертификаты'], ['sections', 'Разделы: женщинам / мужчинам'], ['brand', 'Логотип и название'], ['slider', 'Слайдер на главной'], ['home', 'Главная страница'], ['pages', 'Страницы'],
     ['menu', 'Меню, контакты, соцсети'], ['payment', 'Оплата и доставка'], ['settings', 'Настройки']
   ];
   var TAX = [[1, 'ОСН — общая система'], [2, 'УСН «Доходы»'], [3, 'УСН «Доходы минус расходы»'], [5, 'ЕСХН'], [6, 'Патентная система']];
@@ -197,7 +197,7 @@
       '</nav><div class="adm-side-foot"><a href="#/" class="muted">← В магазин</a><button class="muted" id="admOut">Выйти</button></div></aside><section class="adm-main" id="admMain"></section></div>';
     $('#admOut').addEventListener('click', async function () { await API.adminLogout(); DATA = null; window.ALB_NAV.go('#/'); await A().refresh(); });
     var main = $('#admMain');
-    var fn = { overview: overview, orders: orders, support: supportSection, products: products, categories: categories, sizeCharts: sizeCharts, promotions: promotions, promocodes: promocodes, bonus: bonusSection, exchange: exchangeSection, customers: customers, notify: notifySection, mail: mailSection, alerts: alertsSection, analytics: analyticsSection, gifts: giftsSection, sections: sectionsSettings, brand: brandSection, slider: sliderSection, home: homeSettings, pages: pages, menu: menuSettings, payment: paymentSettings, settings: generalSettings }[s] || overview;
+    var fn = { overview: overview, orders: orders, support: supportSection, products: products, categories: categories, sizeCharts: sizeCharts, promotions: promotions, promocodes: promocodes, bonus: bonusSection, exchange: exchangeSection, customers: customers, notify: notifySection, mail: mailSection, alerts: alertsSection, analytics: analyticsSection, finance: financeSection, gifts: giftsSection, sections: sectionsSettings, brand: brandSection, slider: sliderSection, home: homeSettings, pages: pages, menu: menuSettings, payment: paymentSettings, settings: generalSettings }[s] || overview;
     fn(main, q);
   }
   function waitBadge() { var n = (DATA.waitlist || []).filter(function (w) { return w.status === 'waiting' || w.status === 'failed'; }).length; return n ? ' <span class="adm-badge muted-badge">' + n + '</span>' : ''; }
@@ -1136,10 +1136,11 @@
   function statDays(n) {
     var out = [], st = DATA.stats || {};
     for (var i = n - 1; i >= 0; i--) { var d = new Date(Date.now() + 3 * 36e5 - i * 864e5).toISOString().slice(0, 10); out.push(Object.assign({ day: d, v: 0, p: 0, c: 0, k: 0, src: {}, dev: { m: 0, d: 0 } }, st[d] || {})); }
-    var ord = DATA.orders.filter(function (o) { return !o.test; });
+    // Заказ — одна покупка: без обменов (это тот же заказ), отменённых и брошенных на онлайн-оплате
+    var ord = DATA.orders.filter(function (o) { return !o.test && o.payment.method !== 'exchange' && o.status !== 'canceled' && !(o.payment.method === 'online' && o.payment.status !== 'paid' && o.payment.status !== 'refunded'); });
     out.forEach(function (x) {
       var list = ord.filter(function (o) { return new Date(new Date(o.createdAt).getTime() + 3 * 36e5).toISOString().slice(0, 10) === x.day; });
-      x.o = list.length; x.rev = list.filter(function (o) { return o.status !== 'canceled'; }).reduce(function (s, o) { return s + o.total - (o.refunded || 0); }, 0);
+      x.o = list.length; x.rev = list.reduce(function (s, o) { return s + o.total - (o.refunded || 0); }, 0);
     });
     return out;
   }
@@ -1159,13 +1160,382 @@
       return '<div class="an-step' + (i === worst ? ' is-worst' : '') + '"><div class="an-col"><i style="height:' + h + '%"></i></div><b class="num">' + x[1].toLocaleString('ru-RU') + (i ? ' <span>' + pct(x[1], steps[i - 1][1]) + '</span>' : '') + '</b><small>' + x[0] + (i === worst ? ' · здесь уходят чаще всего' : '') + '</small></div>';
     }).join('') + '</div>';
   }
+  /* ================= Финансы (13.46): отчёт о прибыли, операции, себестоимость, настройки ================= */
+  // Расчёт — public/js/finance.js; сервер хранит только расходы, себестоимость и ставки
+  var FIN_TABS = [['report', 'Отчёт'], ['ops', 'Операции'], ['costs', 'Себестоимость'], ['settings', 'Настройки']];
+  var FIN_PER = [['week', 'Неделя'], ['month', 'Месяц'], ['quarter', 'Квартал'], ['year', 'Год'], ['custom', 'Свой период']];
+  function finInput() { return { orders: DATA.orders, products: DATA.products, expenses: DATA.expenses || [], finance: DATA.finance || Finance.defaults() }; }
+  function finRub(n, sign) { n = Math.round(n || 0); return (n < 0 ? '− ' : sign && n > 0 ? '+ ' : '') + fmt(Math.abs(n)); }
+  function finPct(a, b, digits) { if (!b) return '—'; var v = a / b * 100; return (digits ? v.toFixed(1).replace('.', ',') : Math.round(v)) + '%'; }
+  // Изменение к прошлому периоду: good — рост это хорошо (выручка, прибыль) или плохо (расходы)
+  function finDelta(a, b, good) {
+    if (!b && !a) return '<span class="fn-d">—</span>';
+    if (!b) return '<span class="fn-d">новое</span>';
+    var d = Math.round((a - b) / Math.abs(b) * 100);
+    if (!d) return '<span class="fn-d">0%</span>';
+    var cls = good === undefined ? '' : (d > 0) === good ? ' up' : ' down';
+    return '<span class="fn-d' + cls + '">' + (d > 0 ? '▲ ' : '▼ ') + Math.abs(d) + '%</span>';
+  }
+  function finLink(q, patch) {
+    var o = { s: 'finance', tab: q.tab || 'report', p: q.p || 'month' };
+    ['sh', 'from', 'to', 'f', 'miss'].forEach(function (k) { if (q[k]) o[k] = q[k]; });
+    Object.keys(patch || {}).forEach(function (k) { if (patch[k] === null || patch[k] === '') delete o[k]; else o[k] = patch[k]; });
+    return '#/admin?' + Object.keys(o).map(function (k) { return k + '=' + encodeURIComponent(o[k]); }).join('&');
+  }
+  function finPeriod(q) { return Finance.period(q.p || 'month', Number(q.sh) || 0, q.from, q.to); }
+
+  function financeSection(m, q) {
+    if (!window.Finance) { m.innerHTML = '<p class="form-error">Не загрузился модуль расчёта. Обновите страницу.</p>'; return; }
+    var tab = FIN_TABS.some(function (t) { return t[0] === q.tab; }) ? q.tab : 'report';
+    q.tab = tab;
+    var per = finPeriod(q), withPeriod = tab === 'report' || tab === 'ops';
+    var perHtml = withPeriod ? '<div class="fn-per fn-noprint">' +
+        '<div class="tabs fn-pertabs">' + FIN_PER.map(function (x) { return '<a href="' + finLink(q, { p: x[0], sh: null, from: x[0] === 'custom' ? (q.from || per.from) : null, to: x[0] === 'custom' ? (q.to || per.to) : null }) + '"' + (per.kind === x[0] ? ' class="on"' : '') + '>' + x[1] + '</a>'; }).join('') + '</div>' +
+        (per.kind === 'custom'
+          ? '<span class="fn-custom"><input class="input" type="date" id="fnFrom" value="' + esc(per.from) + '" aria-label="С"> — <input class="input" type="date" id="fnTo" value="' + esc(per.to) + '" aria-label="По"></span>'
+          : '<span class="fn-nav"><a href="' + finLink(q, { sh: (per.shift || 0) + 1 }) + '" aria-label="Раньше">‹</a><b>' + esc(per.label) + '</b>' + (per.shift > 0 ? '<a href="' + finLink(q, { sh: per.shift - 1 || null }) + '" aria-label="Позже">›</a>' : '<span class="fn-nav-off">›</span>') + '</span>') +
+      '</div>' : '';
+    var acts = (tab === 'report' ? '<button class="btn ghost sm" type="button" id="fnCsv">Excel</button><button class="btn ghost sm" type="button" id="fnPdf">PDF</button>' : tab === 'ops' ? '<button class="btn ghost sm" type="button" id="fnCsv">Excel</button>' : '') +
+      (tab === 'report' || tab === 'ops' ? '<button class="btn sm" type="button" id="fnAdd">+ Операция</button>' : '');
+    m.innerHTML = '<div class="fn">' + head('Финансы', acts, tab === 'report' ? esc(per.label) + ' · сравнение с ' + esc(per.prevLabel) + '. Продажи, возвраты, комиссии и доставку СДЭК сайт считает сам, остальные расходы вы вносите в «Операциях».' : '') +
+      '<div class="tabs adm-tabs fn-noprint">' + FIN_TABS.map(function (t) { return '<a href="' + finLink(q, { tab: t[0], f: null }) + '"' + (t[0] === tab ? ' class="on"' : '') + '>' + t[1] + '</a>'; }).join('') + '</div>' +
+      perHtml + '<div id="fnBody"></div></div>';
+    var body = $('#fnBody', m);
+    if (per.kind === 'custom') ['#fnFrom', '#fnTo'].forEach(function (s) { $(s, m).addEventListener('change', function () { var a = $('#fnFrom', m).value, b = $('#fnTo', m).value; if (a && b) window.ALB_NAV.go(finLink(q, { p: 'custom', from: a, to: b })); }); });
+    if ($('#fnAdd', m)) $('#fnAdd', m).addEventListener('click', function () { finExpenseModal(null, q); });
+    if (tab === 'report') finReport(body, q, per);
+    else if (tab === 'ops') finOps(body, q, per);
+    else if (tab === 'costs') finCosts(body, q);
+    else finSettings(body, q);
+  }
+
+  /* ---------- Отчёт ---------- */
+  function finReport(box, q, per) {
+    var r = Finance.report(finInput(), per), c = r.cur, p = r.prev, rev = c.revenue;
+    var per100 = rev > 0 ? Math.round(c.net / rev * 100) : 0;
+    var noCosts = !Object.keys((DATA.finance || {}).costs || {}).length && DATA.products.length;
+    var html = '';
+    // Без себестоимости прибыль завышена — говорим сразу и ведём туда, где её заполнить
+    if (c.missingUnits > 0 || noCosts) html += '<div class="adm-alert fn-alert fn-noprint"><b>' + (c.missingUnits ? 'У ' + c.missingUnits + ' ' + plural(c.missingUnits, 'проданной вещи', 'проданных вещей', 'проданных вещей') + ' не указана себестоимость' : 'Себестоимость товаров ещё не указана') + ' — прибыль получается завышенной.</b> Укажите, сколько стоит пошив, — можно примерно, процентом от цены. <a class="link" href="' + finLink(q, { tab: 'costs', miss: 1 }) + '">Заполнить себестоимость</a></div>';
+
+    // 1. Главное
+    var gN = p.net ? Math.round((c.net - p.net) / Math.abs(p.net) * 100) : null;
+    html += '<div class="fn-hero"><div class="fn-big' + (c.net < 0 ? ' loss' : '') + '"><span class="fn-eb">' + (c.net < 0 ? 'Убыток' : 'Чистая прибыль') + ' · ' + esc(per.label.toLowerCase()) + '</span><b class="num">' + finRub(c.net) + '</b>' +
+      (gN != null ? '<span class="fn-pill' + (c.net >= p.net ? '' : ' bad') + '">' + (c.net >= p.net ? '▲ ' : '▼ ') + Math.abs(gN) + '% к ' + esc(per.prevLabel) + ' · было ' + finRub(p.net) + '</span>' : '') +
+      '<p>' + (rev > 0 ? (c.net >= 0 ? 'Из каждых <strong>100 ₽</strong>, которые заплатили покупатели, у вас осталось <strong>' + per100 + ' ₽</strong> — после пошива, доставки, рекламы и налога.' : 'Расходы больше выручки на <strong>' + finRub(-c.net) + '</strong>. Посмотрите ниже, какая строка выросла сильнее всего.') : 'За этот период продаж не было. Расходы, если они есть, — в таблице ниже.') + '</p></div>' +
+      '<div class="fn-kpis">' +
+        '<div class="adm-stat"><span class="eyebrow">Выручка</span><b class="num">' + finRub(rev) + '</b>' + finDelta(rev, p.revenue, true) + '</div>' +
+        '<div class="adm-stat"><span class="eyebrow">Все расходы</span><b class="num">' + finRub(c.expensesAll) + '</b><span class="fn-d">с себестоимостью и налогом</span></div>' +
+        '<div class="adm-stat"><span class="eyebrow">Заказов · средний чек</span><b class="num">' + c.orders + (c.orders ? ' · ' + finRub(c.avg) : '') + '</b>' + (p.orders ? '<span class="fn-d' + (c.orders >= p.orders ? ' up' : ' down') + '">' + (c.orders >= p.orders ? '▲ ' : '▼ ') + Math.abs(c.orders - p.orders) + ' ' + plural(Math.abs(c.orders - p.orders), 'заказ', 'заказа', 'заказов') + '</span>' : '<span class="fn-d">оплаченных</span>') + '</div>' +
+        '<div class="adm-stat"><span class="eyebrow">Реклама на 1 заказ</span><b class="num">' + (c.orders && c.ads ? finRub(c.adsPerOrder) : '—') + '</b>' + (c.orders && c.ads && p.adsPerOrder ? '<span class="fn-d ' + (c.adsPerOrder > p.adsPerOrder ? 'down' : 'up') + '">' + (c.adsPerOrder > p.adsPerOrder ? '▲ дороже на ' : '▼ дешевле на ') + finRub(Math.abs(c.adsPerOrder - p.adsPerOrder)) + '</span>' : '<span class="fn-d">категория «Реклама»</span>') + '</div>' +
+      '</div></div>';
+
+    // 2. Куда уходят 100 ₽
+    var parts = [['c1', 'Себестоимость', c.cogs, 'пошив и ткань проданных вещей'], ['c2', 'Продажа и доставка', c.variable, 'СДЭК, комиссия ЮKassa, упаковка'], ['c3', 'Работа магазина', c.fixed, 'реклама, фото, сервисы'], ['c4', 'Налог', c.tax, 'УСН ' + String(r.finance.taxRate).replace('.', ',') + '% с выручки'], ['c5', c.net >= 0 ? 'Ваша прибыль' : 'Убыток', c.net, c.net >= 0 ? 'остаётся вам' : 'расходы больше выручки']];
+    if (rev > 0) {
+      var base = Math.max(rev, c.cogs + c.variable + c.fixed + c.tax);
+      html += '<div class="adm-card fn-card"><h3 class="adm-h3">Куда уходят каждые 100 ₽ выручки</h3><p class="fn-lead">Одной полосой — из чего складывается цена, которую платит покупатель.</p>' +
+        '<div class="fn-split">' + parts.filter(function (x) { return x[2] > 0; }).map(function (x) { var w = x[2] / base * 100; return '<div class="' + x[0] + '" style="flex:' + w.toFixed(2) + '" title="' + esc(x[1]) + ': ' + finRub(x[2]) + '">' + (w >= 6 ? Math.round(x[2] / rev * 100) + ' ₽' : '') + '</div>'; }).join('') + '</div>' +
+        '<div class="fn-legend">' + parts.map(function (x) { return '<div><span><i class="' + x[0] + '"></i>' + esc(x[1]) + '</span><b class="num">' + finRub(x[2]) + '</b>' + esc(x[3]) + '</div>'; }).join('') + '</div></div>';
+    }
+
+    // 3. Отчёт о прибыли
+    var row = function (cls, name, hint, a, b, good) {
+      return '<tr class="' + cls + '"><td><div class="fn-lbl"><span>' + esc(name) + '</span>' + (hint ? '<small>' + esc(hint) + '</small>' : '') + '</div></td><td class="r num">' + finRub(a) + '</td><td class="r num">' + (rev ? finPct(a, rev, 1) : '—') + (/sum|final/.test(cls) && rev > 0 ? '<span class="fn-bar"><i style="width:' + Math.max(0, Math.min(100, a / rev * 100)).toFixed(1) + '%"></i></span>' : '') + '</td><td class="r num">' + finRub(b) + '</td><td class="r">' + finDelta(a, b, good) + '</td></tr>';
+    };
+    var children = function (line) {
+      var a = c.lines(line), b = p.lines(line), names = a.map(function (x) { return x.name; });
+      b.forEach(function (x) { if (names.indexOf(x.name) === -1) { a.push({ name: x.name, amount: 0 }); names.push(x.name); } });
+      return a.map(function (x) { var pv = (b.filter(function (y) { return y.name === x.name; })[0] || {}).amount || 0; return row('minus child', x.name, '', x.amount, pv, false); }).join('');
+    };
+    html += '<div class="adm-card fn-card"><h3 class="adm-h3">Отчёт о прибыли — шаг за шагом</h3><p class="fn-lead">Сверху — всё, что заплатили покупатели. Каждая строка ниже — что из этого ушло. Серые строки — промежуточные итоги, чёрная внизу — сколько вы заработали.</p>' +
+      '<div class="fn-tw"><table class="fn-t fn-pl"><thead><tr><th>Статья</th><th class="r">' + esc(per.label) + '</th><th class="r">Доля выручки</th><th class="r">Было</th><th class="r">Изменение</th></tr></thead><tbody>' +
+      row('', 'Продажи', 'оплаченные заказы' + (c.units ? ', ' + c.units + ' ' + plural(c.units, 'вещь', 'вещи', 'вещей') : '') + (c.otherIncome ? ' и доходы вне сайта' : ''), c.sales, p.sales, true) +
+      row('minus', 'Возвраты', c.refundOps ? c.refundOps + ' ' + plural(c.refundOps, 'возврат', 'возврата', 'возвратов') + ', деньги вернули покупателям' : 'деньги, которые вернули покупателям', c.refunds, p.refunds, false) +
+      row('sum', 'Выручка', 'деньги, которые остались у магазина', rev, p.revenue, true) +
+      row('minus', 'Себестоимость проданного', 'сколько стоили вам пошив и ткань этих вещей', c.cogs, p.cogs, false) +
+      row('sum', 'Валовая прибыль', 'наценка: цена минус пошив', c.gross, p.gross, true) +
+      row('minus', 'Продажа и доставка', 'растут вместе с числом заказов', c.variable, p.variable, false) + children('variable') +
+      row('sum', 'Прибыль с продаж', 'сколько приносят сами заказы', c.contribution, p.contribution, true) +
+      row('minus', 'Работа магазина', 'платите каждый месяц, даже без заказов', c.fixed, p.fixed, false) + children('fixed') +
+      row('sum', 'Прибыль до налога', 'результат работы магазина', c.ebt, p.ebt, true) +
+      row('minus', 'Налог УСН ' + String(r.finance.taxRate).replace('.', ',') + '%', 'считается с выручки — отложите заранее', c.tax, p.tax, false) +
+      row('final', 'Чистая прибыль', 'ваши деньги', c.net, p.net, true) +
+      '</tbody></table></div>' +
+      (c.purchase ? '<p class="fn-note">Закупка товара (' + finRub(c.purchase) + ') в прибыль не входит: в расходы попадает себестоимость того, что продали. Закупку видно ниже, в «Живых деньгах».</p>' : '') + '</div>';
+
+    // 4. Прибыль по моделям
+    var pr = r.products, top = pr.filter(function (x) { return !x.missing; })[0];
+    var tot = pr.reduce(function (s, x) { return { units: s.units + x.units, revenue: s.revenue + x.revenue, profit: s.profit + (x.missing ? 0 : x.profit), known: s.known + (x.missing ? 0 : x.revenue) }; }, { units: 0, revenue: 0, profit: 0, known: 0 });
+    html += '<div class="adm-card fn-card"><h3 class="adm-h3">Прибыль по моделям</h3><p class="fn-lead">Какая модель приносит больше всего денег и на какой наценка ниже. Прибыль здесь — цена минус пошив, без доставки и рекламы; возвраты уже вычтены.</p>' +
+      (pr.length ? '<div class="fn-tw"><table class="fn-t fn-prod"><thead><tr><th>Модель</th><th class="r">Себестоимость</th><th class="r">Цена</th><th class="r">Продано</th><th class="r">Выручка</th><th class="r">С 1 вещи</th><th class="r">Прибыль</th><th class="r">Доля прибыли</th></tr></thead><tbody>' +
+        pr.map(function (x) {
+          return '<tr><td>' + esc(x.name) + (x === top && pr.length > 1 ? '<span class="fn-best">лидер</span>' : '') + '</td>' +
+            '<td class="r num">' + (x.cost ? finRub(x.cost) : '<a class="link fn-noprint" href="' + finLink(q, { tab: 'costs', miss: 1 }) + '">указать</a>') + '</td><td class="r num">' + finRub(x.price) + '</td><td class="r num">' + x.units + '</td><td class="r num">' + finRub(x.revenue) + '</td>' +
+            '<td class="r num">' + (x.missing ? '—' : finRub(x.perUnit)) + '</td><td class="r num">' + (x.missing ? '—' : finRub(x.profit)) + '</td><td class="r">' + (x.missing ? '<span class="fn-mg">нет данных</span>' : '<span class="fn-mg ' + (x.margin >= 0.55 ? 'hi' : x.margin >= 0.4 ? 'mid' : 'lo') + '">' + Math.round(x.margin * 100) + '%</span>') + '</td></tr>';
+        }).join('') + '</tbody><tfoot><tr><td>Итого</td><td></td><td></td><td class="r num">' + tot.units + '</td><td class="r num">' + finRub(tot.revenue) + '</td><td></td><td class="r num">' + finRub(tot.profit) + '</td><td class="r">' + (tot.known ? Math.round(tot.profit / tot.known * 100) + '%' : '—') + '</td></tr></tfoot></table></div>' + (tot.known < tot.revenue ? '<p class="fn-note">В итоговой прибыли нет моделей без себестоимости.</p>' : '')
+        : '<p class="muted fn-empty">За этот период ничего не продано.</p>') + '</div>';
+
+    // 5. По месяцам
+    var ms = r.months, maxN = Math.max.apply(null, ms.map(function (x) { return Math.abs(x.p.net); }).concat([1])), curKey = per.to.slice(0, 7);
+    var sum = function (f) { return ms.reduce(function (s, x) { return s + f(x.p); }, 0); };
+    var tRev = sum(function (x) { return x.revenue; }), tNet = sum(function (x) { return x.net; });
+    var mrow = function (name, f, cls) { return '<tr' + (cls ? ' class="' + cls + '"' : '') + '><td>' + name + '</td>' + ms.map(function (x) { return '<td class="r num' + (x.key === curKey ? ' cur' : '') + '">' + f(x.p) + '</td>'; }).join(''); };
+    var money = function (k) { return function (s) { var v = typeof k === 'function' ? k(s) : s[k]; return String(Math.round(v)).replace('-', '− ').replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }; };
+    html += '<div class="adm-card fn-card"><h3 class="adm-h3">Чистая прибыль по месяцам</h3><p class="fn-lead">' + (ms.length === 12 ? 'Год' : 'Полгода') + ' в одной таблице: видно, растёт ли магазин и куда сдвигаются расходы.</p>' +
+      '<div class="fn-spark" style="grid-template-columns:repeat(' + ms.length + ',minmax(0,1fr))">' + ms.map(function (x) {
+        var v = x.p.net, k = Math.round(v / 1000);
+        return '<div class="' + (x.key === curKey ? 'cur' : '') + (v < 0 ? ' neg' : '') + '"><em>' + (v ? (Math.abs(v) >= 1000 ? (v < 0 ? '−' : '') + Math.abs(k) + ' тыс.' : finRub(v)) : '0') + '</em><i style="height:' + Math.max(2, Math.round(Math.abs(v) / maxN * 100)) + '%"></i><span>' + x.label + '</span></div>';
+      }).join('') + '</div>' +
+      '<div class="fn-tw"><table class="fn-t fn-months"><thead><tr><th></th>' + ms.map(function (x) { return '<th class="r' + (x.key === curKey ? ' cur' : '') + '">' + esc(x.full) + (ms[0].year !== ms[ms.length - 1].year ? ' ' + String(x.year).slice(2) : '') + '</th>'; }).join('') + '<th class="r">Итого</th></tr></thead><tbody>' +
+        mrow('Выручка', money('revenue')) + '<td class="r num">' + money(function () { return tRev; })() + '</td></tr>' +
+        mrow('Себестоимость', money('cogs')) + '<td class="r num">' + money(function () { return sum(function (x) { return x.cogs; }); })() + '</td></tr>' +
+        mrow('Расходы', money(function (s) { return s.variable + s.fixed; })) + '<td class="r num">' + money(function () { return sum(function (x) { return x.variable + x.fixed; }); })() + '</td></tr>' +
+        mrow('Налог', money('tax')) + '<td class="r num">' + money(function () { return sum(function (x) { return x.tax; }); })() + '</td></tr>' +
+        mrow('Чистая прибыль', money('net'), 'total') + '<td class="r num">' + money(function () { return tNet; })() + '</td></tr>' +
+        mrow('Остаётся со 100 ₽', function (s) { return s.revenue > 0 ? Math.round(s.net / s.revenue * 100) + ' ₽' : '—'; }) + '<td class="r num">' + (tRev > 0 ? Math.round(tNet / tRev * 100) + ' ₽' : '—') + '</td></tr>' +
+      '</tbody></table></div><p class="fn-note">Суммы в рублях.</p></div>';
+
+    // 6. Живые деньги и склад
+    var st = r.stock, days = function (d) { return d ? Math.round((Date.now() - new Date(d)) / 864e5) : null; };
+    var staleDays = st.stale ? days(st.stale.last) : null;
+    html += '<div class="fn-two">' +
+      '<div class="adm-card fn-card"><h3 class="adm-h3">Живые деньги за период</h3><p class="fn-lead">Прибыль и деньги на счёте — не одно и то же. Здесь то, что реально пришло и ушло.</p><div class="fn-flow">' +
+        '<div class="fn-fl"><span>Пришло от покупателей</span><b class="num up">' + finRub(c.cashIn, true) + '</b><small>оплаченные заказы' + (c.otherIncome ? ' и доходы вне сайта' : '') + '</small></div>' +
+        (c.refunds ? '<div class="fn-fl"><span>Вернули покупателям</span><b class="num down">' + finRub(-c.refunds) + '</b><small>возвраты денег</small></div>' : '') +
+        '<div class="fn-fl"><span>Закупка товара</span><b class="num down">' + finRub(-c.purchase) + '</b><small>' + (c.purchase ? 'пошив, ткани — вещи пока лежат на складе' : 'в этом периоде закупок не было') + '</small></div>' +
+        '<div class="fn-fl"><span>Расходы магазина</span><b class="num down">' + finRub(-(c.variable + c.fixed)) + '</b><small>доставка, комиссии, реклама, фото, сервисы</small></div>' +
+        (c.taxpaid ? '<div class="fn-fl"><span>Заплатили налог и взносы</span><b class="num down">' + finRub(-c.taxpaid) + '</b><small>внесено в «Операциях»</small></div>' : '') +
+        '<div class="fn-fl tot"><span>Итого за период</span><b class="num">' + finRub(c.cash) + '</b></div>' +
+        (c.taxLeft > 0 ? '<div class="fn-fl"><span>Отложить на налог</span><b class="num warn">' + finRub(c.taxLeft) + '</b><small>УСН ' + String(r.finance.taxRate).replace('.', ',') + '% за этот период' + (c.taxpaid ? ', с учётом уплаченного' : '') + '</small></div>' : '') +
+      '</div><div class="fn-why"><b>Почему цифра не равна прибыли?</b> ' + (c.cash >= c.net ? 'Себестоимость — это вещи, пошитые раньше: деньги на них ушли в прошлые месяцы. В месяц большой закупки будет наоборот.' : 'В этом периоде вы закупили товара больше, чем продали: деньги ушли в склад и вернутся, когда вещи продадутся.') + '</div></div>' +
+      '<div class="adm-card fn-card"><h3 class="adm-h3">Товар на складе</h3><p class="fn-lead">Деньги, которые сейчас «лежат» в вещах.</p><div class="fn-stock">' +
+        '<div class="adm-stat"><span class="eyebrow">По себестоимости</span><b class="num">' + finRub(st.atCost) + '</b><span class="fn-d">' + (st.noCost ? st.noCost + ' шт. без себестоимости не учтены' : 'столько вложено') + '</span></div>' +
+        '<div class="adm-stat"><span class="eyebrow">По ценам продажи</span><b class="num">' + finRub(st.atPrice) + '</b><span class="fn-d">' + st.units + ' шт., если продать всё</span></div></div><div class="fn-flow">' +
+        (st.fastest ? '<div class="fn-fl"><span>Продаётся быстрее всего</span><b>' + esc(st.fastest.name) + '</b><small>' + st.fastest.sold + ' шт. за 30 дней' + (st.fastest.left ? ', осталось ' + st.fastest.left + ' шт.' + (st.fastest.sold ? ' — примерно на ' + Math.max(1, Math.round(st.fastest.left / st.fastest.sold * 30 / 7)) + ' нед.' : '') : ', на складе не осталось') + '</small></div>' : '') +
+        (st.stale ? '<div class="fn-fl"><span>Лежит дольше всего</span><b>' + esc(st.stale.name) + '</b><small>' + (staleDays != null ? 'последняя продажа ' + staleDays + ' ' + plural(staleDays, 'день', 'дня', 'дней') + ' назад' : 'ни одной продажи') + ' · на складе ' + st.stale.left + ' шт.</small></div>' : '') +
+        (st.low.length ? '<div class="fn-fl"><span>Скоро закончится</span><b>' + st.low.map(function (x) { return esc(x.name + ', ' + (x.color ? x.color.toLowerCase() + ', ' : '') + x.size); }).join('<br>') + '</b><small>продаются, а осталось по 1 шт. или меньше — пора шить ещё</small></div>' : '') +
+      '</div></div></div>';
+
+    // 7. Выводы
+    html += '<div class="adm-card fn-card"><h3 class="adm-h3">Что видно из отчёта</h3><p class="fn-lead">Главное за период — простыми словами.</p><div class="fn-tips">' + r.tips.map(function (t) { return '<div class="fn-tip ' + t.kind + '"><span class="t">' + esc(t.title) + '</span><p>' + esc(t.text) + '</p><small>' + esc(t.hint) + '</small></div>'; }).join('') + '</div></div>';
+
+    box.innerHTML = html;
+    $('#fnPdf').addEventListener('click', function () { window.print(); });
+    $('#fnCsv').addEventListener('click', function () { finCsvReport(r, per); });
+  }
+
+  /* ---------- Операции ---------- */
+  function finOps(box, q, per) {
+    var ops = Finance.operations(finInput()).filter(function (x) { return !x.hidden && x.date >= per.from && x.date <= per.to; });
+    var f = q.f || 'all', search = '';
+    var cats = {}; ((DATA.finance || {}).categories || []).forEach(function (c) { cats[c.id] = c; });
+    function draw() {
+      var list = ops.filter(function (x) { return f === 'all' || (f === 'in' && x.dir === 'in') || (f === 'out' && x.dir === 'out') || (f === 'manual' && !x.auto); })
+        .filter(function (x) { if (!search) return true; var s = (x.cat + ' ' + x.note + ' ' + (x.order ? '№' + x.order.number + ' ' + x.order.number : '')).toLowerCase(); return s.indexOf(search) !== -1; });
+      var inS = list.reduce(function (s, x) { return s + (x.dir === 'in' ? x.amount : 0); }, 0), outS = list.reduce(function (s, x) { return s + (x.dir === 'out' ? x.amount : 0); }, 0);
+      $('#fnOpsBody', box).innerHTML = list.length ? '<div class="fn-tw"><table class="fn-t fn-ops"><thead><tr><th>Дата</th><th>Тип</th><th>Категория</th><th>Описание</th><th>Откуда</th><th class="r">Сумма</th></tr></thead><tbody>' +
+        list.slice(0, 500).map(function (x) {
+          var type = x.line === 'refunds' ? 'Возврат' : x.dir === 'in' ? 'Доход' : 'Расход';
+          return '<tr' + (x.expense ? ' data-exp="' + esc(x.expense) + '" class="fn-click"' : '') + '><td class="num">' + esc(x.date.split('-').reverse().slice(0, 2).join('.')) + '</td><td><span class="fn-tag ' + (x.dir === 'in' ? 'in' : 'out') + '">' + type + '</span></td><td>' + esc(x.cat) + '</td>' +
+            '<td class="fn-desc" title="' + esc(x.note) + '">' + esc(x.note || '—') + (x.receipt ? ' <a class="fn-rcpt" href="' + esc(x.receipt) + '" target="_blank" rel="noopener" title="Фото чека">чек</a>' : '') + '</td>' +
+            '<td class="fn-src">' + (x.order ? '<a href="#/admin?s=orders&id=' + esc(x.order.id) + '">Заказ № ' + esc(x.order.number) + '</a><span class="fn-auto">авто</span>' : 'вручную') + '</td>' +
+            '<td class="r fn-amt ' + (x.dir === 'in' ? 'in' : 'out') + '">' + (x.dir === 'in' ? '+ ' : '− ') + fmt(Math.round(x.amount)) + '</td></tr>';
+        }).join('') + '</tbody><tfoot><tr><td colspan="5">' + list.length + ' ' + plural(list.length, 'операция', 'операции', 'операций') + ' · пришло ' + finRub(inS) + ' · ушло ' + finRub(outS) + (list.length > 500 ? ' · показаны первые 500' : '') + '</td><td class="r fn-amt">' + finRub(inS - outS, true) + '</td></tr></tfoot></table></div>'
+        : '<div class="fn-emptybox"><b>' + (search || f !== 'all' ? 'Ничего не нашлось' : 'За этот период операций нет') + '</b><span>Расходы на пошив, рекламу, фото и прочее внесите кнопкой «+ Операция» — они сразу попадут в отчёт.</span></div>';
+      $$('tr[data-exp]', box).forEach(function (tr) { tr.addEventListener('click', function (e) { if (e.target.closest('a')) return; var ex = (DATA.expenses || []).find(function (y) { return y.id === tr.getAttribute('data-exp'); }); if (ex) finExpenseModal(ex, q); }); });
+    }
+    box.innerHTML = '<div class="adm-card fn-card"><div class="fn-toolbar"><div class="fn-chips">' + [['all', 'Все'], ['in', 'Доходы'], ['out', 'Расходы'], ['manual', 'Внесённые вручную']].map(function (x) { return '<button type="button" class="fn-chip' + (x[0] === f ? ' on' : '') + '" data-f="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div>' +
+      '<input class="input fn-search" id="fnSearch" placeholder="Поиск: заказ, категория…"></div><div id="fnOpsBody"></div>' +
+      '<p class="fn-note">Строки «авто» сайт добавляет сам по заказам и пересчитывает при возврате. Свои операции можно открыть, поправить или удалить. Себестоимость в списке не показывается — она в отчёте.</p></div>';
+    $$('[data-f]', box).forEach(function (b) { b.addEventListener('click', function () { f = b.getAttribute('data-f'); $$('[data-f]', box).forEach(function (x) { x.classList.toggle('on', x === b); }); draw(); }); });
+    $('#fnSearch', box).addEventListener('input', function (e) { search = e.target.value.trim().toLowerCase(); draw(); });
+    draw();
+    $('#fnCsv').addEventListener('click', function () { finCsvOps(ops, per); });
+  }
+
+  // Окно операции: расход или доход вручную
+  function finExpenseModal(ex, q) {
+    var fin = DATA.finance || Finance.defaults(), cats = fin.categories || [];
+    var cur = ex ? cats.find(function (c) { return c.id === ex.categoryId; }) : null;
+    var isIn = cur ? cur.kind === 'income' : false;
+    var today = Finance.dayOf(new Date().toISOString());
+    var opts = function (inc) {
+      // по умолчанию — первая категория из своего списка (порядок задаётся в настройках)
+      var first = (cats.filter(function (c) { return inc ? c.kind === 'income' : c.kind !== 'income'; })[0] || {}).id;
+      var sel = ex && cats.some(function (c) { return c.id === ex.categoryId && (c.kind === 'income') === inc; }) ? ex.categoryId : first;
+      return Finance.KINDS.filter(function (k) { return inc ? k[0] === 'income' : k[0] !== 'income'; }).map(function (k) {
+        var list = cats.filter(function (c) { return c.kind === k[0]; }); if (!list.length) return '';
+        return '<optgroup label="' + esc(k[1]) + '">' + list.map(function (c) { return '<option value="' + esc(c.id) + '"' + (sel === c.id ? ' selected' : '') + '>' + esc(c.name) + '</option>'; }).join('') + '</optgroup>';
+      }).join('');
+    };
+    var receipt = ex ? ex.receipt || '' : '';
+    A().openModal('<div class="fn-modal"><h3 class="serif">' + (ex ? 'Операция' : 'Новая операция') + '</h3>' +
+      '<div class="tabs fn-dir"><button type="button" data-dir="out"' + (!isIn ? ' class="on"' : '') + '>Расход</button><button type="button" data-dir="in"' + (isIn ? ' class="on"' : '') + '>Доход</button></div>' +
+      '<form class="form" id="fnExForm" novalidate><div class="fn-form2"><label class="field"><span>Сумма, ₽</span><input class="input num" id="fxAmount" inputmode="decimal" placeholder="15 000" value="' + esc(ex ? String(ex.amount).replace('.', ',') : '') + '"></label>' +
+      '<label class="field"><span>Дата</span><input class="input" type="date" id="fxDate" value="' + esc(ex ? ex.date : today) + '" max="' + today + '"></label></div>' +
+      '<label class="field"><span>Категория</span><select class="select" id="fxCat">' + opts(isIn) + '</select><small class="muted fn-kindhint" id="fxHint"></small></label>' +
+      '<label class="field"><span>Комментарий</span><input class="input" id="fxNote" maxlength="300" placeholder="Например: партия костюмов, 20 шт." value="' + esc(ex ? ex.note : '') + '"></label>' +
+      '<div class="field"><span>Фото чека</span><div class="fn-rc" id="fxRc"></div></div>' +
+      '<p class="form-error" id="fxErr"></p><div class="fn-mact"><button class="btn">Сохранить</button>' + (ex ? '<button class="btn ghost" type="button" id="fxDel">Удалить</button>' : '') + '</div></form>' +
+      '<p class="fn-note"><a class="link" href="' + finLink(q || {}, { tab: 'settings' }) + '">Свои категории</a> — в настройках финансов.</p></div>');
+    var box = $('.fn-modal');
+    function hint() { var c = cats.find(function (x) { return x.id === $('#fxCat', box).value; }), k = c && Finance.KINDS.find(function (x) { return x[0] === c.kind; }); $('#fxHint', box).textContent = k ? k[2] : ''; }
+    function rc() {
+      $('#fxRc', box).innerHTML = receipt ? '<a href="' + esc(receipt) + '" target="_blank" rel="noopener"><img src="' + esc(receipt) + '" alt="Чек"></a><button type="button" class="link" id="fxRcDel">Убрать фото</button>'
+        : '<label class="btn ghost sm"><input type="file" accept="image/*" id="fxFile" hidden>Прикрепить фото</label>';
+      if (receipt) $('#fxRcDel', box).addEventListener('click', function () { receipt = ''; rc(); });
+      else $('#fxFile', box).addEventListener('change', async function (e) {
+        var file = e.target.files[0]; if (!file) return;
+        $('#fxRc', box).innerHTML = '<span class="muted">Загружаем…</span>';
+        try { receipt = await A().API.uploadImage(file); } catch (er) { toast(A().errMsg(er), true); }
+        rc();
+      });
+    }
+    $$('[data-dir]', box).forEach(function (b) { b.addEventListener('click', function () { $$('[data-dir]', box).forEach(function (x) { x.classList.toggle('on', x === b); }); $('#fxCat', box).innerHTML = opts(b.getAttribute('data-dir') === 'in'); hint(); }); });
+    $('#fxCat', box).addEventListener('change', hint);
+    hint(); rc();
+    if (!ex) setTimeout(function () { $('#fxAmount', box).focus(); }, 60);
+    $('#fnExForm', box).addEventListener('submit', async function (e) {
+      e.preventDefault();
+      var amount = Number(String($('#fxAmount', box).value).replace(/\s/g, '').replace(',', '.'));
+      if (!(amount > 0)) { $('#fxErr', box).textContent = 'Укажите сумму'; return; }
+      var btn = e.submitter || $('button.btn', box); btn.disabled = true;
+      try {
+        await A().API.adminExpense({ id: ex ? ex.id : undefined, amount: amount, date: $('#fxDate', box).value, categoryId: $('#fxCat', box).value, note: $('#fxNote', box).value, receipt: receipt });
+        A().closePanels(); await afterSave(ex ? 'Операция сохранена' : 'Операция добавлена');
+      } catch (er) { $('#fxErr', box).textContent = A().errMsg(er); btn.disabled = false; }
+    });
+    if (ex) bindConfirm($('#fxDel', box), async function () {
+      try { await A().API.adminExpenseDelete(ex.id); A().closePanels(); await afterSave('Операция удалена'); } catch (er) { $('#fxErr', box).textContent = A().errMsg(er); }
+    });
+  }
+
+  /* ---------- Себестоимость ---------- */
+  function finCosts(box, q) {
+    var fin = DATA.finance || Finance.defaults(), costs = Object.assign({}, fin.costs || {}), dirty = false;
+    var catName = {}; DATA.categories.forEach(function (c) { catName[c.id] = c.name; });
+    var onlyMiss = !!q.miss, search = '';
+    var filled = DATA.products.filter(function (p) { return costs[p.id] > 0; }).length;
+    box.innerHTML = '<div class="adm-card fn-card"><h3 class="adm-h3">Себестоимость товаров</h3><p class="fn-lead">Сколько вам стоит одна вещь: пошив, ткань, фурнитура, бирки. Можно примерно — отчёт станет точнее, когда уточните. Покупатели эти цифры не видят.</p>' +
+      '<div class="fn-cost-top"><div class="fn-progress"><b>' + filled + ' из ' + DATA.products.length + '</b> товаров с себестоимостью<span class="fn-bar"><i style="width:' + (DATA.products.length ? Math.round(filled / DATA.products.length * 100) : 0) + '%"></i></span></div>' +
+        '<div class="fn-fill"><span>Заполнить пустые:</span><input class="input num" id="fnPct" type="number" min="1" max="99" value="35" aria-label="Процент от цены"><span>% от цены</span><button class="btn ghost sm" type="button" id="fnFillBtn">Заполнить</button></div></div>' +
+      '<div class="fn-toolbar"><label class="check"><input type="checkbox" id="fnMiss"' + (onlyMiss ? ' checked' : '') + '> <span>Только без себестоимости</span></label><input class="input fn-search" id="fnCSearch" placeholder="Поиск по названию"></div>' +
+      '<div id="fnCostBody"></div><div class="fn-savebar"><span class="muted" id="fnDirty">Изменений нет</span><button class="btn" type="button" id="fnCostSave">Сохранить</button></div></div>';
+    function profitCells(p) {
+      var c = costs[p.id], price = Number(p.price) || 0;
+      if (!(c > 0)) return '<td class="r num fn-dim">—</td><td class="r"><span class="fn-mg">не указана</span></td>';
+      var pr = price - c, mg = price ? pr / price : 0;
+      return '<td class="r num">' + finRub(pr) + '</td><td class="r"><span class="fn-mg ' + (mg >= 0.55 ? 'hi' : mg >= 0.4 ? 'mid' : 'lo') + '">' + Math.round(mg * 100) + '%</span></td>';
+    }
+    function draw() {
+      var list = DATA.products.filter(function (p) { return (!onlyMiss || !(costs[p.id] > 0)) && (!search || p.name.toLowerCase().indexOf(search) !== -1); });
+      $('#fnCostBody', box).innerHTML = list.length ? '<div class="fn-tw"><table class="fn-t fn-costs"><thead><tr><th>Товар</th><th class="r">Цена</th><th class="r">Себестоимость 1 шт.</th><th class="r">Прибыль с вещи</th><th class="r">Доля прибыли</th></tr></thead><tbody>' +
+        list.map(function (p) {
+          return '<tr data-id="' + esc(p.id) + '"><td><b>' + esc(p.name) + '</b>' + (p.active === false ? ' <span class="fn-auto">скрыт</span>' : '') + '<small>' + esc(catName[p.categoryId] || '') + '</small></td><td class="r num">' + finRub(p.price) + '</td>' +
+            '<td class="r"><span class="fn-cost-in"><input class="input num" inputmode="decimal" data-cost="' + esc(p.id) + '" value="' + esc(costs[p.id] > 0 ? String(costs[p.id]) : '') + '" placeholder="—" aria-label="Себестоимость: ' + esc(p.name) + '"><i>₽</i></span></td>' + profitCells(p) + '</tr>';
+        }).join('') + '</tbody></table></div>'
+        : '<div class="fn-emptybox"><b>' + (onlyMiss ? 'У всех товаров себестоимость указана' : 'Ничего не нашлось') + '</b></div>';
+      $$('[data-cost]', box).forEach(function (inp) {
+        inp.addEventListener('input', function () {
+          var id = inp.getAttribute('data-cost'), v = Number(String(inp.value).replace(/\s/g, '').replace(',', '.'));
+          if (v > 0) costs[id] = v; else delete costs[id];
+          var tr = inp.closest('tr'), p = DATA.products.find(function (x) { return x.id === id; });
+          var tds = tr.querySelectorAll('td'); tds[3].remove(); tds[4].remove(); tr.insertAdjacentHTML('beforeend', profitCells(p));
+          mark();
+        });
+      });
+    }
+    function mark() { dirty = true; $('#fnDirty', box).textContent = 'Есть несохранённые изменения'; $('#fnDirty', box).className = 'fn-warn'; }
+    $('#fnMiss', box).addEventListener('change', function (e) { onlyMiss = e.target.checked; draw(); });
+    $('#fnCSearch', box).addEventListener('input', function (e) { search = e.target.value.trim().toLowerCase(); draw(); });
+    $('#fnFillBtn', box).addEventListener('click', function () {
+      var k = Number($('#fnPct', box).value); if (!(k > 0 && k < 100)) { toast('Укажите процент от 1 до 99', true); return; }
+      var n = 0; DATA.products.forEach(function (p) { if (!(costs[p.id] > 0) && p.price > 0) { costs[p.id] = Math.round(p.price * k / 100); n++; } });
+      if (!n) { toast('Пустых нет — у всех товаров себестоимость уже указана'); return; }
+      draw(); mark(); toast('Заполнено: ' + n + ' ' + plural(n, 'товар', 'товара', 'товаров') + '. Проверьте и сохраните');
+    });
+    $('#fnCostSave', box).addEventListener('click', async function () {
+      var send = {}; DATA.products.forEach(function (p) { send[p.id] = costs[p.id] > 0 ? costs[p.id] : 0; });
+      try { DATA.finance = await A().API.adminCosts(send); dirty = false; await afterSave('Себестоимость сохранена'); } catch (e) { toast(A().errMsg(e), true); }
+    });
+    draw();
+  }
+
+  /* ---------- Настройки: налог, комиссии, категории ---------- */
+  var FIN_CAT_COLS = [{ k: 'name', label: 'Название категории', flex: 3 }, { k: 'kind', label: 'Куда относится', type: 'select', flex: 2, options: [] }];
+  function finSettings(box) {
+    var fin = DATA.finance || Finance.defaults(), rt = fin.rates || {};
+    FIN_CAT_COLS[1].options = Finance.KINDS.map(function (k) { return [k[0], k[1]]; });
+    var used = {}; (DATA.expenses || []).forEach(function (e) { used[e.categoryId] = (used[e.categoryId] || 0) + 1; });
+    var numIn = function (id, v, label, unit, hint) { return '<label class="field"><span>' + label + '</span><span class="fn-unit"><input class="input num" id="' + id + '" type="number" min="0" step="0.01" value="' + esc(v) + '"><i>' + unit + '</i></span>' + (hint ? '<small class="muted">' + hint + '</small>' : '') + '</label>'; };
+    box.innerHTML = '<div class="fn-two">' +
+      '<div class="adm-card fn-card"><h3 class="adm-h3">Налог</h3><p class="fn-lead">УСН «Доходы»: налог считается с выручки — с денег от покупателей за вычетом возвратов.</p>' +
+        '<div class="adm-form fn-one">' + numIn('fsTax', fin.taxRate, 'Ставка УСН', '%', 'В Республике Ингушетия — 2%') + '</div>' +
+        '<h3 class="adm-h3" style="margin-top:26px">СДЭК</h3><div class="adm-form fn-one">' + numIn('fsCod', fin.codFee, 'Комиссия за наложенный платёж', '%', 'Если покупатели платят при получении. Смотрите в договоре СДЭК; 0 — не учитывать') + '</div>' +
+        '<p class="fn-note">Стоимость доставки СДЭК сайт берёт из накладной сам, когда вы оформляете отправление в заказе.</p></div>' +
+      '<div class="adm-card fn-card"><h3 class="adm-h3">Комиссия ЮKassa</h3><p class="fn-lead">Как в личном кабинете ЮKassa: комиссия ЮKassa плюс комиссия партнёра. Сайт считает её по способу, которым оплачен каждый заказ.</p>' +
+        '<div class="fn-rates"><b>Карты, ЮMoney, SberPay, T-Pay, Alfa Pay</b><div class="adm-form">' + numIn('fsOy', (rt.other || {}).yk, 'ЮKassa', '%') + numIn('fsOp', (rt.other || {}).partner, 'Партнёр', '%') + '</div>' +
+        '<b>СБП</b><div class="adm-form">' + numIn('fsSy', (rt.sbp || {}).yk, 'ЮKassa', '%') + numIn('fsSp', (rt.sbp || {}).partner, 'Партнёр', '%') + '</div>' +
+        '<div class="adm-form">' + numIn('fsMin', fin.partnerMin, 'Комиссия партнёра не меньше', '₽', 'С одного платежа') + '</div></div>' +
+        '<p class="fn-note" id="fsEx"></p></div></div>' +
+      '<div class="adm-card fn-card"><h3 class="adm-h3">Категории операций</h3><p class="fn-lead">«Куда относится» решает, в какую строку отчёта попадёт расход. Закупка товара и уплата налога в прибыль не входят — их видно в «Живых деньгах». Категория «Реклама» нужна для показателя «Реклама на 1 заказ».</p>' +
+        rowsEditor('cats', FIN_CAT_COLS, fin.categories || []) +
+        '<p class="fn-note">' + (Object.keys(used).length ? 'Категорию, в которой уже есть операции, удалить нельзя — сначала перенесите операции в другую.' : '') + '</p></div>' +
+      '<div class="adm-actions"><button class="btn" type="button" id="fsSave">Сохранить настройки</button><p class="form-error" id="fsErr"></p></div>';
+    bindRows(box, { cats: FIN_CAT_COLS });
+    var val = function (id) { return Number(String($('#' + id, box).value).replace(',', '.')) || 0; };
+    function example() {
+      var m = 10000, o = m * val('fsOy') / 100 + Math.max(m * val('fsOp') / 100, val('fsOp') ? val('fsMin') : 0), s = m * val('fsSy') / 100 + Math.max(m * val('fsSp') / 100, val('fsSp') ? val('fsMin') : 0);
+      $('#fsEx', box).innerHTML = 'Пример: с заказа на 10 000 ₽ комиссия ' + fmt(Math.round(o)) + ' при оплате картой и ' + fmt(Math.round(s)) + ' через СБП.';
+    }
+    $$('input[type=number]', box).forEach(function (i) { i.addEventListener('input', example); });
+    example();
+    $('#fsSave', box).addEventListener('click', async function () {
+      var cats = readRows(box, 'cats', FIN_CAT_COLS);
+      if (!cats.length) { $('#fsErr', box).textContent = 'Нужна хотя бы одна категория'; return; }
+      var value = { taxRate: val('fsTax'), codFee: val('fsCod'), partnerMin: val('fsMin'), rates: { other: { yk: val('fsOy'), partner: val('fsOp') }, sbp: { yk: val('fsSy'), partner: val('fsSp') } }, categories: cats };
+      try { DATA.finance = await A().API.adminFinance(value); $('#fsErr', box).textContent = ''; await afterSave('Настройки финансов сохранены'); } catch (e) { $('#fsErr', box).textContent = A().errMsg(e); }
+    });
+  }
+
+  /* ---------- Выгрузка для Excel (CSV с разделителем «;» — Excel открывает сразу) ---------- */
+  function finDownload(name, rows) {
+    var cell = function (v) { if (typeof v === 'number') return String(Math.round(v * 100) / 100).replace('.', ','); v = String(v == null ? '' : v); return /[;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+    var text = '﻿' + rows.map(function (r) { return r.map(cell).join(';'); }).join('\r\n');
+    var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' })); a.download = name;
+    document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+  function finCsvOpsRows(ops) {
+    return [['Дата', 'Тип', 'Категория', 'Описание', 'Заказ', 'Сумма, ₽']].concat(ops.map(function (x) { return [x.date.split('-').reverse().join('.'), x.line === 'refunds' ? 'Возврат' : x.dir === 'in' ? 'Доход' : 'Расход', x.cat, x.note, x.order ? x.order.number : 'вручную', (x.dir === 'in' ? 1 : -1) * x.amount]; }));
+  }
+  function finCsvOps(ops, per) { finDownload('операции ' + per.from + '_' + per.to + '.csv', finCsvOpsRows(ops)); }
+  function finCsvReport(r, per) {
+    var c = r.cur, p = r.prev, rows = [[DATA.settings.storeName + ' — финансовый отчёт'], ['Период', per.label, per.from + ' — ' + per.to], [], ['Статья', per.label, 'Доля выручки, %', 'Прошлый период']];
+    var add = function (name, a, b) { rows.push([name, a, c.revenue ? Math.round(a / c.revenue * 1000) / 10 : '', b]); };
+    add('Продажи', c.sales, p.sales); add('− Возвраты', c.refunds, p.refunds); add('Выручка', c.revenue, p.revenue);
+    add('− Себестоимость проданного', c.cogs, p.cogs); add('Валовая прибыль', c.gross, p.gross);
+    add('− Продажа и доставка', c.variable, p.variable); c.lines('variable').forEach(function (x) { add('    ' + x.name, x.amount, ''); });
+    add('Прибыль с продаж', c.contribution, p.contribution);
+    add('− Работа магазина', c.fixed, p.fixed); c.lines('fixed').forEach(function (x) { add('    ' + x.name, x.amount, ''); });
+    add('Прибыль до налога', c.ebt, p.ebt); add('− Налог УСН ' + r.finance.taxRate + '%', c.tax, p.tax); add('Чистая прибыль', c.net, p.net);
+    rows.push([], ['Живые деньги'], ['Пришло от покупателей', c.cashIn], ['Вернули покупателям', -c.refunds], ['Закупка товара', -c.purchase], ['Расходы магазина', -(c.variable + c.fixed)], ['Заплатили налог и взносы', -c.taxpaid], ['Итого', c.cash], ['Отложить на налог', c.taxLeft]);
+    rows.push([], ['Прибыль по моделям'], ['Модель', 'Себестоимость', 'Цена', 'Продано', 'Выручка', 'Прибыль с вещи', 'Прибыль', 'Доля прибыли, %']);
+    r.products.forEach(function (x) { rows.push([x.name, x.cost || '', x.price, x.units, x.revenue, x.missing ? '' : x.perUnit, x.missing ? '' : x.profit, x.missing ? '' : Math.round(x.margin * 100)]); });
+    rows.push([], ['По месяцам'], ['Месяц', 'Выручка', 'Себестоимость', 'Расходы', 'Налог', 'Чистая прибыль']);
+    r.months.forEach(function (m) { rows.push([m.full + ' ' + m.year, m.p.revenue, m.p.cogs, m.p.variable + m.p.fixed, m.p.tax, m.p.net]); });
+    rows.push([], ['Операции']);
+    finCsvOpsRows(r.ops.filter(function (x) { return !x.hidden && x.date >= per.from && x.date <= per.to; })).forEach(function (x) { rows.push(x); });
+    finDownload('финансы ' + per.from + '_' + per.to + '.csv', rows);
+  }
+
   function analyticsSection(m, q) {
     var n = Number((q && q.d) || 7) === 30 ? 30 : 7, days = statDays(n), prev = sumDays(statDays(n * 2).slice(0, n)), t = sumDays(days);
     var delta = function (a, b) { if (!b) return ''; var d = Math.round((a - b) / b * 100); return '<span class="an-d ' + (d >= 0 ? 'up' : 'down') + '">' + (d >= 0 ? '▲ ' : '▼ ') + Math.abs(d) + '% к прошлым ' + n + ' дн.</span>'; };
     var mk = (DATA.settings.metrika || {}), srcs = Object.keys(t.src).sort(function (a, b) { return t.src[b] - t.src[a]; }), srcTotal = srcs.reduce(function (s, k) { return s + t.src[k]; }, 0);
     var maxV = Math.max(1, Math.max.apply(null, days.map(function (x) { return x.v; })));
     m.innerHTML = head('Аналитика', '<div class="tabs adm-tabs"><a href="#/admin?s=analytics&d=7" class="' + (n === 7 ? 'on' : '') + '">7 дней</a><a href="#/admin?s=analytics&d=30" class="' + (n === 30 ? 'on' : '') + '">30 дней</a></div>',
-        'Своя статистика сайта: без cookie и без персональных данных покупателей. Подробные отчёты, карта кликов и записи визитов — в Яндекс Метрике (подключается ниже).') +
+        'Своя статистика сайта: без cookie и без персональных данных покупателей. Каждый посетитель считается один раз в день, сколько бы раз он ни заходил; ваши заходы не считаются. Подробные отчёты, карта кликов и записи визитов — в Яндекс Метрике (подключается ниже).') +
       '<div class="adm-stats an-kpi">' +
         '<div class="adm-stat"><span class="eyebrow">Посетители</span><b class="num">' + t.v.toLocaleString('ru-RU') + '</b>' + delta(t.v, prev.v) + '</div>' +
         '<div class="adm-stat"><span class="eyebrow">Конверсия в заказ</span><b>' + pct(t.o, t.v) + '</b><span class="an-d">' + t.o + ' ' + plural(t.o, 'заказ', 'заказа', 'заказов') + '</span></div>' +

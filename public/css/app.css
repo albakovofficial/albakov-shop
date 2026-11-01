@@ -3774,3 +3774,9 @@ body::after { content: none; display: none; }
 .qs-fit > i { color: var(--muted); display: grid; }
 .qs-size.rec { border-color: var(--text); box-shadow: inset 0 0 0 1px var(--text); }
 .qs-size.rec small { color: #0f7a3a; }
+
+/* ---------- 13.53: бонусы в карточке каталога — чёрная плашка ---------- */
+.card .card-bonus { align-self: flex-start; gap: 6px; margin-top: 2px; padding: 3px 11px 3px 3px; border-radius: 999px; font-size: 12px; font-weight: 500; letter-spacing: .01em; color: #fff; white-space: nowrap;
+  background: linear-gradient(135deg, #24272c, #0d0e10); box-shadow: 0 6px 14px -8px rgba(13, 14, 16, .6); }
+.card .card-bonus .b-ic { width: 18px; height: 18px; font-size: 9.5px; color: #121417; background: #fff; margin: 0; vertical-align: 0; }
+@media (max-width: 380px) { .card .card-bonus { font-size: 11px; padding-right: 9px; gap: 5px; } .card .card-bonus .b-ic { width: 16px; height: 16px; font-size: 8.5px; } }

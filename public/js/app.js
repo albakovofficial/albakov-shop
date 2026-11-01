@@ -295,7 +295,7 @@
   // «+75 бонусов» под ценой — сколько придёт за покупку по проценту из панели управления
   function bonusLine(price, cls) {
     var n = Pricing.bonusFor(price, D.settings);
-    return n > 0 ? '<span class="' + (cls || 'card-bonus') + '"><i class="b-ic" aria-hidden="true">Б</i>+' + bonusNum(n) + ' ' + bonusWord(n) + '</span>' : '';
+    return n > 0 ? '<span class="' + (cls || 'card-bonus') + '"' + (cls ? '' : ' title="Бонусы за покупку: 1 бонус = 1 ₽ на следующие заказы"') + '><i class="b-ic" aria-hidden="true">Б</i>+' + bonusNum(n) + ' ' + bonusWord(n) + '</span>' : '';
   }
   // Карточка в каталоге. cid — выбранный цвет (переключается кружками прямо в карточке)
   function card(p, cid) {
@@ -317,7 +317,7 @@
       (img1 ? '<img class="alt" src="' + esc(img1) + '" alt="" loading="lazy">' : '') + '</div>' +
       '<div class="meta"><span class="name">' + esc(p.name) + '</span>' + sub +
       (cs.length > 1 ? '<span class="card-swatches" role="group" aria-label="Цвета">' + cs.slice(0, 5).map(function (c) { return '<i role="button" tabindex="0" class="' + (c === c0 ? 'on' : '') + (Pricing.stockOf(c) ? '' : ' none') + '" style="' + swatchStyle(c) + '" data-sw="' + esc(p.id) + '|' + esc(c.id) + '" title="' + esc(c.name) + '" aria-label="' + esc(c.name) + '" aria-pressed="' + (c === c0) + '"></i>'; }).join('') + (cs.length > 5 ? '<em>+' + (cs.length - 5) + '</em>' : '') + '</span>' : '') +
-      '<span class="card-buy">' + priceHtml(pr) + '</span></div></a>';
+      '<span class="card-buy">' + priceHtml(pr) + '</span>' + (stock > 0 ? bonusLine(pr.price) : '') + '</div></a>';
   }
   function bagIcon() { return '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8h14l-1 12H6L5 8z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/><path d="M12 11v5M9.5 13.5h5"/></svg>'; }
   // Размер по сохранённым меркам покупателя (после подбора) — для отметки «ваш» в окне выбора

@@ -18,6 +18,7 @@ loadEnv(path.join(__dirname, '.env'));
 const PORT = Number(process.env.PORT || 3000);
 const PUBLIC_URL = (process.env.PUBLIC_URL || `http://localhost:${PORT}`).replace(/\/$/, '');
 const COOKIE_SECURE = PUBLIC_URL.startsWith('https://');
+const PUBLIC_HOST = (() => { try { const h = new URL(PUBLIC_URL).hostname; return /^www\./.test(h) || h === 'localhost' ? '' : h; } catch (e) { return ''; } })();
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const UPLOAD_DIR = path.join(PUBLIC_DIR, 'uploads');
 const DATA_DIR = path.join(__dirname, 'data');
@@ -131,6 +132,38 @@ const Seo = require('./lib/seo.js').create({
   features: () => ({ tryOn: !!((cdekCfg().services || {}).tryOn), cod: !!((db.settings.payment || {}).cod) })
 });
 let indexHtml = { mtime: 0, text: '' };
+
+/* IndexNow: сразу сообщаем Яндексу (и Bing) о новых и изменённых страницах — не ждём, пока робот сам зайдёт.
+   Ключ — случайный, лежит в файле /<ключ>.txt (так Яндекс проверяет, что сайт наш). Работает только на https. */
+if (!/^[a-f0-9]{32}$/.test(db.secrets.indexnow || '')) db.secrets.indexnow = crypto.randomBytes(16).toString('hex');
+const seoPingQ = new Set();
+let seoPingTimer = null;
+const seoPingOn = () => /^https:\/\//.test(PUBLIC_URL) && !/localhost|127\.0\.0\.1/.test(PUBLIC_URL) && ((db.settings.seo || {}).indexnow !== false);
+function seoPing(paths) {
+  if (!seoPingOn()) return;
+  (paths || []).forEach((u) => { if (u) seoPingQ.add(/^https?:/.test(u) ? u : PUBLIC_URL + (u[0] === '/' ? '' : '/') + u); });
+  clearTimeout(seoPingTimer); seoPingTimer = setTimeout(() => seoPingFlush().catch(() => {}), 30e3); // правки копятся полминуты — один запрос
+}
+async function seoPingFlush() {
+  clearTimeout(seoPingTimer); seoPingTimer = null;
+  const list = [...seoPingQ].slice(0, 10000); seoPingQ.clear();
+  if (!list.length || !seoPingOn()) return null;
+  const host = new URL(PUBLIC_URL).host, out = { at: new Date().toISOString(), count: list.length, ok: false, error: '' };
+  try {
+    const r = await fetch('https://yandex.com/indexnow', { method: 'POST', headers: { 'Content-Type': 'application/json; charset=utf-8' }, body: JSON.stringify({ host, key: db.secrets.indexnow, keyLocation: PUBLIC_URL + '/' + db.secrets.indexnow + '.txt', urlList: list }), signal: AbortSignal.timeout(15000) });
+    out.ok = r.status === 200 || r.status === 202; out.status = r.status;
+    if (!out.ok) out.error = r.status === 403 ? 'Яндекс не смог проверить ключ на сайте' : r.status === 422 ? 'Адреса не с этого сайта' : r.status === 429 ? 'Слишком часто — повторим позже' : 'Ответ ' + r.status;
+  } catch (e) { out.error = 'Не удалось связаться с Яндексом: ' + e.message; }
+  db.seoPing = out; save();
+  if (!out.ok) console.error('IndexNow:', out.error);
+  return out;
+}
+// Что поменялось в панели — то и отправляем
+function seoChanged(coll, item) {
+  if (coll === 'products') seoPing(item ? ['/product/' + item.slug, '/catalog', '/'].concat((db.categories.find((c) => c.id === item.categoryId) || {}).slug ? ['/catalog?cat=' + encodeURIComponent(db.categories.find((c) => c.id === item.categoryId).slug)] : []) : Seo.urls());
+  else if (coll === 'pages') seoPing(item ? ['/page/' + item.slug] : Seo.urls());
+  else if (coll === 'categories') seoPing(Seo.urls().filter((u) => /\/catalog/.test(u)));
+}
 function sendIndex(req, res, url) {
   const file = path.join(PUBLIC_DIR, 'index.html'), mt = fs.statSync(file).mtimeMs;
   if (mt !== indexHtml.mtime) indexHtml = { mtime: mt, text: fs.readFileSync(file, 'utf8') };
@@ -1572,10 +1605,20 @@ async function api(req, res, url, body) {
       d.giftcards = db.giftcards.map((g) => Object.assign({}, g, { state: giftState(g) }));
       d.stats = db.stats || {};
       d.expenses = db.expenses; d.finance = db.finance;
+      d.seo = { indexnow: seoPingOn(), https: /^https:/.test(PUBLIC_URL), url: PUBLIC_URL, last: db.seoPing || null, pages: Seo.urls().length };
       return { data: d };
     }
     if (p[1] === 'health' && M === 'GET') return { health: health() };
     if (p[1] === 'finance') return financeApi(p, M, body);
+    // Отправить все страницы сайта в Яндекс прямо сейчас
+    if (p[1] === 'seo-ping' && M === 'POST') {
+      if (!/^https:/.test(PUBLIC_URL)) fail(400, 'Сначала включите HTTPS — Яндекс принимает страницы только с https-адресов');
+      if (!seoPingOn()) fail(400, 'Оповещение Яндекса выключено');
+      throttle(req, 'seoping', 10);
+      seoPing(Seo.urls()); const r = await seoPingFlush();
+      if (!r || !r.ok) fail(502, (r && r.error) || 'Не удалось отправить');
+      return { last: r };
+    }
     if (p[1] === 'support') return supportAdminApi(p, M, body);
     // Следующий номер заказа (Настройки → Нумерация заказов)
     if (p[1] === 'order-seq' && M === 'GET') return { next: (Number(db.orderSeq) || 0) + 1 };
@@ -1886,15 +1929,15 @@ async function api(req, res, url, body) {
         db[p[1]] = arr.filter((x) => !drop.has(x.id));
         save(); return { deleted: before - db[p[1]].length };
       }
-      if (!p[2] && M === 'PUT') { if (!Array.isArray(body.value)) fail(400, 'Нужен список'); if (p[1] === 'products') body.value.forEach(Pricing.migrateProduct); db[p[1]] = body.value; save(); return p[1] === 'products' ? { notify: await processWaitlist() } : {}; }
+      if (!p[2] && M === 'PUT') { if (!Array.isArray(body.value)) fail(400, 'Нужен список'); if (p[1] === 'products') body.value.forEach(Pricing.migrateProduct); db[p[1]] = body.value; save(); seoChanged(p[1]); return p[1] === 'products' ? { notify: await processWaitlist() } : {}; }
       if (p[2] && M === 'PUT') {
         const item = body.value; if (!item || item.id !== p[2]) fail(400, 'Неверные данные');
         if (p[1] === 'products') { const was = arr.find((x) => x.id === item.id); item.preorderSold = was ? (was.preorderSold || 0) : 0; if (Array.isArray(item.look)) item.look = item.look.filter((id) => id !== item.id && db.products.some((x) => x.id === id)).slice(0, 4); Pricing.migrateProduct(item); if (item.specs) { item.specs = Specs.clean(item.specs); if (!Object.keys(item.specs).length) delete item.specs; } }
         const i = arr.findIndex((x) => x.id === item.id);
         if (i === -1) arr.push(item); else arr[i] = item;
-        save(); return p[1] === 'products' ? { notify: await processWaitlist() } : {};
+        save(); seoChanged(p[1], item); return p[1] === 'products' ? { notify: await processWaitlist() } : {};
       }
-      if (p[2] && M === 'DELETE') { db[p[1]] = arr.filter((x) => x.id !== p[2]); save(); return {}; }
+      if (p[2] && M === 'DELETE') { const gone = arr.find((x) => x.id === p[2]); db[p[1]] = arr.filter((x) => x.id !== p[2]); save(); if (gone) seoChanged(p[1], gone); return {}; } // удалённую страницу Яндекс перепроверит и уберёт из поиска
     }
   }
   fail(404, 'Не найдено');
@@ -1973,6 +2016,9 @@ const server = http.createServer(async (req, res) => {
   if (COOKIE_SECURE) res.setHeader('Strict-Transport-Security', 'max-age=31536000');
   let url;
   try { url = new URL(req.url, 'http://x'); } catch (e) { res.writeHead(400); return res.end(); }
+  // www.домен → домен: у поисковика одна версия сайта, а не две одинаковые
+  const host = String(req.headers.host || '').toLowerCase(), mainHost = PUBLIC_HOST;
+  if (mainHost && host === 'www.' + mainHost && (req.method === 'GET' || req.method === 'HEAD')) { res.writeHead(301, { Location: PUBLIC_URL + url.pathname + url.search }); return res.end(); }
   if (url.pathname === '/api/cart-remind/off' && req.method === 'GET') {
     const u = db.users.find((x) => x.id === url.searchParams.get('u'));
     const ok = !!(u && safeEqual(url.searchParams.get('t') || '', cartOffSig(u.id)));
@@ -2013,6 +2059,10 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=3600' });
     return res.end('User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /cart\nDisallow: /checkout\nDisallow: /account\nDisallow: /favorites\nDisallow: /track\nDisallow: /gift\nDisallow: /order/\nDisallow: /*?*q=\nDisallow: /*?*sort=\n' +
       'Clean-param: utm_source&utm_medium&utm_campaign&utm_content&utm_term&yclid&source\n\nSitemap: ' + PUBLIC_URL + '/sitemap.xml\n');
+  }
+  if (url.pathname === '/' + db.secrets.indexnow + '.txt') {
+    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=3600' });
+    return res.end(db.secrets.indexnow);
   }
   if (url.pathname === '/sitemap.xml' || url.pathname === '/yml.xml') {
     res.writeHead(200, { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=900' });

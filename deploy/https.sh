@@ -31,7 +31,7 @@ NAMES=(-d "$DOMAIN")
 if [ -n "$W_IP" ] && { [ -z "$MY_IP" ] || printf ' %s ' "$W_IP" | grep -q " $MY_IP "; }; then NAMES+=(-d "www.$DOMAIN")
 else warn "www.$DOMAIN не указывает на сервер — сертификат будет только для $DOMAIN (добавьте A-запись для www и запустите скрипт ещё раз)"; fi
 
-if certbot --nginx --non-interactive --agree-tos --redirect -m "$EMAIL" "${NAMES[@]}" >/tmp/albakov-certbot.log 2>&1; then
+if certbot --nginx --non-interactive --agree-tos --redirect --expand -m "$EMAIL" "${NAMES[@]}" >/tmp/albakov-certbot.log 2>&1; then
   env_set PUBLIC_URL "https://$DOMAIN"
   systemctl restart "$SERVICE"
   wait_app || true

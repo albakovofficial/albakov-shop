@@ -50,6 +50,11 @@ db.sessions = db.sessions || {};
 if (!db.orderNumbering) { db.orderSeq = 0; db.orderNumbering = 1; }
 // Статистика посещений (13.50.2): один раз обнуляем — до 13.50.1 в неё могли попадать заходы владельца
 if (db.statsReset !== 2) { db.stats = {}; db.statsReset = 2; }
+/* Объявление над шапкой (13.55): сумму бесплатной доставки берём из настроек доставки — меняем число на {free} один раз */
+if (db.settings && typeof db.settings.announcement === 'string' && !db.settings.annFree && /бесплатн/i.test(db.settings.announcement) && /доставк/i.test(db.settings.announcement)) {
+  db.settings.announcement = db.settings.announcement.replace(/(от\s*)\d[\d\s\u00a0]*\s*(₽|руб\.?|р\.)/i, '$1{free}');
+  db.settings.annFree = 1;
+}
 /* Артикулы (13.51): у каждого товара свой — ALB-0001, ALB-0002…; можно задать свой в панели */
 function cleanSku(v) { return String(v || '').trim().toUpperCase().replace(/\s+/g, '-').replace(/[^A-ZА-ЯЁ0-9._\/-]/g, '').slice(0, 32); }
 function nextSku(list) {
@@ -1735,6 +1740,27 @@ async function api(req, res, url, body) {
       if (p[1] === 'cities') return { cities: await cdek.cities(url.searchParams.get('q')) };
       return { points: await cdek.points(url.searchParams.get('city')) };
     } catch (e) { console.error('СДЭК:', e.message); fail(502, 'СДЭК сейчас не отвечает. Попробуйте ещё раз через минуту.'); }
+  }
+
+  // Срок и цена доставки одной вещи в город — для страницы товара (до оформления заказа)
+  if (p[0] === 'cdek' && p[1] === 'estimate' && M === 'GET') {
+    throttle(req, 'cdekest', 300);
+    const city = String(url.searchParams.get('city') || '').replace(/\D/g, '').slice(0, 9);
+    const prod = db.products.find((x) => x.id === url.searchParams.get('pid') && x.active !== false);
+    if (!city || !prod) fail(400, 'Нет города или товара');
+    const from = cdekCfg().shipmentPoint && cdekCfg().shipmentPoint.cityCode;
+    const ms = (db.settings.delivery.methods || []).filter((m) => Pricing.cdekMode(m));
+    const out = [];
+    for (const m of ms) {
+      const kind = Pricing.cdekMode(m) === 'door' ? 'door' : 'pvz';
+      let price = Math.round(Number(m.price) || 0), days = '';
+      if (cdek.ready() && from) {
+        try { const r = await cdekShipPrice(m, city, kind, [{ productId: prod.id, qty: 1 }]); if (r) { if (m.priceAuto) price = r.price; days = r.days; } }
+        catch (e) { console.error('СДЭК срок:', e.message); }
+      }
+      out.push({ id: m.id, name: m.name, kind, price, days, freeFrom: Math.round(Number(m.freeFrom) || 0) });
+    }
+    return { methods: out };
   }
 
   // Подсказки улицы и дома внутри выбранного города (данные OpenStreetMap через Photon) — чтобы адрес был без опечаток

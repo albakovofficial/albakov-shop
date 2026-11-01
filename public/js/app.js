@@ -118,7 +118,7 @@
   function renderShell() {
     var s = D.settings;
     root.innerHTML =
-      (s.announcement ? '<div class="topbar"><div class="wrap">' + esc(s.announcement) + '</div></div>' : '') +
+      (s.announcement ? '<div class="topbar"><div class="wrap">' + esc(annText(s.announcement)) + '</div></div>' : '') +
       '<header class="header"><div class="wrap">' +
         '<nav class="nav" aria-label="Основное меню">' + navLinks() + '</nav>' +
         '<button class="icon-btn burger" data-act="menu" aria-label="Меню">' + ICON.menu + '</button>' +
@@ -283,6 +283,9 @@
     lastCount = n;
   }
 
+  // {free} в объявлении — самый низкий порог «Бесплатно от» из способов доставки (меняется вместе с настройками)
+  function freeFromMin() { var ms = (((D.settings.delivery || {}).methods) || []).map(function (m) { return Number(m.freeFrom) || 0; }).filter(function (x) { return x > 0; }); return ms.length ? Math.min.apply(null, ms) : 0; }
+  function annText(t) { var f = freeFromMin(); return String(t).replace(/\s*от\s*\{free\}/g, f ? ' от ' + fmt(f) : '').replace(/\{free\}/g, f ? fmt(f) : ''); }
   /* ---------- Карточка товара ---------- */
   // Плашки товара: «Новинка», «Скидка 15%», «Хит продаж» — тексты и цвета из панели управления
   function badgeHtml(p, pr) {
@@ -1116,7 +1119,7 @@
       '<div class="sticky-buy"><div class="buy-row"><div class="qty"><button data-q="-1" aria-label="Меньше">−</button><span id="qty">1</span><button data-q="1" aria-label="Больше">+</button></div><button class="btn" id="addBtn">Добавить в корзину</button></div></div>' +
       '<div class="buy-more"><button type="button" class="btn ghost buy-now" id="buyNow"><span>Купить сейчас</span><span class="bn-ic" aria-hidden="true">' + ARROW + '</span></button>' +
         '<button type="button" class="fav-btn fav-wide' + (Fav.has(p.id) ? ' on' : '') + '" data-fav="' + esc(p.id) + '" aria-pressed="' + Fav.has(p.id) + '" aria-label="' + (Fav.has(p.id) ? 'Убрать из избранного' : 'В избранное') + '">' + ICON.heart + '<span class="fav-t">' + (Fav.has(p.id) ? 'В избранном' : 'В избранное') + '</span></button></div>' +
-      fitGuaranteeHtml() +
+      '<div id="pShip"></div>' + fitGuaranteeHtml() +
       '<div class="acc p-acc">' +
         (p.description ? '<details open>' + accSum('text', 'Описание', '') + '<div class="body p-desc">' + esc(p.description) + '</div></details>' : '') +
         specsHtml(p) +
@@ -1235,6 +1238,7 @@
       var chip = $('#sizeChips [data-size="' + (window.CSS && CSS.escape ? CSS.escape(size) : size) + '"]'); if (chip) chip.focus();
     }
     var ff = $('#fitFind'); if (ff) ff.addEventListener('click', function () { openFitFinder(p, col, pickSize); });
+    shipEstimate(p);
     $('#fitCheck').addEventListener('click', function (e) {
       var b = e.target.closest('[data-fc]'); if (!b) return; var k = b.getAttribute('data-fc');
       if (k === 'find') openFitFinder(p, col, pickSize);
@@ -1342,6 +1346,47 @@
     if (a || b) out += '<div class="fit-tools">' + (a ? '<button type="button" class="btn ghost fit-find" id="fitFind"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="8" width="20" height="8"></rect><path d="M6 8v3M10 8v4M14 8v3M18 8v4"></path></svg>Подобрать размер</button>' : '') +
       (b ? '<button type="button" class="link fit-cmp" id="fitCompare">Сравнить со своей футболкой</button>' : '') + '</div>';
     return out;
+  }
+  /* Срок и цена доставки на странице товара: город — из оформления заказа или выбранный здесь (по умолчанию Москва) */
+  var SHIP_DEFAULT = { code: 44, city: 'Москва', region: '' };
+  function shipCity() { try { var sv = JSON.parse(localStorage.getItem('albakov:pvz') || 'null'); if (sv && sv.city && sv.city.code) return sv.city; } catch (e) {} return SHIP_DEFAULT; }
+  function shipCitySave(c) { try { var sv = JSON.parse(localStorage.getItem('albakov:pvz') || 'null') || {}; if (!sv.city || sv.city.code !== c.code) localStorage.setItem('albakov:pvz', JSON.stringify({ city: c, pvz: null, addr: '' })); } catch (e) {} }
+  function inCity(name) { // «в Москву», «в Санкт-Петербург», «в Казань»
+    var n = String(name || ''); if (/а$/.test(n)) return n.replace(/а$/, 'у'); if (/я$/.test(n)) return n.replace(/я$/, 'ю'); return n;
+  }
+  function daysWord(d) { var m = String(d || '').match(/(\d+)\s*$/); var n = m ? Number(m[1]) : 0; return d ? d + ' ' + plural(n, 'день', 'дня', 'дней') : ''; }
+  var shipSeq = 0;
+  async function shipEstimate(p) {
+    var box = $('#pShip'); if (!box) return;
+    var ms = (((D.settings.delivery || {}).methods) || []).filter(function (m) { return Pricing.cdekMode(m); });
+    if (!ms.length) return;
+    var c = shipCity(), my = ++shipSeq;
+    box.innerHTML = '<div class="pship is-load"><div class="pship-head"><span class="pship-ic">' + TRUCK_IC + '</span><span class="pship-t">Доставка в <button type="button" class="pship-city" data-ship-city>' + esc(inCity(c.city)) + '</button></span></div><div class="pship-rows"><span class="pship-skel"></span><span class="pship-skel"></span></div></div>';
+    var r = null; try { r = await API.shipEstimate(c.code, p.id); } catch (e) { r = null; }
+    if (my !== shipSeq || !document.body.contains(box)) return;
+    var list = (r && r.methods) || ms.map(function (m) { return { name: m.name, kind: Pricing.cdekMode(m), price: Number(m.price) || 0, days: '', freeFrom: Number(m.freeFrom) || 0 }; });
+    var price = priceOf(p).price;
+    box.innerHTML = '<div class="pship"><div class="pship-head"><span class="pship-ic">' + TRUCK_IC + '</span><span class="pship-t">Доставка в <button type="button" class="pship-city" data-ship-city aria-label="Изменить город, сейчас ' + esc(c.city) + '">' + esc(inCity(c.city)) + '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button></span></div>' +
+      '<div class="pship-rows">' + list.map(function (m) {
+        var free = m.freeFrom && price >= m.freeFrom;
+        return '<div class="pship-row"><span class="pship-n">' + (m.kind === 'door' ? 'Курьером до двери' : 'В пункт выдачи СДЭК') + (m.days ? '<small>' + esc(daysWord(m.days)) + '</small>' : '') + '</span>' +
+          '<span class="pship-p">' + (free ? '<b class="ok">Бесплатно</b>' : m.price ? fmt(m.price) : '<b class="ok">Бесплатно</b>') + (m.freeFrom && !free ? '<small>бесплатно от ' + fmt(m.freeFrom) + '</small>' : '') + '</span></div>';
+      }).join('') + '</div>' +
+      (r && list.some(function (m) { return m.days; }) ? '<p class="pship-note">Срок СДЭК — со дня отправки заказа. Точную цену покажем при оформлении.</p>' : '') + '</div>';
+  }
+  function openShipCity(p) {
+    openModal('<div class="shipc"><span class="eyebrow">Доставка</span><h3 class="serif">Ваш город</h3><p class="muted">Посчитаем срок и стоимость доставки СДЭК.</p>' +
+      '<label class="field"><span>Город</span><input class="input" id="shipQ" autocomplete="address-level2" placeholder="Начните вводить, например Казань" aria-autocomplete="list" aria-controls="shipList"></label><ul class="shipc-list" id="shipList" role="listbox"></ul>' +
+      '<div class="shipc-quick">' + [[44, 'Москва'], [137, 'Санкт-Петербург'], [424, 'Казань'], [250, 'Екатеринбург'], [270, 'Новосибирск']].map(function (x) { return '<button type="button" class="chip" data-shc="' + x[0] + '|' + esc(x[1]) + '">' + esc(x[1]) + '</button>'; }).join('') + '</div></div>');
+    var q = $('#shipQ'), list = $('#shipList'), t = 0, seq = 0, items = [];
+    setTimeout(function () { q.focus(); }, 60);
+    function pick(c) { shipCitySave(c); closePanels(); shipEstimate(p); }
+    q.addEventListener('input', function () {
+      clearTimeout(t); var v = q.value.trim(); if (v.length < 2) { list.innerHTML = ''; return; }
+      t = setTimeout(async function () { var my = ++seq; try { var r = await API.cdekCities(v); if (my !== seq) return; items = r; list.innerHTML = r.length ? r.slice(0, 8).map(function (c, i) { return '<li role="option" data-shi="' + i + '"><b>' + esc(c.city) + '</b>' + (c.region ? '<span>' + esc(c.region) + '</span>' : '') + '</li>'; }).join('') : '<li class="muted">Не нашли такой город</li>'; } catch (e) { list.innerHTML = '<li class="muted">' + esc(errMsg(e)) + '</li>'; } }, 250);
+    });
+    list.addEventListener('click', function (e) { var li = e.target.closest('[data-shi]'); if (li) pick(items[+li.getAttribute('data-shi')]); });
+    $('.shipc-quick').addEventListener('click', function (e) { var b = e.target.closest('[data-shc]'); if (b) { var k = b.getAttribute('data-shc').split('|'); pick({ code: +k[0], city: k[1], region: '' }); } });
   }
   /* Блок «Убедитесь, что размер ваш»: до подбора — приглашение, после — персональный вывод под выбранный размер */
   var FIT_IC = '<svg viewBox="0 0 40 40" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><rect x="3" y="13" width="34" height="14" rx="3"/><path d="M9 13v5M14 13v3M19 13v5M24 13v3M29 13v5M34 13v3"/></svg>';
@@ -3063,6 +3108,8 @@
       }
       var qf = e.target.closest('[data-qfit]');
       if (qf) { e.preventDefault(); var kf = qf.getAttribute('data-qfit').split('|'), fp2 = D.products.find(function (x) { return x.id === kf[0]; }); if (fp2) openFitFinder(fp2, Pricing.colorOf(fp2, kf[1]), function () { quickSheet(kf[0], kf[1]); }); return; }
+      var shc = e.target.closest('[data-ship-city]');
+      if (shc) { e.preventDefault(); var sp2 = productBySlug(location.pathname.split('/')[2] || ''); if (sp2) openShipCity(sp2); return; }
       var qsh = e.target.closest('[data-qsheet]');
       if (qsh) { e.preventDefault(); e.stopPropagation(); var kq = qsh.getAttribute('data-qsheet').split('|'); quickSheet(kq[0], kq[1]); return; }
       var qa = e.target.closest('[data-qa]');

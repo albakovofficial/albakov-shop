@@ -57,6 +57,7 @@
     async logout() { await call('POST', 'api/auth/logout'); this.user = null; Fav.set([], true); Cart.set([], true); },
     async geoStreet(q, city, region) { return (await call('GET', 'api/geo/street?q=' + encodeURIComponent(q) + '&city=' + encodeURIComponent(city || '') + '&region=' + encodeURIComponent(region || ''))).items; },
     async cdekCities(q) { return (await call('GET', 'api/cdek/cities?q=' + encodeURIComponent(q))).cities; },
+    async shipEstimate(city, pid) { return await call('GET', 'api/cdek/estimate?city=' + encodeURIComponent(city) + '&pid=' + encodeURIComponent(pid)); },
     async cdekPoints(code) { return (await call('GET', 'api/cdek/points?city=' + encodeURIComponent(code))).points; },
     async adminCdek(body) { return await call('POST', 'api/admin/cdek', body); },
     async adminReturn(id, act, body) { return await call('POST', 'api/admin/orders/' + encodeURIComponent(id) + '/' + act, body || {}); },

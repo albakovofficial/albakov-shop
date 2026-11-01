@@ -3848,3 +3848,33 @@ body::after { content: none; display: none; }
   .nf-acts .btn.ghost { justify-content: center; }
 }
 @media (prefers-reduced-motion: reduce), (hover: none), (pointer: coarse) { .nf-ring::after { animation: none; } }
+
+/* ---------- 13.55: срок и цена доставки на странице товара ---------- */
+.pship { display: grid; gap: 12px; padding: 16px 18px; border-radius: var(--r-md, 18px); background: var(--paper); box-shadow: inset 0 0 0 1px rgba(18, 20, 23, .08); }
+.pship-head { display: flex; align-items: center; gap: 12px; }
+.pship-ic { flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--surface); color: var(--text); }
+.pship-t { font-size: 15px; font-weight: 500; }
+.pship-city { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0; background: none; font: inherit; color: var(--text); cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-decoration-color: rgba(18, 20, 23, .35); text-underline-offset: 4px; }
+.pship-city:hover { text-decoration-color: currentColor; }
+.pship-city:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; border-radius: 4px; }
+.pship-rows { display: grid; gap: 2px; }
+.pship-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 10px 0; border-top: 1px solid var(--line); }
+.pship-row:first-child { border-top: 0; padding-top: 2px; }
+.pship-n, .pship-p { display: grid; gap: 2px; font-size: 14px; }
+.pship-p { text-align: right; justify-items: end; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pship small { font-size: 12.5px; color: var(--muted); }
+.pship .ok { color: #0f7a3a; font-weight: 600; }
+.pship-note { margin: 0; font-size: 12px; color: var(--dim); }
+.pship-skel { height: 18px; border-radius: 6px; background: linear-gradient(90deg, var(--surface), #fff, var(--surface)); background-size: 200% 100%; animation: pshipSk 1.2s linear infinite; }
+.pship-skel + .pship-skel { width: 70%; margin-top: 10px; }
+@keyframes pshipSk { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .pship-skel { animation: none; } }
+/* Выбор города */
+.shipc { display: grid; gap: 14px; }
+.shipc h3 { font-size: 34px; margin-top: -8px; }
+.shipc-list { list-style: none; margin: -6px 0 0; padding: 0; display: grid; max-height: 280px; overflow: auto; }
+.shipc-list li { display: grid; gap: 2px; padding: 11px 12px; border-radius: 12px; cursor: pointer; font-size: 15px; }
+.shipc-list li span { font-size: 12.5px; color: var(--muted); }
+.shipc-list li:hover { background: var(--surface); }
+.shipc-list li.muted { cursor: default; background: none; font-size: 14px; }
+.shipc-quick { display: flex; flex-wrap: wrap; gap: 8px; }

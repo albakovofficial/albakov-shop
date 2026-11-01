@@ -2853,7 +2853,7 @@
     if (!adminLoading) adminLoading = (function () {
       var ver = ((document.querySelector('script[src*="js/app.js"]') || {}).src || '').split('v=')[1];
       var load = function (src) { return new Promise(function (ok, bad) { var sc = document.createElement('script'); sc.src = src + '?v=' + ver; sc.onload = ok; sc.onerror = bad; document.body.appendChild(sc); }); };
-      return (window.Mail ? Promise.resolve() : load('js/mail.js')).then(function () { return load('js/admin.js'); }).catch(function (e) { adminLoading = null; throw e; });
+      return (window.Mail ? Promise.resolve() : load('js/mail.js')).then(function () { return window.Finance ? null : load('js/finance.js'); }).then(function () { return load('js/admin.js'); }).catch(function (e) { adminLoading = null; throw e; });
     })();
     adminLoading.then(function () { if (window.Admin && $('#view') === v) window.Admin.render(v, parts, q); },
       function () { v.innerHTML = '<div class="wrap"><div class="empty"><h3>Не удалось загрузить панель</h3><p>Проверьте интернет и обновите страницу.</p></div></div>'; });

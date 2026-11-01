@@ -110,6 +110,11 @@
     async adminOrderSeq(next) { return (await call(next === undefined ? 'GET' : 'POST', 'api/admin/order-seq', next === undefined ? undefined : { next: next })).next; },
     async adminRefund(id, body) { return await call('POST', 'api/admin/orders/' + encodeURIComponent(id) + '/refund', body); },
     async adminOrderDelete(id) { return await call('DELETE', 'api/admin/orders/' + encodeURIComponent(id)); },
+    // Финансы: ставки и категории, себестоимость, операции вручную
+    async adminFinance(value) { return (await call('PUT', 'api/admin/finance/settings', { value: value })).finance; },
+    async adminCosts(costs) { return (await call('PUT', 'api/admin/finance/costs', { costs: costs })).finance; },
+    async adminExpense(e) { return (await call(e.id ? 'PUT' : 'POST', 'api/admin/finance/expenses' + (e.id ? '/' + encodeURIComponent(e.id) : ''), e)).expense; },
+    async adminExpenseDelete(id) { await call('DELETE', 'api/admin/finance/expenses/' + encodeURIComponent(id)); },
     async adminPassword(pw) { await call('POST', 'api/admin/password', { password: pw }); },
     async adminSecret(secret) { return (await call('POST', 'api/admin/payment-secret', secret === undefined ? {} : { secret: secret })); },
     async uploadImage(file) { var data = await readImage(file, 2000, 0.86); return (await call('POST', 'api/admin/upload', { dataUrl: data })).url; },

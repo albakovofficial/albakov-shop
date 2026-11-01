@@ -10,7 +10,7 @@
 
   var SECTIONS = [
     ['overview', 'Обзор'], ['orders', 'Заказы'], ['support', 'Поддержка'], ['products', 'Товары'], ['categories', 'Категории'], ['sizeCharts', 'Размерные сетки'],
-    ['promotions', 'Акции'], ['promocodes', 'Промокоды'], ['bonus', 'Бонусы'], ['exchange', 'Обмен и возвраты'], ['customers', 'Покупатели'], ['notify', 'Сообщить о поступлении'], ['mail', 'Письма'], ['alerts', 'Уведомления на почту'], ['analytics', 'Аналитика'], ['finance', 'Финансы'], ['gifts', 'Подарочные сертификаты'], ['sections', 'Разделы: женщинам / мужчинам'], ['brand', 'Логотип и название'], ['slider', 'Слайдер на главной'], ['home', 'Главная страница'], ['pages', 'Страницы'],
+    ['promotions', 'Акции'], ['promocodes', 'Промокоды'], ['bonus', 'Бонусы'], ['exchange', 'Обмен и возвраты'], ['customers', 'Покупатели'], ['mail', 'Почта'], ['analytics', 'Аналитика'], ['finance', 'Финансы'], ['gifts', 'Подарочные сертификаты'], ['sections', 'Разделы: женщинам / мужчинам'], ['brand', 'Логотип и название'], ['slider', 'Слайдер на главной'], ['home', 'Главная страница'], ['pages', 'Страницы'],
     ['menu', 'Меню, контакты, соцсети'], ['payment', 'Оплата и доставка'], ['settings', 'Настройки']
   ];
   var TAX = [[1, 'ОСН — общая система'], [2, 'УСН «Доходы»'], [3, 'УСН «Доходы минус расходы»'], [5, 'ЕСХН'], [6, 'Патентная система']];
@@ -191,27 +191,61 @@
       return;
     }
     if (ticket !== renderTicket || !document.body.contains(v)) return; // пока грузились данные, открылась другая страница
+    // «Письма», «Уведомления на почту» и «Сообщить о поступлении» теперь вкладки раздела «Почта» (13.48): старые ссылки ведут туда же
+    if (q.s === 'notify') { q.s = 'mail'; q.sub = q.tab === 'letter' ? 'letter' : q.sub; q.tab = q.tab === 'mail' ? 'smtp' : 'notify'; }
+    else if (q.s === 'alerts') { q.s = 'mail'; q.tab = 'alerts'; }
     var s = q.s || 'overview';
     v.innerHTML = '<div class="adm"><aside class="adm-side"><div class="adm-brand"><span class="eyebrow">Управление</span><b class="serif">' + esc(A().D.settings.storeName) + '</b></div><nav>' +
-      SECTIONS.map(function (x) { return '<a href="#/admin?s=' + x[0] + '"' + (x[0] === s ? ' class="on"' : '') + '>' + x[1] + (x[0] === 'orders' ? newOrdersBadge() : '') + (x[0] === 'support' && DATA.supportNew ? ' <span class="adm-badge">' + DATA.supportNew + '</span>' : '') + (x[0] === 'notify' ? waitBadge() : '') + (x[0] === 'exchange' ? reqBadge() : '') + '</a>'; }).join('') +
+      SECTIONS.map(function (x) { return '<a href="#/admin?s=' + x[0] + '"' + (x[0] === s ? ' class="on"' : '') + '>' + x[1] + (x[0] === 'orders' ? newOrdersBadge() : '') + (x[0] === 'support' && DATA.supportNew ? ' <span class="adm-badge">' + DATA.supportNew + '</span>' : '') + (x[0] === 'mail' ? waitBadge() : '') + (x[0] === 'exchange' ? reqBadge() : '') + '</a>'; }).join('') +
       '</nav><div class="adm-side-foot"><a href="#/" class="muted">← В магазин</a><button class="muted" id="admOut">Выйти</button></div></aside><section class="adm-main" id="admMain"></section></div>';
     $('#admOut').addEventListener('click', async function () { await API.adminLogout(); DATA = null; window.ALB_NAV.go('#/'); await A().refresh(); });
     var main = $('#admMain');
-    var fn = { overview: overview, orders: orders, support: supportSection, products: products, categories: categories, sizeCharts: sizeCharts, promotions: promotions, promocodes: promocodes, bonus: bonusSection, exchange: exchangeSection, customers: customers, notify: notifySection, mail: mailSection, alerts: alertsSection, analytics: analyticsSection, finance: financeSection, gifts: giftsSection, sections: sectionsSettings, brand: brandSection, slider: sliderSection, home: homeSettings, pages: pages, menu: menuSettings, payment: paymentSettings, settings: generalSettings }[s] || overview;
+    var fn = { overview: overview, orders: orders, support: supportSection, products: products, categories: categories, sizeCharts: sizeCharts, promotions: promotions, promocodes: promocodes, bonus: bonusSection, exchange: exchangeSection, customers: customers,  mail: mailHub,  analytics: analyticsSection, finance: financeSection, gifts: giftsSection, sections: sectionsSettings, brand: brandSection, slider: sliderSection, home: homeSettings, pages: pages, menu: menuSettings, payment: paymentSettings, settings: generalSettings }[s] || overview;
     fn(main, q);
   }
   function waitBadge() { var n = (DATA.waitlist || []).filter(function (w) { return w.status === 'waiting' || w.status === 'failed'; }).length; return n ? ' <span class="adm-badge muted-badge">' + n + '</span>' : ''; }
   function newOrdersBadge() { var n = DATA.orders.filter(function (o) { return o.status === 'new'; }).length; return n ? ' <span class="adm-badge">' + n + '</span>' : ''; }
   /* ================= Письма: все письма сайта с примером ================= */
-  async function mailSection(m) {
-    m.innerHTML = head('Письма', '', 'Все письма, которые сайт отправляет сам. Покупателям они приходят с адреса для отправки и с пометкой «отвечать не нужно» — написать вам можно на почту для связи.') + '<div class="loader">…</div>';
+  /* ================= Почта (13.48): письма покупателям, уведомления владельцу, «Сообщить о поступлении», подключение ================= */
+  var MAIL_TABS = [['letters', 'Письма покупателям'], ['alerts', 'Уведомления мне'], ['notify', 'Сообщить о поступлении'], ['smtp', 'Подключение']];
+  async function mailHub(m, q) {
+    var tab = MAIL_TABS.some(function (t) { return t[0] === q.tab; }) ? q.tab : 'letters';
+    m.innerHTML = head('Почта', '', 'Всё, что сайт отправляет письмами: покупателям, вам и тем, кто ждёт размер.') + '<div class="loader">…</div>';
+    var mail = { ready: false };
+    try { mail = (await A().API.adminMail()).mail; } catch (e) {}
+    var st = DATA.settings, on = Object.assign({ email: '', events: {} }, st.ownerNotify || {}), ev = Object.assign({ order: true, support: true, stock: true }, on.events);
+    var evN = ['order', 'support', 'stock'].filter(function (k) { return ev[k] !== false; }).length;
+    var ownerTo = on.email || (st.contacts || {}).email || '';
+    var tpl = Mail.tplOf(st), wl = DATA.waitlist || [], waiting = wl.filter(function (w) { return w.status === 'waiting' || w.status === 'failed'; }).length;
+    var card = function (key, label, state, cls, sub) {
+      return '<a class="mh-card' + (tab === key ? ' on' : '') + '" href="#/admin?s=mail&tab=' + key + '"><span class="mh-eb">' + label + '</span><b><span class="status ' + cls + '">' + state + '</span></b><small>' + sub + '</small></a>';
+    };
+    m.innerHTML = head('Почта', '', 'Всё, что сайт отправляет письмами: покупателям, вам и тем, кто ждёт размер. Письма уходят с вашего почтового ящика — он подключается один раз.') +
+      (mail.ready ? '' : '<div class="adm-alert mh-alert"><div><b>Почта не подключена — ни одно письмо не уходит.</b> Покупатели не получают подтверждение заказа и трек-номер, вы не узнаёте о новых заказах.</div><a class="btn sm" href="#/admin?s=mail&tab=smtp">Подключить почту</a></div>') +
+      '<div class="mh-cards">' +
+        card('smtp', 'Почта для отправки', mail.ready ? 'Подключена' : 'Не подключена', mail.ready ? 'done' : 'canceled', mail.ready ? esc(mail.fromEmail || '') : 'письма не отправляются') +
+        card('alerts', 'Уведомления мне', evN ? 'Включены' : 'Выключены', evN ? 'done' : 'canceled', ownerTo ? evN + ' из 3 · на ' + esc(ownerTo) : 'укажите почту') +
+        card('notify', 'Сообщить о поступлении', tpl.enabled ? 'Кнопка включена' : 'Кнопка выключена', tpl.enabled ? 'done' : 'canceled', waiting ? 'ждут ' + waiting + ' ' + plural(waiting, 'покупатель', 'покупателя', 'покупателей') : 'заявок нет') +
+      '</div>' +
+      '<div class="tabs adm-tabs mh-tabs">' + MAIL_TABS.map(function (t) {
+        var badge = t[0] === 'notify' && waiting ? ' <span class="adm-badge">' + waiting + '</span>' : t[0] === 'smtp' && !mail.ready ? ' <span class="mh-dot" aria-label="не подключена"></span>' : '';
+        return '<a href="#/admin?s=mail&tab=' + t[0] + '"' + (tab === t[0] ? ' class="on"' : '') + '>' + t[1] + badge + '</a>';
+      }).join('') + '</div><div id="mhBody" class="mh-body"></div>';
+    var body = $('#mhBody', m);
+    if (tab === 'alerts') return alertsPanel(body);
+    if (tab === 'notify') return notifyPanel(body, q, mail);
+    if (tab === 'smtp') return mailTab(body, mail);
+    return mailLetters(body);
+  }
+  async function mailLetters(m) {
+    m.innerHTML = '<p class="mh-lead">Все письма, которые сайт отправляет сам. Покупателям они приходят с адреса для отправки и с пометкой «отвечать не нужно» — написать вам можно на почту для связи. Откройте любое письмо, чтобы посмотреть, как его видит покупатель.</p>' + '<div class="loader">…</div>';
     var r; try { r = await A().API.adminMailCatalog(); } catch (e) { m.querySelector('.loader').outerHTML = '<p class="form-error">' + esc(A().errMsg(e)) + '</p>'; return; }
     var mi = r.mail;
-    m.innerHTML = head('Письма', '', 'Все письма, которые сайт отправляет сам. Покупателям они приходят с адреса для отправки и с пометкой «отвечать не нужно» — написать вам можно на почту для связи.') +
+    m.innerHTML = '<p class="mh-lead">Все письма, которые сайт отправляет сам. Покупателям они приходят с адреса для отправки и с пометкой «отвечать не нужно» — написать вам можно на почту для связи. Откройте любое письмо, чтобы посмотреть, как его видит покупатель.</p>' +
       '<div class="ml-top">' +
         '<div class="ml-a"><span>Отправитель</span><b>' + esc(mi.fromName || '') + ' &lt;' + esc(mi.from || '—') + '&gt;</b><small class="' + (mi.ready ? 'ok' : 'warn') + '">' + (mi.ready ? 'Почта настроена, письма уходят' : 'Не настроена — письма не отправляются') + '</small></div>' +
         '<div class="ml-a"><span>Пишут вам и получают ответ</span><b>' + esc(mi.support || mi.replyTo || '—') + '</b><small>Указан в письмах; меняется в «Меню, контакты, соцсети»</small></div>' +
-        '<div class="ml-a"><span>Если покупатель всё же ответит</span><b>' + esc(mi.replyTo || '—') + '</b><small>Ответ уйдёт сюда (Reply-To). <a class="link" href="#/admin?s=notify&tab=mail">Настройки почты</a></small></div>' +
+        '<div class="ml-a"><span>Если покупатель всё же ответит</span><b>' + esc(mi.replyTo || '—') + '</b><small>Ответ уйдёт сюда (Reply-To). <a class="link" href="#/admin?s=mail&tab=smtp">Подключение почты</a></small></div>' +
       '</div>' +
       '<div class="ml-list">' + r.letters.map(function (x, i) {
         return '<div class="ml-i" data-i="' + i + '"><div class="ml-h"><span class="ml-n">' + (i + 1) + '</span><div><b>' + esc(x.title) + '</b><small>' + esc(x.when) + '</small></div><span class="ml-to">' + esc(x.to) + '</span></div>' +
@@ -1651,13 +1685,12 @@
 
   /* ================= Уведомления на почту ================= */
   // Владельцу на основную почту: новые заказы, вопросы покупателей, заканчивающиеся размеры
-  function alertsSection(m) {
+  function alertsPanel(m) {
     var s = clone(DATA.settings), n = s.ownerNotify = Object.assign({ email: '', events: {} }, s.ownerNotify || {});
     var ev = Object.assign({ order: true, support: true, stock: true }, n.events);
     var main = (s.contacts || {}).email || '', ready = !!A().D.mailReady;
     var KINDS = [['order', 'Новый заказ', 'Состав, покупатель, доставка и оплата. Заказ с онлайн-оплатой приходит, когда деньги поступили'], ['support', 'Вопросы покупателей', 'Новые обращения и сообщения в поддержку'], ['stock', 'Заканчивается размер', 'Когда после заказа осталось 2 штуки или меньше']];
-    m.innerHTML = head('Уведомления на почту', '', 'Новые заказы, вопросы покупателей и заканчивающиеся размеры приходят письмом на вашу почту — сразу, как только что-то произошло.') +
-      (ready ? '' : '<div class="adm-alert"><b>Почта для отправки не настроена.</b> Без неё письма не уходят — подключите её в разделе <a class="link" href="#/admin?s=notify&tab=mail">«Письма» → «Почта для отправки»</a>.</div>') +
+    m.innerHTML = '<p class="mh-lead">Новые заказы, вопросы покупателей и заканчивающиеся размеры приходят письмом на вашу почту — сразу, как только что-то произошло.</p>' +
       '<div class="adm-two"><div class="adm-card al-card"><h3 class="adm-h3">Куда присылать</h3>' +
         '<label class="field"><span>Почта для уведомлений</span><input class="input" id="alEmail" type="email" inputmode="email" autocomplete="email" placeholder="' + esc(main || 'shop@example.ru') + '" value="' + esc(n.email || '') + '"></label>' +
         '<p class="al-hint">' + (main ? 'Пусто — письма уходят на основную почту магазина <b>' + esc(main) + '</b> из раздела «Меню, контакты».' : 'Укажите адрес, на который присылать уведомления.') + '</p>' +
@@ -2475,30 +2508,23 @@
     }).join('');
   }
 
-  async function notifySection(m, q) {
-    var API = A().API, tab = q.tab || 'requests', tpl = Mail.tplOf(DATA.settings);
-    var mail = { ready: false };
-    try { mail = (await API.adminMail()).mail; } catch (e) {}
+  function notifyPanel(m, q, mail) {
+    var API = A().API, tab = q.sub === 'letter' ? 'letter' : 'requests', tpl = Mail.tplOf(DATA.settings);
     var wl = DATA.waitlist || [];
     var waiting = wl.filter(function (w) { return w.status === 'waiting' || w.status === 'failed'; });
     var ready = Mail.readyRequests(wl, DATA.products);
-    var mailState = mail.ready ? ['Настроена', 'done', esc(mail.fromEmail)] : ['Не настроена', 'canceled', 'Письма не отправляются'];
-    m.innerHTML = head('Сообщить о поступлении', '', 'Если нужного размера или цвета нет, покупатель нажимает на сайте «Сообщить о поступлении» и оставляет почту. Когда вы пополните остаток в карточке товара и сохраните её, письмо уйдёт автоматически — один раз на каждую заявку.') +
+    m.innerHTML = '<p class="mh-lead">Если нужного размера или цвета нет, покупатель нажимает на сайте «Сообщить о поступлении» и оставляет почту. Когда вы пополните остаток в карточке товара и сохраните её, письмо уйдёт автоматически — один раз на каждую заявку.</p>' +
       '<ol class="adm-steps"><li><b>Покупатель оставляет заявку</b><span>на странице товара, если размера или цвета нет</span></li><li><b>Вы пополняете остаток</b><span>в разделе «Товары», в нужном цвете и размере</span></li><li><b>Письмо уходит само</b><span>сразу после сохранения товара</span></li></ol>' +
-      '<div class="adm-stats" style="margin-top:20px">' +
-        '<div class="adm-stat"><span class="eyebrow">Кнопка на сайте</span><b class="adm-stat-sm"><span class="status ' + (tpl.enabled ? 'done' : 'canceled') + '">' + (tpl.enabled ? 'Включена' : 'Выключена') + '</span></b><button class="link muted" id="nToggle" style="justify-self:start;font-size:14px">' + (tpl.enabled ? 'Выключить' : 'Включить') + '</button></div>' +
-        '<a class="adm-stat" href="#/admin?s=notify&tab=mail"><span class="eyebrow">Почта для отправки</span><b class="adm-stat-sm"><span class="status ' + mailState[1] + '">' + mailState[0] + '</span></b><span class="muted" style="font-size:14px">' + mailState[2] + '</span></a>' +
-        '<a class="adm-stat" href="#/admin?s=notify"><span class="eyebrow">Ждут поступления</span><b class="num">' + waiting.length + '</b></a>' +
-      '</div>' +
-      (ready.length && !mail.ready ? '<div class="adm-alert">' + ready.length + ' ' + plural(ready.length, 'заявка', 'заявки', 'заявок') + ': товар уже в наличии, но письма не ушли, потому что почта для отправки не настроена. <a class="link" href="#/admin?s=notify&tab=mail">Настроить почту</a></div>' : '') +
-      '<div class="tabs adm-tabs">' + [['requests', 'Заявки'], ['letter', 'Текст письма'], ['mail', 'Почта для отправки']].map(function (t) { return '<a href="#/admin?s=notify&tab=' + t[0] + '" class="' + (tab === t[0] ? 'on' : '') + '">' + t[1] + '</a>'; }).join('') + '</div><div id="nBody"></div>';
-    $('#nToggle').addEventListener('click', async function () {
+      // Кнопка на сайте — одним переключателем; сколько ждут, видно на вкладке и в карточке сверху
+      '<label class="mh-toggle"><span><b>Кнопка «Сообщить о поступлении» на сайте</b><small>' + (tpl.enabled ? 'Покупатели видят её, если размера или цвета нет' : 'Выключена — покупатели её не видят') + '</small></span><span class="adm-switch"><input type="checkbox" id="nToggle"' + (tpl.enabled ? ' checked' : '') + '><span></span></span></label>' +
+      (ready.length && !mail.ready ? '<div class="adm-alert">' + ready.length + ' ' + plural(ready.length, 'заявка', 'заявки', 'заявок') + ': товар уже в наличии, но письма не ушли, потому что почта для отправки не настроена. <a class="link" href="#/admin?s=mail&tab=smtp">Подключить почту</a></div>' : '') +
+      '<div class="mh-sub">' + [['requests', 'Заявки'], ['letter', 'Текст письма']].map(function (t) { return '<a href="#/admin?s=mail&tab=notify' + (t[0] === 'letter' ? '&sub=letter' : '') + '" class="fn-chip' + (tab === t[0] ? ' on' : '') + '">' + t[1] + '</a>'; }).join('') + '</div><div id="nBody"></div>';
+    $('#nToggle').addEventListener('change', async function () {
       var s2 = clone(DATA.settings); s2.notify = Object.assign({}, tpl, { enabled: !tpl.enabled });
-      try { await API.adminSave('settings', s2); await afterSave(s2.notify.enabled ? 'Кнопка «Сообщить о поступлении» включена' : 'Кнопка выключена: покупатели её не увидят', '#/admin?s=notify&tab=' + tab); } catch (e) { toast(A().errMsg(e), true); }
+      try { await API.adminSave('settings', s2); await afterSave(s2.notify.enabled ? 'Кнопка «Сообщить о поступлении» включена' : 'Кнопка выключена: покупатели её не увидят', '#/admin?s=mail&tab=notify' + (tab === 'letter' ? '&sub=letter' : '')); } catch (e) { toast(A().errMsg(e), true); }
     });
     var body = $('#nBody');
     if (tab === 'letter') return letterTab(body, tpl, mail);
-    if (tab === 'mail') return mailTab(body, mail);
     requestsTab(body, q, wl, ready, mail);
   }
 
@@ -2516,7 +2542,7 @@
       (top.length ? '<div class="adm-card" style="margin-bottom:20px"><h3 class="adm-h3" style="margin-bottom:12px">Чего ждут покупатели</h3><div class="table-wrap adm-table"><table class="sizes"><thead><tr><th>Товар</th><th>Цвет</th><th>Размер</th><th>Ждут</th><th>Остаток сейчас</th><th></th></tr></thead><tbody>' +
         top.map(function (g) { var i = wInfo(g.w); return '<tr><td>' + esc(i.name) + '</td><td>' + swatchInline(i.hex) + esc(i.color) + '</td><td>' + esc(i.size) + '</td><td class="num"><b>' + g.n + '</b></td><td class="num' + (i.stock ? '' : ' muted') + '">' + i.stock + '</td><td>' + (i.p ? '<a class="link" href="#/admin?s=products&id=' + esc(i.p.id) + '">Пополнить</a>' : '') + '</td></tr>'; }).join('') +
         '</tbody></table></div></div>' : '') +
-      '<div class="adm-head" style="margin:0 0 14px"><div class="adm-filter" style="margin:0">' + [['waiting', 'Ждут'], ['done', 'Отправлены'], ['canceled', 'Отменены'], ['all', 'Все']].map(function (x) { return '<a class="chip' + (f === x[0] ? ' on' : '') + '" href="#/admin?s=notify&f=' + x[0] + '">' + x[1] + '</a>'; }).join('') + '</div>' +
+      '<div class="adm-head" style="margin:0 0 14px"><div class="adm-filter" style="margin:0">' + [['waiting', 'Ждут'], ['done', 'Отправлены'], ['canceled', 'Отменены'], ['all', 'Все']].map(function (x) { return '<a class="chip' + (f === x[0] ? ' on' : '') + '" href="#/admin?s=mail&tab=notify&f=' + x[0] + '">' + x[1] + '</a>'; }).join('') + '</div>' +
         (ready.length ? '<button class="btn sm" id="nSend">Отправить письма сейчас (' + ready.length + ')</button>' : '') + '</div>' +
       (list.length ? '<div class="table-wrap adm-table"><table class="sizes"><thead><tr><th>Дата</th><th>Почта</th><th>Товар</th><th>Цвет</th><th>Размер</th><th>Статус</th><th></th></tr></thead><tbody>' +
         list.map(function (w) { var i = wInfo(w), st = W_STATUS[w.status] || [w.status, '']; return '<tr><td class="num">' + esc(new Date(w.createdAt).toLocaleDateString('ru-RU')) + '</td><td class="copyable">' + esc(w.email) + '</td><td>' + esc(i.name) + '</td><td>' + swatchInline(i.hex) + esc(i.color) + '</td><td>' + esc(i.size) + '</td><td><span class="status ' + st[1] + '"' + (w.error ? ' title="' + esc(w.error) + '"' : '') + '>' + esc(st[0]) + '</span>' + (w.sentAt && w.status === 'sent' ? '<div class="muted" style="font-size:13px">' + esc(new Date(w.sentAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })) + '</div>' : '') + '</td><td><button class="adm-x" data-wdel="' + esc(w.id) + '" title="Удалить заявку">✕</button></td></tr>'; }).join('') +
@@ -2524,9 +2550,9 @@
         '<div class="empty"><h3>' + (f === 'waiting' ? 'Заявок нет' : 'Пусто') + '</h3><p>' + (f === 'waiting' ? 'Когда покупатель попросит сообщить о поступлении, заявка появится здесь.' : 'В этом списке пока ничего нет.') + '</p></div>');
     var sb = $('#nSend'); if (sb) sb.addEventListener('click', async function () {
       sb.disabled = true;
-      try { var r = await A().API.adminWaitlistSend(); await afterSave(notifyMsg('Готово', r.notify), '#/admin?s=notify'); } catch (e) { toast(A().errMsg(e), true); sb.disabled = false; }
+      try { var r = await A().API.adminWaitlistSend(); await afterSave(notifyMsg('Готово', r.notify), '#/admin?s=mail&tab=notify'); } catch (e) { toast(A().errMsg(e), true); sb.disabled = false; }
     });
-    $$('[data-wdel]', body).forEach(function (b) { bindConfirm(b, async function () { try { await A().API.adminWaitlistDelete(b.getAttribute('data-wdel')); await afterSave('Заявка удалена', '#/admin?s=notify&f=' + f); } catch (e) { toast(A().errMsg(e), true); } }); });
+    $$('[data-wdel]', body).forEach(function (b) { bindConfirm(b, async function () { try { await A().API.adminWaitlistDelete(b.getAttribute('data-wdel')); await afterSave('Заявка удалена', '#/admin?s=mail&tab=notify&f=' + f); } catch (e) { toast(A().errMsg(e), true); } }); });
   }
   function swatchInline(hex) { return hex ? '<i class="adm-dot" style="background:' + esc(hex) + '"></i>' : ''; }
 
@@ -2570,7 +2596,7 @@
       var bad = (t.subject + t.heading + t.text + t.button + t.footer).match(/\{[^}]*\}/g); bad = (bad || []).filter(function (x) { return !Mail.PLACEHOLDERS.some(function (p) { return p[0] === x; }); });
       if (bad.length) { $('#ltErr').textContent = 'Неизвестная подстановка ' + bad[0] + '. Используйте подстановки из списка выше.'; return; }
       var s2 = clone(DATA.settings); s2.notify = Object.assign({}, t, { enabled: tpl.enabled });
-      try { await A().API.adminSave('settings', s2); await afterSave('Текст письма сохранён', '#/admin?s=notify&tab=letter'); } catch (e) { $('#ltErr').textContent = A().errMsg(e); }
+      try { await A().API.adminSave('settings', s2); await afterSave('Текст письма сохранён', '#/admin?s=mail&tab=notify&sub=letter'); } catch (e) { $('#ltErr').textContent = A().errMsg(e); }
     });
     var ta = $('#ltTestAcc', body); if (ta) ta.addEventListener('click', async function () {
       var to = $('#ltTo').value.trim(); if (!to) { toast('Впишите почту, куда отправить пример', true); $('#ltTo').focus(); return; }
@@ -2609,7 +2635,7 @@
       var m = readForm(box, defs, {});
       if (!m.host || !m.user) { $('#mlErr').textContent = 'Укажите сервер и логин'; return; }
       if (!m.fromEmail) m.fromEmail = m.user;
-      try { await A().API.adminMailSave(m); toast('Настройки почты сохранены. Проверьте их: «Текст письма» → «Отправить пример».'); window.ALB_NAV.go('#/admin?s=notify&tab=mail&t=' + Date.now()); } catch (e) { $('#mlErr').textContent = A().errMsg(e); }
+      try { await A().API.adminMailSave(m); toast('Настройки почты сохранены. Проверьте их: отправьте себе любое письмо во вкладке «Письма покупателям».'); window.ALB_NAV.go('#/admin?s=mail&tab=smtp&t=' + Date.now()); } catch (e) { $('#mlErr').textContent = A().errMsg(e); }
     });
   }
 

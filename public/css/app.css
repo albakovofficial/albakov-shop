@@ -3543,3 +3543,27 @@ body::after { content: none; display: none; }
 .seo-step.done .seo-n { background: #eef4ef; color: #3e6847; }
 .seo-step .copyable { overflow-wrap: anywhere; }
 @media (max-width: 900px) { .seo-facts { grid-template-columns: minmax(0, 1fr); } }
+
+/* Почта (13.48): один раздел вместо трёх */
+.mh-alert { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.mh-alert b { font-weight: 500; }
+.mh-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
+.mh-card { display: grid; gap: 8px; align-content: start; padding: 18px 20px; border-radius: 20px; background: #fff; box-shadow: var(--ring); transition: transform .4s var(--ease), box-shadow .4s; min-width: 0; }
+.mh-card:hover { transform: translateY(-3px); box-shadow: var(--ring), var(--lift); }
+.mh-card.on { box-shadow: inset 0 0 0 1.5px var(--ink); }
+.mh-eb { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
+.mh-card b { font-weight: 400; font-size: 15px; }
+.mh-card small { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mh-tabs { margin: 0 0 18px; }
+.mh-tabs .adm-badge { margin-left: 6px; font-size: 11px; vertical-align: 1px; }
+.mh-dot { display: inline-block; width: 7px; height: 7px; margin-left: 7px; border-radius: 50%; background: var(--acc); vertical-align: 2px; }
+.mh-lead { font-size: 14px; line-height: 1.6; color: var(--muted); max-width: 75ch; margin: 0 0 18px; }
+.mh-sub { display: flex; gap: 6px; flex-wrap: wrap; margin: 22px 0 16px; }
+@media (max-width: 760px) { .mh-cards { grid-template-columns: minmax(0, 1fr); } }
+.mh-alert { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+@media (max-width: 760px) { .mh-alert { grid-template-columns: minmax(0, 1fr); } }
+.mh-toggle { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 16px; padding: 16px 20px; border-radius: var(--r-md); background: #fff; box-shadow: var(--ring); cursor: pointer; }
+.mh-toggle > span:first-child { display: grid; gap: 2px; }
+.mh-toggle b { font-weight: 500; font-size: 15px; }
+.mh-toggle small { font-size: 13px; color: var(--muted); }
+.mh-body .ml-i, .mh-body .ml-a { border-radius: var(--r-md); }

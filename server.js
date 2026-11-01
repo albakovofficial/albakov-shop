@@ -2056,8 +2056,9 @@ const server = http.createServer(async (req, res) => {
   }
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); return res.end(); }
   if (url.pathname === '/robots.txt') {
+    // /api/state открыт: без него витрина у робота не загружается (Google видел одну заставку — «ложная 404»)
     res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=3600' });
-    return res.end('User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /cart\nDisallow: /checkout\nDisallow: /account\nDisallow: /favorites\nDisallow: /track\nDisallow: /gift\nDisallow: /order/\nDisallow: /*?*q=\nDisallow: /*?*sort=\n' +
+    return res.end('User-agent: *\nAllow: /\nAllow: /api/state\nDisallow: /api/\nDisallow: /cart\nDisallow: /checkout\nDisallow: /account\nDisallow: /favorites\nDisallow: /track\nDisallow: /gift\nDisallow: /order/\nDisallow: /*?*q=\nDisallow: /*?*sort=\n' +
       'Clean-param: utm_source&utm_medium&utm_campaign&utm_content&utm_term&yclid&source\n\nSitemap: ' + PUBLIC_URL + '/sitemap.xml\n');
   }
   if (url.pathname === '/' + db.secrets.indexnow + '.txt') {

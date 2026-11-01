@@ -3567,3 +3567,7 @@ body::after { content: none; display: none; }
 .mh-toggle b { font-weight: 500; font-size: 15px; }
 .mh-toggle small { font-size: 13px; color: var(--muted); }
 .mh-body .ml-i, .mh-body .ml-a { border-radius: var(--r-md); }
+
+/* Магазин не загрузился полностью — показываем текст страницы от сервера (13.49) */
+.offline-bar { padding: 12px var(--gutter); background: #f6f7f8; border-bottom: 1px solid var(--line); font-size: 14px; color: var(--muted); }
+.offline-bar button { margin-left: 8px; border-bottom: 1px solid var(--line-strong); color: var(--text); }

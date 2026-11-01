@@ -660,7 +660,7 @@
   function stat(e, extra) {
     try {
       if (statOff()) return;
-      var k = 'vanta:st:' + e, day = statDay(); if (localStorage.getItem(k) === day) return; localStorage.setItem(k, day);
+      var k = 'vanta:st2:' + e, day = statDay(); if (localStorage.getItem(k) === day) return; localStorage.setItem(k, day);
       fetch('api/t', { method: 'POST', keepalive: true, credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ e: e, id: statId() }, extra || {})) }).catch(function () {});
     } catch (ex) {} // хранилище браузера закрыто (частный режим с запретом) — не считаем вовсе, чтобы не считать дважды
   }

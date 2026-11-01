@@ -3571,3 +3571,17 @@ body::after { content: none; display: none; }
 /* Магазин не загрузился полностью — показываем текст страницы от сервера (13.49) */
 .offline-bar { padding: 12px var(--gutter); background: #f6f7f8; border-bottom: 1px solid var(--line); font-size: 14px; color: var(--muted); }
 .offline-bar button { margin-left: 8px; border-bottom: 1px solid var(--line-strong); color: var(--text); }
+
+/* Шапка на ноутбуке и планшете (961–1279 px): меню и вкладки «Женщинам / Мужчинам» не помещались вместе с логотипом,
+   и логотип сжимался до нуля. Вкладки разделов уходят в полосу под шапкой, как на телефоне (13.48.2) */
+@media (min-width: 961px) and (max-width: 1279px) {
+  .gtabs-head { display: none; }
+  .gbar { display: block; border-top: 1px solid var(--line); }
+  .gtabs-bar { display: grid; grid-template-columns: 1fr 1fr; gap: 0; max-width: 520px; margin: 0 auto; }
+  .gtabs-bar .gtab { text-align: center; padding: 11px 0 10px; font-size: 14px; }
+  .gtabs-bar .gtab::after { bottom: -1px; left: 22%; right: 22%; }
+  /* меню шире правой колонки — логотип ставим ровно посередине между меню и значками */
+  .header .wrap { grid-template-columns: auto 1fr auto; }
+}
+/* Логотип в шапке никогда не сжимается до нуля */
+.header .logo { min-width: max-content; }

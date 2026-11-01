@@ -429,7 +429,8 @@ function recordRefund(r) {
   if (!r || r.status !== 'succeeded') return;
   const o = db.orders.find((x) => x.payment.providerId === r.payment_id); if (!o) return;
   o.refunds = o.refunds || [];
-  if (o.refunds.some((x) => x.id === r.id)) return;
+  // уже записан (оформлен из панели): только обновляем статус, второй раз сумму не добавляем
+  const known = o.refunds.find((x) => x.id === r.id); if (known) { if (known.status !== r.status) { known.status = r.status; save(); } return; }
   o.refunds.push({ id: r.id, status: r.status, amount: Number(r.amount.value), at: r.created_at || new Date().toISOString(), reason: 'Оформлен в кабинете ЮKassa', items: [], delivery: false, external: true });
   o.refunded = refundedK(o) / 100;
   if (refundedK(o) >= Math.round(o.total * 100)) { o.payment.status = 'refunded'; if (o.status !== 'returned') { o.statusBefore = o.status; o.status = 'returned'; } }
@@ -847,6 +848,9 @@ const REMIND_AFTER = Number(process.env.CART_REMIND_AFTER_MIN || 180) * 60e3; //
 setInterval(() => { cartReminders().catch((e) => console.error(e)); }, Number(process.env.CART_REMIND_EVERY_SEC || 900) * 1000).unref();
 
 let statDirty = false;
+// Кто уже засчитан сегодня (только в памяти: номера браузеров не сохраняются и обнуляются каждый день)
+const statSeen = { day: '', keys: new Set() };
+const STAT_SALT = crypto.randomBytes(16).toString('hex');
 setInterval(() => { if (statDirty) { statDirty = false; save(); } }, 60e3).unref();
 
 /* ---------------- Уведомления владельцу на почту ----------------
@@ -1434,6 +1438,12 @@ async function api(req, res, url, body) {
     throttle(req, 'stat', 400);
     const e = String(body.e || ''); if (!['v', 'p', 'c', 'k'].includes(e)) fail(400, 'Неизвестное событие');
     const day = new Date(Date.now() + 3 * 36e5).toISOString().slice(0, 10); // по Москве
+    // Повторы за день не считаем: браузер шлёт свой случайный номер; без номера — отпечаток адреса и браузера (только в памяти, с солью)
+    const sid = /^[a-z0-9]{12,40}$/.test(String(body.id || '')) ? String(body.id) : 'h' + crypto.createHash('sha256').update(STAT_SALT + clientIp(req) + '|' + String(req.headers['user-agent'] || '')).digest('hex').slice(0, 24);
+    if (statSeen.day !== day) { statSeen.day = day; statSeen.keys = new Set(); }
+    const sk = sid + ':' + e;
+    if (statSeen.keys.has(sk) || statSeen.keys.size > 300000) return {};
+    statSeen.keys.add(sk);
     db.stats = db.stats || {};
     const d = db.stats[day] = db.stats[day] || { v: 0, p: 0, c: 0, k: 0, src: {}, dev: { m: 0, d: 0 } };
     d[e]++;
@@ -1739,7 +1749,7 @@ async function api(req, res, url, body) {
         save();
         // номер СДЭК присваивает через пару секунд
         for (let i = 0; i < 4 && !o.cdek.number; i++) { await new Promise((r) => setTimeout(r, 1500)); try { await syncCdek(o); } catch (e) { /* дождёмся уведомления */ } }
-        if (o.cdek.error) { const err = o.cdek.error; delete o.cdek; save(); fail(400, 'СДЭК отклонил заявку: ' + err); }
+        if (o.cdek.error) { const err = o.cdek.error; delete o.cdek; if (o.fin) delete o.fin.cdekCost; save(); fail(400, 'СДЭК отклонил заявку: ' + err); }
         return { order: orderView(o) };
       }
       if (p[3] === 'return-ship' && M === 'POST') { const r = await createReturnShip(o, body); return { order: orderView(o), ret: r }; }
@@ -1759,7 +1769,7 @@ async function api(req, res, url, body) {
         if (!o.cdek) fail(400, 'Отправления нет');
         if (!CDEK_WAIT.includes(o.cdek.status)) fail(400, 'Посылка уже у СДЭК — отменить можно только через СДЭК');
         try { await cdek.cancel(o.cdek.uuid); } catch (e) { fail(502, 'СДЭК: ' + e.message); }
-        delete o.cdek; if (o.status === 'processing') o.status = 'new'; save();
+        delete o.cdek; if (o.fin) delete o.fin.cdekCost; if (o.status === 'processing') o.status = 'new'; save(); // отменённая заявка — СДЭК за неё не берёт
         return { order: orderView(o) };
       }
       if (p[3] === 'cdek-print' && M === 'GET') {

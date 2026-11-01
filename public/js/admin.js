@@ -1136,10 +1136,11 @@
   function statDays(n) {
     var out = [], st = DATA.stats || {};
     for (var i = n - 1; i >= 0; i--) { var d = new Date(Date.now() + 3 * 36e5 - i * 864e5).toISOString().slice(0, 10); out.push(Object.assign({ day: d, v: 0, p: 0, c: 0, k: 0, src: {}, dev: { m: 0, d: 0 } }, st[d] || {})); }
-    var ord = DATA.orders.filter(function (o) { return !o.test; });
+    // Заказ — одна покупка: без обменов (это тот же заказ), отменённых и брошенных на онлайн-оплате
+    var ord = DATA.orders.filter(function (o) { return !o.test && o.payment.method !== 'exchange' && o.status !== 'canceled' && !(o.payment.method === 'online' && o.payment.status !== 'paid' && o.payment.status !== 'refunded'); });
     out.forEach(function (x) {
       var list = ord.filter(function (o) { return new Date(new Date(o.createdAt).getTime() + 3 * 36e5).toISOString().slice(0, 10) === x.day; });
-      x.o = list.length; x.rev = list.filter(function (o) { return o.status !== 'canceled'; }).reduce(function (s, o) { return s + o.total - (o.refunded || 0); }, 0);
+      x.o = list.length; x.rev = list.reduce(function (s, o) { return s + o.total - (o.refunded || 0); }, 0);
     });
     return out;
   }
@@ -1534,7 +1535,7 @@
     var mk = (DATA.settings.metrika || {}), srcs = Object.keys(t.src).sort(function (a, b) { return t.src[b] - t.src[a]; }), srcTotal = srcs.reduce(function (s, k) { return s + t.src[k]; }, 0);
     var maxV = Math.max(1, Math.max.apply(null, days.map(function (x) { return x.v; })));
     m.innerHTML = head('Аналитика', '<div class="tabs adm-tabs"><a href="#/admin?s=analytics&d=7" class="' + (n === 7 ? 'on' : '') + '">7 дней</a><a href="#/admin?s=analytics&d=30" class="' + (n === 30 ? 'on' : '') + '">30 дней</a></div>',
-        'Своя статистика сайта: без cookie и без персональных данных покупателей. Подробные отчёты, карта кликов и записи визитов — в Яндекс Метрике (подключается ниже).') +
+        'Своя статистика сайта: без cookie и без персональных данных покупателей. Каждый посетитель считается один раз в день, сколько бы раз он ни заходил; ваши заходы не считаются. Подробные отчёты, карта кликов и записи визитов — в Яндекс Метрике (подключается ниже).') +
       '<div class="adm-stats an-kpi">' +
         '<div class="adm-stat"><span class="eyebrow">Посетители</span><b class="num">' + t.v.toLocaleString('ru-RU') + '</b>' + delta(t.v, prev.v) + '</div>' +
         '<div class="adm-stat"><span class="eyebrow">Конверсия в заказ</span><b>' + pct(t.o, t.v) + '</b><span class="an-d">' + t.o + ' ' + plural(t.o, 'заказ', 'заказа', 'заказов') + '</span></div>' +

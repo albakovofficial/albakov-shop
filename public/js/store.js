@@ -89,7 +89,7 @@
       if (r.user) this.user = r.user;
       return { order: r.order, payUrl: r.payUrl || null, repeated: !!r.repeated };
     },
-    async adminLogin(pw) { await call('POST', 'api/admin/login', { password: pw }); this.isAdmin = true; },
+    async adminLogin(pw) { await call('POST', 'api/admin/login', { password: pw }); this.isAdmin = true; try { localStorage.setItem('vanta:nostat', '1'); } catch (e) {} }, // свои заходы не попадают в статистику
     async adminLogout() { await call('POST', 'api/admin/logout'); this.isAdmin = false; },
     async adminData() { return (await call('GET', 'api/admin/data')).data; },
     async adminHealth() { return (await call('GET', 'api/admin/health')).health; },

@@ -148,6 +148,11 @@
 
   /* ---------- Операции: всё, что сайт считает сам, и внесённое вручную ---------- */
   var SKIP_METHODS = ['exchange'];
+  // Отправление СДЭК ещё не передано в доставку (заявка создана, но посылку не сдали) — СДЭК за него не берёт
+  var CDEK_WAIT = ['', 'ACCEPTED', 'CREATED', 'INVALID', 'REMOVED'];
+  var shipped = function (st) { return CDEK_WAIT.indexOf(String(st || '')) === -1; };
+  // Возврат денег учитывается, если его не отменили (как и везде на сайте: «pending» в ЮKassa почти всегда проходит)
+  var refundOk = function (r) { return r && r.status !== 'canceled'; };
   function costOf(fin, o, i) {
     var it = o.items[i], snap = o.fin && o.fin.costs ? o.fin.costs[i] : null;
     if (snap != null && snap > 0) return snap;
@@ -173,10 +178,19 @@
     var fin = input.finance || defaults(), cats = {}, out = [];
     (fin.categories || []).forEach(function (c) { cats[c.id] = c; });
     (input.orders || []).forEach(function (o) {
-      if (!o || o.test || !o.payment || SKIP_METHODS.indexOf(o.payment.method) !== -1) return;
+      if (!o || o.test || !o.payment) return;
+      var ref = { id: o.id, number: o.number };
+      // Доставка СДЭК — по каждой посылке, которую реально сдали в СДЭК: и у обменов, и у заказов, от которых отказались
+      // (сумма одна на заказ: при новой заявке она заменяется, при отмене заявки — пропадает)
+      if (o.cdek && shipped(o.cdek.status) && o.fin && o.fin.cdekCost > 0) out.push({ date: dayOf(o.cdek.createdAt || o.createdAt), dir: 'out', line: 'variable', cat: 'Доставка СДЭК', amount: o.fin.cdekCost, note: [o.payment.method === 'exchange' ? 'Обмен' : '', (o.delivery && o.delivery.city) || ''].filter(Boolean).join(' · '), order: ref, auto: true });
+      // Обратная доставка: СДЭК берёт с магазина всегда; если её удержали из возврата денег — удержание уже уменьшило сумму возврата
+      (o.returns || []).forEach(function (r) {
+        if (r.cost > 0 && shipped(r.status)) out.push({ date: dayOf(r.createdAt || o.createdAt), dir: 'out', line: 'variable', cat: 'Обратная доставка СДЭК', amount: r.cost, note: r.deducted ? 'Удержана из возврата денег' : 'За счёт магазина', order: ref, auto: true });
+      });
+      if (SKIP_METHODS.indexOf(o.payment.method) !== -1) return; // обмен: денег и новых продаж нет
       var paid = o.payment.status === 'paid' || o.payment.status === 'refunded';
       if (!paid) return;
-      var ref = { id: o.id, number: o.number }, pd = dayOf(o.payment.paidAt || o.createdAt), money = Math.max(0, Number(o.total) || 0);
+      var pd = dayOf(o.payment.paidAt || o.createdAt), money = Math.max(0, Number(o.total) || 0);
       var gift = o.kind === 'gift';
       var what = gift ? 'Подарочный сертификат' : o.items.map(function (it) { return it.name + (it.size ? ', ' + it.size : '') + (it.qty > 1 ? ' × ' + it.qty : ''); }).join(' · ');
       if (money > 0) {
@@ -195,15 +209,10 @@
         });
         if (units) out.push({ date: pd, dir: 'out', line: 'cogs', cat: 'Себестоимость', amount: cogs, note: what, order: ref, auto: true, missing: miss, units: units, hidden: true });
       }
-      // Доставка СДЭК: сколько взял СДЭК с магазина
-      if (o.fin && o.fin.cdekCost > 0) out.push({ date: dayOf((o.cdek && o.cdek.createdAt) || o.payment.paidAt || o.createdAt), dir: 'out', line: 'variable', cat: 'Доставка СДЭК', amount: o.fin.cdekCost, note: (o.delivery && o.delivery.city) || '', order: ref, auto: true });
-      (o.returns || []).forEach(function (r) {
-        if (r.cost > 0 && !r.deducted && r.status !== 'REMOVED') out.push({ date: dayOf(r.createdAt || o.createdAt), dir: 'out', line: 'variable', cat: 'Обратная доставка СДЭК', amount: r.cost, note: 'Возврат за счёт магазина', order: ref, auto: true });
-      });
       // Возвраты денег и вещи, вернувшиеся на склад
       var refunded = 0;
       (o.refunds || []).forEach(function (r) {
-        if (r.status && r.status !== 'succeeded') return;
+        if (!refundOk(r)) return;
         var amt = Number(r.amount) || 0; refunded += amt;
         var d = dayOf(r.at || o.createdAt), back = 0;
         (r.items || []).forEach(function (x) { var i = refundItemIdx(o, x); if (i !== -1) { var c = costOf(fin, o, i); if (c != null) back += c * (Number(x.qty) || 0); } });
@@ -280,7 +289,7 @@
         if (pd > row.lastSale) row.lastSale = pd;
       });
       (o.refunds || []).concat(o.status === 'returned' && o.payment.method !== 'online' ? [{ at: ((o.history || []).filter(function (x) { return /→ Возврат/.test(x.text); }).slice(-1)[0] || {}).at, items: o.items.map(function (it) { return { name: it.name, size: it.size, color: it.color, qty: Math.max(0, it.qty - (it.refundedQty || 0)) }; }), offline: true }] : []).forEach(function (r) {
-        if (r.status && r.status !== 'succeeded') return;
+        if (!refundOk(r)) return;
         var d = dayOf(r.at || o.createdAt); if (d < from || d > to) return;
         (r.items || []).forEach(function (x) {
           var i = refundItemIdx(o, x); if (i === -1) return;

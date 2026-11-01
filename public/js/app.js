@@ -638,11 +638,28 @@
 
   /* ---------- Статистика: своя (без cookie) и Яндекс Метрика, если подключена в панели ---------- */
   var routeN = 0;
+  // Один браузер — один посетитель в день (по Москве): сколько бы раз человек ни открывал сайт, вкладки
+  // или приложение, заход, просмотр товара, корзина и оформление засчитываются ему один раз за день.
+  // Свой номер браузера — случайный, без cookie и без данных о человеке; по нему сервер не засчитывает повторы.
+  // Владелец магазина не считается: в браузере, где хоть раз входили в панель, статистика не отправляется.
+  var statDay = function () { return new Date(Date.now() + 3 * 36e5).toISOString().slice(0, 10); };
+  function statOff() {
+    try {
+      if (API.isAdmin) localStorage.setItem('vanta:nostat', '1');
+      return localStorage.getItem('vanta:nostat') === '1' || /^#\/admin/.test(location.hash);
+    } catch (e) { return true; }
+  }
+  function statId() {
+    var id = localStorage.getItem('vanta:sid');
+    if (!/^[a-z0-9]{12,40}$/.test(id || '')) { id = (Math.random().toString(36).slice(2) + Date.now().toString(36) + Math.random().toString(36).slice(2)).slice(0, 24); localStorage.setItem('vanta:sid', id); }
+    return id;
+  }
   function stat(e, extra) {
     try {
-      var k = 'vanta:st:' + e; if (sessionStorage.getItem(k)) return; sessionStorage.setItem(k, '1');
-      fetch('api/t', { method: 'POST', keepalive: true, credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ e: e }, extra || {})) }).catch(function () {});
-    } catch (ex) {}
+      if (statOff()) return;
+      var k = 'vanta:st:' + e, day = statDay(); if (localStorage.getItem(k) === day) return; localStorage.setItem(k, day);
+      fetch('api/t', { method: 'POST', keepalive: true, credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ e: e, id: statId() }, extra || {})) }).catch(function () {});
+    } catch (ex) {} // хранилище браузера закрыто (частный режим с запретом) — не считаем вовсе, чтобы не считать дважды
   }
   function trafficSource() {
     var q = new URLSearchParams(location.search), utm = (q.get('utm_source') || '').toLowerCase(), r = '';

@@ -3083,6 +3083,7 @@ a:hover .cat-go { background: var(--ink); color: #fff; transform: rotate(-45deg)
 .an-mini:hover { box-shadow: var(--ring), var(--lift); }
 .an-mini b { display: block; font-weight: 200; font-size: 34px; letter-spacing: -.03em; }
 .an-mini .an-col { height: 56px; }
+.an-mini .an-pv { display: block; margin-top: 6px; font-size: 12px; color: var(--muted); }
 .an-mini .an-step small, .an-mini .an-step b { display: none; }
 .an-more { position: absolute; top: 18px; right: 22px; font-size: 13px; color: var(--muted); }
 @media (max-width: 860px) {
@@ -3214,8 +3215,9 @@ a:hover .cat-go { background: var(--ink); color: #fff; transform: rotate(-45deg)
 .remind-opt b { font-weight: 500; font-size: 14px; } .remind-opt small { font-size: 12.5px; color: var(--muted); line-height: 1.4; }
 .an-empty { margin-bottom: 16px; background: linear-gradient(180deg, #f7f7f6, #eff0f2); box-shadow: var(--ring); }
 
-.an-kpi { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-@media (max-width: 900px) { .an-kpi { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.an-kpi { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+@media (max-width: 1280px) { .an-kpi { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 900px) { .an-kpi { grid-template-columns: repeat(2, minmax(0, 1fr)); } .an-kpi .adm-stat:last-child:nth-child(odd) { grid-column: 1 / -1; } }
 .adm-card .copyable { white-space: nowrap; font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; padding: 1px 6px; border-radius: 6px; background: rgba(13, 14, 16, .05); }
 
 /* ---------- 13.43: телефон — ровная прокрутка без мельканий и зависаний ----------

@@ -1621,18 +1621,20 @@ async function api(req, res, url, body) {
   // Своя статистика без cookie и персональных данных: сколько зашло, открыло товар, положило в корзину, начало оформление
   if (p[0] === 't' && M === 'POST') {
     if (/bot|crawl|spider|slurp|yandex(bot|images)|googlebot|headless|lighthouse|preview/i.test(String(req.headers['user-agent'] || ''))) return {};
-    throttle(req, 'stat', 400);
-    const e = String(body.e || ''); if (!['v', 'p', 'c', 'k'].includes(e)) fail(400, 'Неизвестное событие');
+    const e = String(body.e || ''); if (!['v', 'p', 'c', 'k', 'pv'].includes(e)) fail(400, 'Неизвестное событие');
+    throttle(req, e === 'pv' ? 'statpv' : 'stat', e === 'pv' ? 600 : 400);
     const day = new Date(Date.now() + 3 * 36e5).toISOString().slice(0, 10); // по Москве
     // Повторы за день не считаем: браузер шлёт свой случайный номер; без номера — отпечаток адреса и браузера (только в памяти, с солью)
     const sid = /^[a-z0-9]{12,40}$/.test(String(body.id || '')) ? String(body.id) : 'h' + crypto.createHash('sha256').update(STAT_SALT + clientIp(req) + '|' + String(req.headers['user-agent'] || '')).digest('hex').slice(0, 24);
     if (statSeen.day !== day) { statSeen.day = day; statSeen.keys = new Set(); }
-    const sk = sid + ':' + e;
-    if (statSeen.keys.has(sk) || statSeen.keys.size > 300000) return {};
-    statSeen.keys.add(sk);
+    if (e !== 'pv') { // просмотры страниц считаем все, остальное — один раз в день на посетителя
+      const sk = sid + ':' + e;
+      if (statSeen.keys.has(sk) || statSeen.keys.size > 300000) return {};
+      statSeen.keys.add(sk);
+    }
     db.stats = db.stats || {};
-    const d = db.stats[day] = db.stats[day] || { v: 0, p: 0, c: 0, k: 0, src: {}, dev: { m: 0, d: 0 } };
-    d[e]++;
+    const d = db.stats[day] = db.stats[day] || { v: 0, p: 0, c: 0, k: 0, pv: 0, src: {}, dev: { m: 0, d: 0 } };
+    d[e] = (d[e] || 0) + 1;
     if (e === 'v') {
       const SRC = ['instagram', 'telegram', 'vk', 'yandex', 'google', 'direct', 'other'];
       const sc = SRC.includes(body.src) ? body.src : 'other'; d.src[sc] = (d.src[sc] || 0) + 1;

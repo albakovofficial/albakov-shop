@@ -393,6 +393,7 @@
       v.innerHTML = '<div class="wrap"><div class="empty"><h3>Страница не открылась</h3><p>Попробуйте ещё раз — обычно это помогает.</p><div class="empty-acts"><button class="btn" type="button" id="viewReload">Обновить</button><a class="btn ghost" href="#/">На главную</a></div></div></div>';
       $('#viewReload').addEventListener('click', function () { location.reload(); });
     }
+    if (fn !== adminPage) statPage();
     if (routeN++ && window.Metrika && fn !== adminPage) setTimeout(function () { Metrika.hit(location.pathname + location.search); }, 50);
     pageMeta(name, p, r.q);
     document.body.classList.toggle('hero-under', !!$('#view > .slider:first-child'));
@@ -660,6 +661,13 @@
       var k = 'vanta:st:' + e, day = statDay(); if (localStorage.getItem(k) === day) return; localStorage.setItem(k, day);
       fetch('api/t', { method: 'POST', keepalive: true, credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ e: e, id: statId() }, extra || {})) }).catch(function () {});
     } catch (ex) {} // хранилище браузера закрыто (частный режим с запретом) — не считаем вовсе, чтобы не считать дважды
+  }
+  // Просмотр страницы: каждое открытие страницы, без отсева повторов
+  function statPage() {
+    try {
+      if (statOff()) return;
+      fetch('api/t', { method: 'POST', keepalive: true, credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ e: 'pv', id: statId() }) }).catch(function () {});
+    } catch (ex) {}
   }
   function trafficSource() {
     var q = new URLSearchParams(location.search), utm = (q.get('utm_source') || '').toLowerCase(), r = '';

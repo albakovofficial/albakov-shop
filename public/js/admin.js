@@ -300,7 +300,7 @@
         stat('Новые заказы', newN, '#/admin?s=orders&f=new') + stat('Заказов сегодня', todayN, '#/admin?s=orders') + stat('Выручка, всего', fmt(revenue), '#/admin?s=orders') + stat('Покупателей', DATA.users.length, '#/admin?s=customers') +
         stat('Товаров в продаже', DATA.products.filter(function (p) { return p.active !== false; }).length, '#/admin?s=products') + stat('Активных акций', promosActive, '#/admin?s=promotions') + stat('Активных промокодов', codesActive, '#/admin?s=promocodes') +
       '</div>' +
-      (function () { var t = sumDays(statDays(7)); return '<a class="adm-card an-mini" href="#/admin?s=analytics"><div><span class="adm-h3">Посетители за 7 дней</span><b class="num">' + t.v.toLocaleString('ru-RU') + '</b></div><div><span class="adm-h3">Конверсия в заказ</span><b>' + pct(t.o, t.v) + '</b></div><div class="an-mini-f">' + funnelHtml(t) + '</div><span class="an-more">Подробнее →</span></a>'; })() +
+      (function () { var t = sumDays(statDays(7)); return '<a class="adm-card an-mini" href="#/admin?s=analytics"><div><span class="adm-h3">Посетители за 7 дней</span><b class="num">' + t.v.toLocaleString('ru-RU') + '</b><small class="an-pv">' + t.pv.toLocaleString('ru-RU') + ' ' + plural(t.pv, 'просмотр', 'просмотра', 'просмотров') + ' страниц</small></div><div><span class="adm-h3">Конверсия в заказ</span><b>' + pct(t.o, t.v) + '</b></div><div class="an-mini-f">' + funnelHtml(t) + '</div><span class="an-more">Подробнее →</span></a>'; })() +
       '<div class="adm-two"><div class="adm-card"><h3 class="adm-h3">Последние заказы</h3>' + (o.length ? ordersTable(o.slice().reverse().slice(0, 6)) : '<p class="muted">Заказов пока нет.</p>') + '</div>' +
       '<div class="adm-card"><h3 class="adm-h3">Заканчиваются</h3>' + (low.length ? '<div class="adm-list">' + low.slice(0, 10).map(function (x) { return '<a href="#/admin?s=products&id=' + esc(x.p.id) + '" class="adm-li"><span>' + esc(x.p.name) + ' <span class="muted">· ' + esc(x.c.name) + ' · ' + esc(x.s.size) + '</span></span><span class="num ' + (x.s.stock ? 'warn' : 'bad') + '">' + x.s.stock + ' шт.</span></a>'; }).join('') + '</div>' : '<p class="muted">Все размеры в наличии.</p>') + '</div></div>';
   }
@@ -1328,7 +1328,7 @@
   /* ================= Аналитика: своя воронка + Яндекс Метрика ================= */
   function statDays(n) {
     var out = [], st = DATA.stats || {};
-    for (var i = n - 1; i >= 0; i--) { var d = new Date(Date.now() + 3 * 36e5 - i * 864e5).toISOString().slice(0, 10); out.push(Object.assign({ day: d, v: 0, p: 0, c: 0, k: 0, src: {}, dev: { m: 0, d: 0 } }, st[d] || {})); }
+    for (var i = n - 1; i >= 0; i--) { var d = new Date(Date.now() + 3 * 36e5 - i * 864e5).toISOString().slice(0, 10); out.push(Object.assign({ day: d, v: 0, p: 0, c: 0, k: 0, pv: 0, src: {}, dev: { m: 0, d: 0 } }, st[d] || {})); }
     // Заказ — одна покупка: без обменов (это тот же заказ), отменённых и брошенных на онлайн-оплате
     var ord = DATA.orders.filter(function (o) { return !o.test && o.payment.method !== 'exchange' && o.status !== 'canceled' && !(o.payment.method === 'online' && o.payment.status !== 'paid' && o.payment.status !== 'refunded'); });
     out.forEach(function (x) {
@@ -1338,8 +1338,8 @@
     return out;
   }
   function sumDays(days) {
-    var t = { v: 0, p: 0, c: 0, k: 0, o: 0, rev: 0, src: {}, m: 0, d: 0 };
-    days.forEach(function (x) { ['v', 'p', 'c', 'k', 'o', 'rev'].forEach(function (k) { t[k] += x[k] || 0; }); Object.keys(x.src || {}).forEach(function (k) { t.src[k] = (t.src[k] || 0) + x.src[k]; }); t.m += (x.dev || {}).m || 0; t.d += (x.dev || {}).d || 0; });
+    var t = { v: 0, p: 0, c: 0, k: 0, pv: 0, o: 0, rev: 0, src: {}, m: 0, d: 0 };
+    days.forEach(function (x) { ['v', 'p', 'c', 'k', 'pv', 'o', 'rev'].forEach(function (k) { t[k] += x[k] || 0; }); Object.keys(x.src || {}).forEach(function (k) { t.src[k] = (t.src[k] || 0) + x.src[k]; }); t.m += (x.dev || {}).m || 0; t.d += (x.dev || {}).d || 0; });
     return t;
   }
   var SRC_NAMES = { instagram: 'Instagram', telegram: 'Telegram', vk: 'ВКонтакте', yandex: 'Яндекс', google: 'Google', direct: 'Прямые заходы', other: 'Другие сайты' };
@@ -1728,9 +1728,10 @@
     var mk = (DATA.settings.metrika || {}), srcs = Object.keys(t.src).sort(function (a, b) { return t.src[b] - t.src[a]; }), srcTotal = srcs.reduce(function (s, k) { return s + t.src[k]; }, 0);
     var maxV = Math.max(1, Math.max.apply(null, days.map(function (x) { return x.v; })));
     m.innerHTML = head('Аналитика', '<div class="tabs adm-tabs"><a href="#/admin?s=analytics&d=7" class="' + (n === 7 ? 'on' : '') + '">7 дней</a><a href="#/admin?s=analytics&d=30" class="' + (n === 30 ? 'on' : '') + '">30 дней</a></div>',
-        'Своя статистика сайта: без cookie и без персональных данных покупателей. Каждый посетитель считается один раз в день, сколько бы раз он ни заходил; ваши заходы не считаются. Подробные отчёты, карта кликов и записи визитов — в Яндекс Метрике (подключается ниже).') +
+        'Своя статистика сайта: без cookie и без персональных данных покупателей. Каждый посетитель считается один раз в день, сколько бы раз он ни заходил, а «Просмотры страниц» — все открытия страниц; ваши заходы не считаются. Подробные отчёты, карта кликов и записи визитов — в Яндекс Метрике (подключается ниже).') +
       '<div class="adm-stats an-kpi">' +
         '<div class="adm-stat"><span class="eyebrow">Посетители</span><b class="num">' + t.v.toLocaleString('ru-RU') + '</b>' + delta(t.v, prev.v) + '</div>' +
+        '<div class="adm-stat"><span class="eyebrow">Просмотры страниц</span><b class="num">' + t.pv.toLocaleString('ru-RU') + '</b>' + (t.v ? '<span class="an-d">' + String(Math.round(t.pv / t.v * 10) / 10).replace('.', ',') + ' на посетителя</span>' : '') + '</div>' +
         '<div class="adm-stat"><span class="eyebrow">Конверсия в заказ</span><b>' + pct(t.o, t.v) + '</b><span class="an-d">' + t.o + ' ' + plural(t.o, 'заказ', 'заказа', 'заказов') + '</span></div>' +
         '<div class="adm-stat"><span class="eyebrow">Выручка</span><b class="num">' + fmt(t.rev) + '</b>' + delta(t.rev, prev.rev) + '</div>' +
         '<div class="adm-stat"><span class="eyebrow">Средний чек</span><b class="num">' + (t.o ? fmt(Math.round(t.rev / t.o)) : '—') + '</b>' + (t.m + t.d ? '<span class="an-d">с телефона ' + pct(t.m, t.m + t.d) + ' визитов</span>' : '') + '</div>' +

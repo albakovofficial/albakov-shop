@@ -35,7 +35,12 @@
 
   /* ================= SERVER ================= */
   async function call(method, url, body) {
-    var r = await fetch(url, { method: method, credentials: 'same-origin', headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
+    var r;
+    try { r = await fetch(url, { method: method, credentials: 'same-origin', headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined }); }
+    catch (ex) {
+      // Связь пропала (Failed to fetch, Load failed и т. п.) — понятный текст вместо технического
+      var ne = err(navigator.onLine === false ? 'Нет подключения к интернету. Проверьте связь и попробуйте ещё раз.' : 'Не удалось связаться с магазином — похоже, пропал интернет. Попробуйте ещё раз.'); ne.status = 0; ne.network = true; throw ne;
+    }
     var j = null; try { j = await r.json(); } catch (e) {}
     if (!r.ok || !j || j.ok === false) { var e = err((j && j.error) || 'Сервер не ответил. Попробуйте ещё раз.'); e.status = r.status; throw e; }
     return j;
@@ -183,7 +188,8 @@
     for (var i = 0; i < wait.length; i++) {
       if (wait[i]) await new Promise(function (r) { setTimeout(r, wait[i]); });
       try {
-        var r = await fetch('api/state', { credentials: 'same-origin', headers: { Accept: 'application/json' }, cache: 'no-store' });
+        var early = i === 0 && root.__albState; root.__albState = null; // первая попытка — запрос, начатый ещё в splash.js
+        var r = early ? await early : await fetch('api/state', { credentials: 'same-origin', headers: { Accept: 'application/json' }, cache: 'no-store' });
         if (r.ok && (r.headers.get('content-type') || '').indexOf('json') !== -1) {
           var j = await r.json();
           if (j && j.ok && j.data) { var data = await Server.init(j); return { api: Server, data: data }; }

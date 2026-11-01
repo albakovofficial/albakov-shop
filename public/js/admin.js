@@ -549,6 +549,7 @@
           fieldHtml({ k: 'paymentStatus', label: 'Оплата (' + (o.payment.method === 'online' ? 'онлайн' : o.payment.method === 'bonus' ? 'бонусами' : o.payment.method === 'exchange' ? 'обмен по заказу № ' + (o.exchangeOf ? o.exchangeOf.number : '') : 'при получении') + ')', type: 'select', options: Object.keys(A().PAY).filter(function (k) { return k !== 'refunded' || o.payment.method !== 'online' || o.payment.status === 'refunded'; }).map(function (k) { return [k, A().PAY[k]]; }) }, { paymentStatus: o.payment.status }) +
           fieldHtml({ k: 'note', label: 'Заметка для себя', type: 'textarea', rows: 2 }, { note: o.adminNote || '' }) +
           '<button class="btn" id="oSave">Сохранить</button></div>' +
+        historyCard(o) +
         '<div class="adm-card" style="display:grid;gap:10px"><h3 class="adm-h3">Удаление</h3><p class="muted" style="font-size:13px;margin:0">Для тестовых и ошибочных заказов. Товар вернётся на склад, промокод и бонусы — как при отмене. Удаление не отменить.</p><button class="btn ghost" id="oDel" type="button">Удалить заказ</button></div></div></div>';
     bindRefund(o); bindRequest(o);
     if (useCdek(o)) { bindCdekOrder(o); bindReturn(o); }
@@ -884,6 +885,16 @@
   }
   function newColor(n, hex, kind) { return { id: uid('col'), name: '', hex: hex, images: [], sizes: [], art: { kind: kind || 'tee', tone: hex } }; }
   function sizeRow(s) { return '<div class="adm-size-row"><input class="input" data-sz placeholder="Размер" value="' + esc(s.size) + '" aria-label="Размер"><input class="input num" data-st type="number" min="0" placeholder="Остаток" value="' + esc(s.stock) + '" aria-label="Остаток, шт."><span class="muted" style="font-size:14px">шт.</span><button type="button" class="adm-x" data-szrm title="Удалить">✕</button></div>'; }
+
+  // История заказа: оформление, смена статуса и оплаты, трек-номер, возвраты — новое сверху
+  function historyCard(o) {
+    var h = (o.history || []).slice().reverse();
+    if (!h.length) h = [{ at: o.createdAt, text: 'Заказ оформлен на сайте', by: 'customer' }];
+    var WHO = { admin: 'в панели', customer: 'покупатель', system: 'автоматически' };
+    return '<div class="adm-card"><h3 class="adm-h3">История заказа</h3><ol class="o-hist">' + h.slice(0, 40).map(function (x) {
+      return '<li><span class="o-hist-dot" aria-hidden="true"></span><div><b>' + esc(x.text) + '</b><small>' + esc(new Date(x.at).toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })) + ' · ' + (WHO[x.by] || '') + '</small></div></li>';
+    }).join('') + '</ol>' + ((o.history || []).length ? '' : '<p class="muted" style="font-size:12.5px;margin:10px 0 0">Подробная история ведётся для заказов с 1 ноября 2026.</p>') + '</div>';
+  }
 
   /* ================= Категории ================= */
   function categories(m, q) {

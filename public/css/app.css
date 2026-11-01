@@ -3299,3 +3299,23 @@ body::after { content: none; display: none; }
 .al-ev > span:first-child { display: grid; gap: 3px; }
 .al-ev b { font-weight: 500; font-size: 15px; }
 .al-ev small { font-size: 13px; line-height: 1.5; color: var(--muted); }
+
+/* История заказа в панели (13.44) */
+.o-hist { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 0; }
+.o-hist li { position: relative; display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 12px; padding: 0 0 14px; }
+.o-hist li:not(:last-child)::before { content: ""; position: absolute; left: 4px; top: 14px; bottom: 0; width: 1px; background: var(--line); }
+.o-hist-dot { width: 9px; height: 9px; margin-top: 5px; border-radius: 50%; background: var(--ink); box-shadow: 0 0 0 3px #fff, 0 0 0 4px var(--line); }
+.o-hist li:first-child .o-hist-dot { background: var(--acc); }
+.o-hist b { display: block; font-weight: 500; font-size: 14px; line-height: 1.45; }
+.o-hist small { display: block; margin-top: 2px; font-size: 12.5px; color: var(--muted); }
+
+/* Таблица размеров на телефоне (13.44): компактнее, колонка «Размер» закреплена, подсказка про прокрутку */
+.modal-box h3.serif { line-height: 1.06; letter-spacing: -.03em; }
+.tw-hint { display: none; margin: 8px 0 0; font-size: 12.5px; color: var(--muted); }
+@media (max-width: 600px) {
+  .tw-hint { display: block; }
+  .table-wrap { -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
+  table.sizes th, table.sizes td { padding: 11px 12px; font-size: 13.5px; white-space: nowrap; }
+  table.sizes th:first-child, table.sizes td:first-child { position: sticky; left: 0; z-index: 1; background: #fff; box-shadow: 1px 0 0 var(--line); }
+  table.sizes thead th:first-child { background: var(--surface, #f3f3f4); }
+}

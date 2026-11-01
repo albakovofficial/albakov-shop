@@ -320,14 +320,22 @@
       '<span class="card-buy">' + priceHtml(pr) + '</span></div></a>';
   }
   function bagIcon() { return '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8h14l-1 12H6L5 8z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/><path d="M12 11v5M9.5 13.5h5"/></svg>'; }
+  // Размер по сохранённым меркам покупателя (после подбора) — для отметки «ваш» в окне выбора
+  function qsRec(p) { if (!fitCanPick(p)) return ''; var sv = fitSaved(), r = sv.done && sv.h && sv.kg ? fitPick(p, sv.h, sv.kg, sv.pref || 'free') : null; return r ? r.row.size : ''; }
+  function qsFitHtml(p, c) {
+    if (!fitCanPick(p)) return '';
+    var rec = qsRec(p), rs = rec && (c.sizes || []).find(function (x) { return x.size === rec; }), recOut = rs && rs.stock <= 0;
+    return '<button type="button" class="qs-fit" data-qfit="' + esc(p.id) + '|' + esc(c.id) + '"><span class="qs-fit-ic">' + FIT_IC + '</span><span class="qs-fit-t"><b>' + (rec ? 'Ваш размер — ' + esc(rec) : 'Убедитесь в размере') + '</b><span>' + (recOut ? 'В этом цвете сейчас нет — посмотрите другой цвет' : rec ? 'По вашим меркам. Изменить' : 'Рост и вес — подскажем, как сядет. 10 секунд') + '</span></span><i aria-hidden="true">' + ARROW + '</i></button>';
+  }
   // Выбор размера снизу экрана (телефон): цвет, размеры в наличии, «В корзину»
   function quickSheet(pid, cid) {
     var p = D.products.find(function (x) { return x.id === pid; }); if (!p) return;
     var cs = Pricing.colorsOf(p), c = cs.find(function (x) { return x.id === cid; }) || shownColor(p), pr = priceOf(p);
-    var img = (c.images && c.images[0]) || Art.make(c.art);
+    var img = (c.images && c.images[0]) || Art.make(c.art), rec = qsRec(p);
     openModal('<div class="qs"><div class="qs-top"><img src="' + esc(img) + '" alt=""><div><b class="qs-name">' + esc(p.name) + '</b>' + priceHtml(pr) + (p.sku ? '<span class="qs-sku">Арт. ' + esc(p.sku) + '</span>' : '') + '</div></div>' +
       (cs.length > 1 ? '<div class="qs-row"><span class="qs-l">Цвет: <b>' + esc(c.name) + '</b></span><div class="qs-colors">' + cs.map(function (x) { return '<button type="button" class="qs-color' + (x === c ? ' on' : '') + '" data-qsheet="' + esc(p.id) + '|' + esc(x.id) + '" aria-label="' + esc(x.name) + '" aria-pressed="' + (x === c) + '"' + (Pricing.stockOf(x) ? '' : ' disabled') + '><i style="' + swatchStyle(x) + '"></i></button>'; }).join('') + '</div></div>' : '') +
-      '<div class="qs-row"><span class="qs-l">Размер</span><div class="qs-sizes">' + (c.sizes || []).map(function (x) { return x.stock > 0 ? '<button type="button" class="qs-size" data-qa="' + esc(p.id) + '|' + esc(c.id) + '|' + esc(x.size) + '">' + esc(x.size) + (x.stock <= 2 ? '<small>' + (x.stock === 1 ? 'последний' : 'мало') + '</small>' : '') + '</button>' : '<button type="button" class="qs-size" disabled>' + esc(x.size) + '</button>'; }).join('') + '</div></div>' +
+      qsFitHtml(p, c) +
+      '<div class="qs-row"><span class="qs-l">Размер</span><div class="qs-sizes">' + (c.sizes || []).map(function (x) { var isRec = x.size === rec; return x.stock > 0 ? '<button type="button" class="qs-size' + (isRec ? ' rec' : '') + '" data-qa="' + esc(p.id) + '|' + esc(c.id) + '|' + esc(x.size) + '">' + esc(x.size) + (isRec ? '<small>ваш</small>' : x.stock <= 2 ? '<small>' + (x.stock === 1 ? 'последний' : 'мало') + '</small>' : '') + '</button>' : '<button type="button" class="qs-size" disabled>' + esc(x.size) + '</button>'; }).join('') + '</div></div>' +
       '<a class="link qs-more" href="#/product/' + esc(p.slug) + (c !== cs[0] ? '?color=' + esc(c.id) : '') + '">Подробнее о товаре и таблица размеров →</a></div>');
   }
   function priceHtml(pr) { return '<span class="price">' + (pr.oldPrice ? '<span class="now sale">' + fmt(pr.price) + '</span><s>' + fmt(pr.oldPrice) + '</s>' : '<span class="now">' + fmt(pr.price) + '</span>') + '</span>'; }
@@ -1085,7 +1093,7 @@
           return '<button class="swatch-btn' + (out ? ' out' : '') + '" role="radio" data-color="' + esc(c.id) + '" title="' + esc(c.name) + (out ? ' — нет в наличии' : '') + '" aria-label="' + esc(c.name) + (out ? ', нет в наличии' : '') + '"><span class="sw" style="' + swatchStyle(c) + '"></span></button>';
         }).join('') + '</div></div>' +
       '<div><div class="opt-head"><span>Размер</span>' + (chart || fitCanCompare(p) ? '<button class="link" style="font-size:14px" id="openChart">' + (chart ? 'Таблица размеров' : 'Мерки изделия') + '</button>' : '') + '</div>' +
-        '<div class="chips" id="sizeChips"></div><p class="stock-note" id="stockNote" style="margin-top:10px"></p>' + fitToolsHtml(p) + '</div>' +
+        '<div class="chips" id="sizeChips"></div><p class="stock-note" id="stockNote" style="margin-top:10px"></p>' + fitToolsHtml(p) + '<div id="fitCheck" aria-live="polite"></div></div>' +
       '<div class="sticky-buy"><div class="buy-row"><div class="qty"><button data-q="-1" aria-label="Меньше">−</button><span id="qty">1</span><button data-q="1" aria-label="Больше">+</button></div><button class="btn" id="addBtn">Добавить в корзину</button></div></div>' +
       '<div class="buy-more"><button type="button" class="btn ghost buy-now" id="buyNow"><span>Купить сейчас</span><span class="bn-ic" aria-hidden="true">' + ARROW + '</span></button>' +
         '<button type="button" class="fav-btn fav-wide' + (Fav.has(p.id) ? ' on' : '') + '" data-fav="' + esc(p.id) + '" aria-pressed="' + Fav.has(p.id) + '" aria-label="' + (Fav.has(p.id) ? 'Убрать из избранного' : 'В избранное') + '">' + ICON.heart + '<span class="fav-t">' + (Fav.has(p.id) ? 'В избранном' : 'В избранное') + '</span></button></div>' +
@@ -1149,9 +1157,17 @@
       $('.buy-row .qty').hidden = wait;
       $('#buyNow').hidden = wait || (!anyAvail && !pre);
     }
+    var fcLast = null;
+    function drawFitCheck() {
+      var box = $('#fitCheck'); if (!box) return;
+      var key = col.id + '|' + sel + '|' + JSON.stringify(fitSaved()); if (key === fcLast) return;
+      var changed = fcLast !== null; fcLast = key;
+      box.innerHTML = fitCheckHtml(p, col, sel);
+      var fc = box.firstChild; if (fc && changed) { fc.classList.remove('fc-in'); void fc.offsetWidth; fc.classList.add('fc-in'); }
+    }
     function note() {
       var n = $('#stockNote'), s = sizeOf(), anyAvail = (col.sizes || []).some(function (x) { return x.stock > 0; });
-      n.className = 'stock-note'; updateBtn();
+      n.className = 'stock-note'; updateBtn(); drawFitCheck();
       if (pre && s && s.stock <= 0) { n.textContent = 'Предзаказ' + (preDate() ? ' · отправим ' + preDate() : '') + (preLeft !== Infinity ? ' · осталось ' + preLeft + ' ' + plural(preLeft, 'место', 'места', 'мест') : ''); n.classList.add('pre'); if (preLeft !== Infinity && qty > preLeft) { qty = preLeft; $('#qty').textContent = qty; } return; }
       if (pre && !s) { n.textContent = 'Выберите размер'; return; }
       if (!anyAvail && (!s || s.stock <= 0)) { n.textContent = notifyOn ? 'Этого цвета сейчас нет. Оставьте почту — напишем, когда он появится.' : (colors.length > 1 ? 'Посмотрите другие цвета' : ''); return; }
@@ -1200,6 +1216,12 @@
       var chip = $('#sizeChips [data-size="' + (window.CSS && CSS.escape ? CSS.escape(size) : size) + '"]'); if (chip) chip.focus();
     }
     var ff = $('#fitFind'); if (ff) ff.addEventListener('click', function () { openFitFinder(p, col, pickSize); });
+    $('#fitCheck').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-fc]'); if (!b) return; var k = b.getAttribute('data-fc');
+      if (k === 'find') openFitFinder(p, col, pickSize);
+      else if (k === 'cmp') openFitCompare(p, col, pickSize);
+      else if (k === 'pick') pickSize(b.getAttribute('data-size'));
+    });
     if (q.fit === '1' && fitCanPick(p)) setTimeout(function () { openFitFinder(p, col, pickSize); }, 120);
     var fc = $('#fitCompare'); if (fc) fc.addEventListener('click', function () { openFitCompare(p, col, pickSize); });
   }
@@ -1265,7 +1287,19 @@
   var LS_FIT = 'albakov:fit';
   var FIT_PREF = [['close', 'Ближе к телу'], ['free', 'Свободно, как задумано'], ['xfree', 'Очень свободно']];
   function fitRows(p) { var f = p.fit || {}; return (f.rows || []).filter(function (r) { return r && r.size; }); }
-  function fitRangeRows(p) { return fitRows(p).filter(function (r) { return r.hMin > 0 && r.hMax >= r.hMin && r.kMin > 0 && r.kMax >= r.kMin; }); }
+  // Рост и вес для размеров: из панели, а если не заполнены — по типичной сетке (как кнопка «Заполнить типовыми» в панели)
+  var FIT_TYPICAL = { XS: [150, 165, 45, 58], S: [160, 172, 52, 66], M: [170, 180, 62, 76], L: [176, 186, 72, 86], XL: [182, 192, 82, 96], '2XL': [186, 198, 92, 110], XXL: [186, 198, 92, 110], '3XL': [190, 205, 105, 125], XXXL: [190, 205, 105, 125] };
+  function fitSizes(p) { var out = []; Pricing.colorsOf(p).forEach(function (c) { (c.sizes || []).forEach(function (x) { if (x.size && out.indexOf(x.size) === -1) out.push(x.size); }); }); return out; }
+  function fitRangeRows(p) {
+    var own = fitRows(p).filter(function (r) { return r.hMin > 0 && r.hMax >= r.hMin && r.kMin > 0 && r.kMax >= r.kMin; });
+    if (own.length >= 2) return own;
+    var base = fitRows(p), rows = fitSizes(p).map(function (sz) {
+      var t = FIT_TYPICAL[String(sz).toUpperCase().replace(/\s+/g, '')]; if (!t) return null;
+      return Object.assign({}, base.find(function (r) { return r.size === sz; }) || {}, { size: sz, hMin: t[0], hMax: t[1], kMin: t[2], kMax: t[3], typical: true });
+    }).filter(Boolean);
+    return rows.length >= 2 ? rows : [];
+  }
+  function fitIsTypical(p) { var r = fitRangeRows(p); return !!(r[0] && r[0].typical); }
   function fitCanPick(p) { return fitRangeRows(p).length >= 2; }
   function fitCanCompare(p) { return fitRows(p).filter(function (r) { return r.w > 0 && r.l > 0; }).length >= 2; }
   function fitSaved() { try { return JSON.parse(localStorage.getItem(LS_FIT) || 'null') || {}; } catch (e) { return {}; } }
@@ -1285,10 +1319,35 @@
   function fitToolsHtml(p) {
     var f = p.fit || {}, out = '';
     if (f.modelHeight && f.modelSize) out += '<p class="fit-model">На модели размер <b>' + esc(f.modelSize) + '</b>, рост ' + esc(f.modelHeight) + ' см</p>';
-    var a = fitCanPick(p), b = fitCanCompare(p);
+    var a = false, b = fitCanCompare(p) && !fitCanPick(p); // подбор по росту и весу — в блоке «Убедитесь, что размер ваш»
     if (a || b) out += '<div class="fit-tools">' + (a ? '<button type="button" class="btn ghost fit-find" id="fitFind"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="8" width="20" height="8"></rect><path d="M6 8v3M10 8v4M14 8v3M18 8v4"></path></svg>Подобрать размер</button>' : '') +
       (b ? '<button type="button" class="link fit-cmp" id="fitCompare">Сравнить со своей футболкой</button>' : '') + '</div>';
     return out;
+  }
+  /* Блок «Убедитесь, что размер ваш»: до подбора — приглашение, после — персональный вывод под выбранный размер */
+  var FIT_IC = '<svg viewBox="0 0 40 40" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><rect x="3" y="13" width="34" height="14" rx="3"/><path d="M9 13v5M14 13v3M19 13v5M24 13v3M29 13v5M34 13v3"/></svg>';
+  var FIT_OK = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+  function fitCheckHtml(p, col, sel) {
+    if (!fitCanPick(p)) return '';
+    var sv = fitSaved(), res = sv.done && sv.h && sv.kg ? fitPick(p, sv.h, sv.kg, sv.pref || 'free') : null;
+    var cmp = fitCanCompare(p) ? '<button type="button" class="fc-link" data-fc="cmp">Сравнить со своей футболкой</button>' : '';
+    if (!res) {
+      return '<div class="fc"><span class="fc-ic">' + FIT_IC + '</span><div class="fc-body"><span class="fc-eye">Подбор размера · 10 секунд</span>' +
+        '<b class="fc-title">' + (sel ? 'Убедитесь, что ' + esc(sel) + ' — ваш размер' : 'Не уверены в размере?') + '</b>' +
+        '<p class="fc-text">Чтобы вещь села именно так, как задумано, рекомендуем свериться с подбором: укажите рост и вес — подскажем ваш размер и как он сядет.</p>' +
+        '<div class="fc-acts"><button type="button" class="fc-btn" data-fc="find">Подобрать размер<i aria-hidden="true">' + ARROW + '</i></button>' + cmp + '</div></div></div>';
+    }
+    var rec = res.row.size, pref = { close: 'ближе к телу', free: 'свободно', xfree: 'очень свободно' }[sv.pref || 'free'];
+    var who = sv.h + ' см · ' + sv.kg + ' кг · ' + pref, recStock = (col.sizes || []).find(function (x) { return x.size === rec; });
+    var recOut = recStock && recStock.stock <= 0 ? ' <span class="fc-out">— в этом цвете сейчас нет</span>' : '';
+    var state = !sel ? 'rec' : sel === rec ? 'ok' : 'diff';
+    return '<div class="fc is-' + state + '"><span class="fc-ic">' + (state === 'ok' ? '<span class="fc-check">' + FIT_OK + '</span>' : FIT_IC) + '</span><div class="fc-body"><span class="fc-eye">Ваши мерки: ' + esc(who) + '</span>' +
+      (state === 'ok' ? '<b class="fc-title">' + esc(rec) + ' — ваш размер</b><p class="fc-text">Сядет ' + ({ close: 'аккуратно, ближе к телу', free: 'свободно — так, как задумано', xfree: 'очень свободно, с запасом' }[sv.pref || 'free']) + '. Можно смело добавлять в корзину.</p>'
+        : state === 'diff' ? '<b class="fc-title">Вам скорее подойдёт ' + esc(rec) + '</b><p class="fc-text">Вы выбрали ' + esc(sel) + '. По вашим меркам ' + esc(rec) + ' сядет так, как задумано' + recOut + '.</p>'
+        : '<b class="fc-title">Ваш размер — ' + esc(rec) + recOut + '</b><p class="fc-text">Подобрали по вашим меркам. Отметьте его ниже или нажмите «Выбрать».</p>') +
+      '<div class="fc-acts">' + (state !== 'ok' && !recOut ? '<button type="button" class="fc-btn" data-fc="pick" data-size="' + esc(rec) + '">Выбрать ' + esc(rec) + '</button>' : '') +
+        '<button type="button" class="fc-link" data-fc="find">Изменить мерки</button>' + cmp + '</div>' +
+      (res.row.typical ? '<p class="fc-typ">По типичной размерной сетке</p>' : '') + '</div></div>';
   }
   function exchangeCfg() { var e = (D.settings && D.settings.exchange) || {}; return { enabled: e.enabled !== false, days: Math.max(1, Math.round(Number(e.days) || 14)), free: e.free !== false }; }
   var EXCH_IC = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3"></path><path d="M18 3v4h-4M6 21v-4h4"></path></svg>';
@@ -1330,7 +1389,7 @@
         st.pref === 'free' && res.prev ? 'Сомневаетесь между ' + esc(res.prev.size) + ' и ' + esc(r.size) + '? Крой уже свободный: ' + esc(res.prev.size) + ' сядет аккуратнее, ' + esc(r.size) + ' — как на фото.' : '';
       $('#fitRes').innerHTML = '<span class="muted">Ваш размер</span><div class="fit-big"><b>' + esc(r.size) + '</b><span>' + note + '</span></div>' +
         (meas.length ? '<div class="fit-meas">' + meas.map(function (m) { return '<div><span>' + m[0] + '</span><b>' + m[1] + '</b></div>'; }).join('') + '</div>' : '') +
-        (tip ? '<p class="fit-tip">' + tip + '</p>' : '') + fitStockNote(col, r.size);
+        (tip ? '<p class="fit-tip">' + tip + '</p>' : '') + fitStockNote(col, r.size) + (r.typical ? '<p class="fit-typ">Подбор по типичной размерной сетке. Точные мерки изделия — в «Таблице размеров».</p>' : '');
       $('#fitOk').textContent = 'Выбрать размер ' + r.size;
       fitSave(st);
     }
@@ -1345,7 +1404,7 @@
     }
     numIn('#fitHn', 'h', 145, 210); numIn('#fitKn', 'kg', 40, 150);
     $('.fit-pref').addEventListener('click', function (e) { var b = e.target.closest('[data-pref]'); if (b) { st.pref = b.getAttribute('data-pref'); draw(); } });
-    $('#fitOk').addEventListener('click', function () { if (res) { closePanels(); onPick(res.row.size); } });
+    $('#fitOk').addEventListener('click', function () { if (res) { var sv3 = fitSaved(); sv3.done = 1; fitSave(sv3); closePanels(); onPick(res.row.size); } });
     if ($('#fitToCmp')) $('#fitToCmp').addEventListener('click', function () { openFitCompare(p, col, onPick); });
     draw();
   }
@@ -2963,6 +3022,8 @@
         if (sp && ce) { var tmp = document.createElement('div'); tmp.innerHTML = card(sp, ks[1]); var nc = tmp.firstChild; ce.replaceWith(nc); var f = nc.querySelector('[data-sw="' + ks[0] + '|' + ks[1] + '"]'); if (f && e.detail === 0) f.focus(); }
         return;
       }
+      var qf = e.target.closest('[data-qfit]');
+      if (qf) { e.preventDefault(); var kf = qf.getAttribute('data-qfit').split('|'), fp2 = D.products.find(function (x) { return x.id === kf[0]; }); if (fp2) openFitFinder(fp2, Pricing.colorOf(fp2, kf[1]), function () { quickSheet(kf[0], kf[1]); }); return; }
       var qsh = e.target.closest('[data-qsheet]');
       if (qsh) { e.preventDefault(); e.stopPropagation(); var kq = qsh.getAttribute('data-qsheet').split('|'); quickSheet(kq[0], kq[1]); return; }
       var qa = e.target.closest('[data-qa]');

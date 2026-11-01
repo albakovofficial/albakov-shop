@@ -1623,6 +1623,7 @@ async function api(req, res, url, body) {
     if (/bot|crawl|spider|slurp|yandex(bot|images)|googlebot|headless|lighthouse|preview/i.test(String(req.headers['user-agent'] || ''))) return {};
     const e = String(body.e || ''); if (!['v', 'p', 'c', 'k', 'pv'].includes(e)) fail(400, 'Неизвестное событие');
     throttle(req, e === 'pv' ? 'statpv' : 'stat', e === 'pv' ? 600 : 400);
+    if (getSession(req, 'admin')) return {}; // заходы владельца с открытой админкой не считаем, даже если браузер забыл пометку
     const day = new Date(Date.now() + 3 * 36e5).toISOString().slice(0, 10); // по Москве
     // Повторы за день не считаем: браузер шлёт свой случайный номер; без номера — отпечаток адреса и браузера (только в памяти, с солью)
     const sid = /^[a-z0-9]{12,40}$/.test(String(body.id || '')) ? String(body.id) : 'h' + crypto.createHash('sha256').update(STAT_SALT + clientIp(req) + '|' + String(req.headers['user-agent'] || '')).digest('hex').slice(0, 24);

@@ -646,8 +646,10 @@
   var statDay = function () { return new Date(Date.now() + 3 * 36e5).toISOString().slice(0, 10); };
   function statOff() {
     try {
-      if (API.isAdmin) localStorage.setItem('vanta:nostat', '1');
-      return localStorage.getItem('vanta:nostat') === '1' || /^#\/admin/.test(location.hash);
+      // Владелец: вошёл в админку в этом браузере или открыл ссылку с ?nostat=1 (для иконки на экране, Instagram, Telegram и других браузеров телефона)
+      if (API.isAdmin || /[?&]nostat=1\b/.test(location.search)) localStorage.setItem('vanta:nostat', '1');
+      if (/[?&]nostat=0\b/.test(location.search)) localStorage.removeItem('vanta:nostat');
+      return localStorage.getItem('vanta:nostat') === '1' || /^#\/admin/.test(location.hash) || isAdminRoute(location.pathname.split('/')[1] || '');
     } catch (e) { return true; }
   }
   function statId() {

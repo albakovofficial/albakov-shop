@@ -1353,6 +1353,13 @@ async function api(req, res, url, body) {
     if (!validEmail(email)) fail(400, 'Проверьте электронную почту');
     if (db.users.some((x) => x.id !== u.id && x.email === email)) fail(409, 'Эта почта уже используется');
     if (db.users.some((x) => x.id !== u.id && x.phone === phone)) fail(409, 'Этот телефон уже используется');
+    // Смена пароля или почты (почта — это логин) — только с текущим паролем: иначе чужой человек с открытым кабинетом мог бы забрать аккаунт
+    if (body.newPassword || email !== u.email) {
+      const tk = throttle(req, 'pwcheck', 15);
+      if (!String(body.currentPassword || '')) fail(400, body.newPassword ? 'Введите текущий пароль, чтобы сменить его' : 'Введите текущий пароль, чтобы сменить почту');
+      if (!pwOk(body.currentPassword) || !checkPassword(body.currentPassword, u.hash)) fail(400, 'Текущий пароль указан неверно');
+      throttleOk(tk);
+    }
     Object.assign(u, { firstName: body.firstName.trim().slice(0, 60), lastName: body.lastName.trim().slice(0, 60), email, phone });
     if (body.newPassword) { if (String(body.newPassword).length < 6) fail(400, 'Пароль должен быть не короче 6 символов'); if (!pwOk(body.newPassword)) fail(400, 'Слишком длинный пароль'); u.hash = hashPassword(body.newPassword); }
     save(); return { user: publicUser(u) };

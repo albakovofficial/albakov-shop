@@ -1474,14 +1474,33 @@
   }
 
   /* ---------- Акции ---------- */
+  // Блок акции: тёмная карточка, крупная скидка, срок, сколько вещей участвует и ссылка на них
+  function promoBand(a) {
+    var cats = a.scope === 'categories' ? (a.categoryIds || []).map(catById).filter(Boolean) : [];
+    var scope = a.scope === 'all' ? 'Весь каталог' : cats.length ? cats.map(function (c) { return c.name; }).join(', ') : 'Избранные модели';
+    var n = gProducts().filter(function (p) { var pr = priceOf(p); return pr.promotion && pr.promotion.id === a.id; }).length;
+    var href = cats.length === 1 ? '#/catalog?cat=' + encodeURIComponent(cats[0].slug) : '#/catalog?sale=1';
+    var left = '';
+    if (a.endsAt) {
+      var d = Math.ceil((new Date(a.endsAt + 'T23:59:59').getTime() - Date.now()) / 864e5);
+      left = d <= 1 ? 'Последний день' : 'Осталось ' + d + ' ' + plural(d, 'день', 'дня', 'дней');
+    }
+    var pct = a.type === 'percent';
+    return '<article class="pband">' +
+      '<span class="pband-glow" aria-hidden="true"></span><span class="pband-rings" aria-hidden="true"><i></i><i></i><i></i></span>' +
+      '<div class="pband-copy">' +
+        '<div class="pband-tags"><span class="pband-tag"><i aria-hidden="true"></i>' + esc(scope) + '</span>' + (a.endsAt ? '<span class="pband-tag soft">до ' + esc(fmtDate(a.endsAt).replace(/ \d{4} г\.$/, '')) + '</span>' : '') + '</div>' +
+        '<h3>' + esc(a.title) + '</h3>' + (a.description ? '<p>' + esc(a.description) + '</p>' : '') +
+        '<div class="pband-foot"><a class="pband-cta" href="' + esc(href) + '">' + (n ? 'Смотреть ' + n + ' ' + plural(n, 'вещь', 'вещи', 'вещей') : 'Смотреть товары') + '<i aria-hidden="true">' + ARROW + '</i></a>' + (left ? '<span class="pband-left"><b></b>' + left + '</span>' : '') + '</div>' +
+      '</div>' +
+      '<div class="pband-num' + (pct ? '' : ' cur') + '" aria-label="Скидка ' + (pct ? a.value + '%' : fmt(a.value)) + '"><span class="pband-k">скидка</span><span class="pband-v"><em>−</em>' + (pct ? a.value + '<sup>%</sup>' : esc(fmt(a.value))) + '</span></div>' +
+    '</article>';
+  }
   function sale(v) {
     var promos = activePromos();
     var items = gProducts().filter(function (p) { return priceOf(p).onSale; });
     v.innerHTML = '<div class="wrap"><div class="page-head"><span class="eyebrow">Специальные предложения</span><h1>Акции</h1></div>' +
-      (promos.length ? '<div style="display:grid;gap:12px;margin-bottom:56px">' + promos.map(function (a) {
-        var scope = a.scope === 'all' ? 'На весь каталог' : a.scope === 'categories' ? 'Категории: ' + (a.categoryIds || []).map(function (id) { var c = catById(id); return c ? c.name : ''; }).filter(Boolean).join(', ') : 'На отдельные товары';
-        return '<div class="promo-band"><div><span class="eyebrow">' + esc(scope) + (a.endsAt ? ' · до ' + esc(fmtDate(a.endsAt)) : '') + '</span><h3 style="margin-top:12px">' + esc(a.title) + '</h3><p>' + esc(a.description || '') + '</p></div><div class="pct">' + (a.type === 'percent' ? '−' + a.value + '%' : '−' + fmt(a.value)) + '</div></div>';
-      }).join('') + '</div>' : '<p class="muted" style="margin-bottom:40px">Сейчас нет активных акций. Подпишитесь на наши соцсети, чтобы не пропустить следующую.</p>') +
+      (promos.length ? '<div class="pbands">' + promos.map(promoBand).join('') + '</div>' : '<p class="muted" style="margin-bottom:40px">Сейчас нет активных акций. Подпишитесь на наши соцсети, чтобы не пропустить следующую.</p>') +
       (items.length ? '<div class="section-head"><h2>Товары со скидкой</h2></div><div class="grid" style="padding-bottom:96px">' + items.map(card).join('') + '</div>' : '<div style="padding-bottom:96px"></div>') + '</div>';
   }
 

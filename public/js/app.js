@@ -1015,7 +1015,7 @@
   function product(v, parts, q) {
     var p = productBySlug(parts[1]);
     if (!p) return notFound(v);
-    var colors = Pricing.colorsOf(p), notifyOn = Mail.tplOf(D.settings).enabled;
+    var colors = Pricing.colorsOf(p), notifyOn = ((D.settings.notify || {}).enabled) !== false; // «Сообщить о поступлении» включено, пока его не выключили в панели
     var pr = priceOf(p), cat = catById(p.categoryId);
     var chart = D.sizeCharts.find(function (c) { return c.id === p.sizeChartId; });
     // Цвет: из адреса, иначе первый, где что-то есть в наличии
@@ -1362,7 +1362,8 @@
   function swatchStyle(c) { return c.hex ? 'background:' + esc(c.hex) : 'background:var(--surface-2)'; }
   function chartTable(c) {
     return '<div class="table-wrap"><table class="sizes"><thead><tr>' + (c.columns || []).map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr></thead><tbody>' +
-      (c.rows || []).map(function (r) { return '<tr>' + (c.columns || []).map(function (x, i) { return '<td>' + esc(r[i] || '') + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>';
+      (c.rows || []).map(function (r) { return '<tr>' + (c.columns || []).map(function (x, i) { return '<td>' + esc(r[i] || '') + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>' +
+      ((c.columns || []).length > 3 ? '<p class="tw-hint" aria-hidden="true">Таблица листается вбок →</p>' : '');
   }
   function measureHtml() {
     return '<div class="how-measure"><div><b>Обхват груди</b>По самым выступающим точкам, лента горизонтально под мышками.</div><div><b>Обхват талии</b>По самой узкой части туловища, не затягивая ленту.</div><div><b>Обхват бёдер</b>По самым выступающим точкам ягодиц.</div></div>';
@@ -2038,14 +2039,18 @@
         '<div class="row2"><label class="field"><span>Телефон</span><input class="input" id="pf-phone" type="tel" autocomplete="tel" value="' + esc(fmtPhone(u.phone)) + '"></label>' +
         '<label class="field"><span>Электронная почта</span><input class="input" id="pf-email" type="email" autocomplete="email" value="' + esc(u.email) + '"></label></div></fieldset>' +
       '<fieldset><legend>Пароль</legend><p>Заполните, только если хотите сменить пароль.</p>' +
-        '<label class="field"><span>Новый пароль</span><input class="input" id="pf-pass" type="password" autocomplete="new-password" placeholder="Не короче 6 символов"></label></fieldset>' +
+        '<label class="field"><span>Новый пароль</span><input class="input" id="pf-pass" type="password" autocomplete="new-password" placeholder="Не короче 6 символов"></label>' +
+        '<label class="field" id="pfCurRow" hidden><span>Текущий пароль</span><input class="input" id="pf-cur" type="password" autocomplete="current-password" placeholder="Для смены пароля или почты"></label></fieldset>' +
       '<fieldset><legend>Письма</legend><p>Только по делу — никаких рассылок.</p><label class="check"><input type="checkbox" data-remind' + (u.cartRemind ? ' checked' : '') + '> <span>Напоминать о товарах в корзине, если я не оформил заказ<br><small class="muted">Одно письмо на корзину, через несколько часов</small></span></label></fieldset>' +
       '<p class="form-error" id="pfErr"></p><div class="acc-profile-act"><button class="btn">Сохранить изменения</button><button class="btn ghost" type="button" id="pfOut">Выйти из аккаунта</button></div></form>';
     phoneMask($('#pf-phone'));
+    // Поле «Текущий пароль» появляется, когда меняют пароль или почту
+    var curNeed = function () { var need = !!$('#pf-pass').value || $('#pf-email').value.trim().toLowerCase() !== String(u.email || '').toLowerCase(); $('#pfCurRow').hidden = !need; };
+    ['#pf-pass', '#pf-email'].forEach(function (q) { $(q).addEventListener('input', curNeed); });
     $('#pfOut').addEventListener('click', async function () { await API.logout(); toast('Вы вышли из аккаунта'); go('#/'); });
     $('#profForm').addEventListener('submit', async function (e) {
       e.preventDefault();
-      var f = { firstName: $('#pf-first').value, lastName: $('#pf-last').value, phone: $('#pf-phone').value, email: $('#pf-email').value, newPassword: $('#pf-pass').value };
+      var f = { firstName: $('#pf-first').value, lastName: $('#pf-last').value, phone: $('#pf-phone').value, email: $('#pf-email').value, newPassword: $('#pf-pass').value, currentPassword: $('#pf-cur').value };
       var er = !f.firstName.trim() || !f.lastName.trim() ? 'Укажите имя и фамилию' : !validPhone(f.phone) ? 'Проверьте номер телефона' : !validEmail(f.email) ? 'Проверьте электронную почту' : f.newPassword && f.newPassword.length < 6 ? 'Пароль должен быть не короче 6 символов' : '';
       if (er) { $('#pfErr').textContent = er; return; }
       try { await API.updateProfile(f); toast('Изменения сохранены'); go('#/account?tab=profile'); } catch (ex) { $('#pfErr').textContent = errMsg(ex); }
@@ -2844,10 +2849,12 @@
   function adminPage(v, parts, q) {
     if (window.Admin) { window.Admin.render(v, parts, q); return; }
     v.innerHTML = '<div class="loader">…</div>';
-    if (!adminLoading) adminLoading = new Promise(function (ok, bad) {
-      var sc = document.createElement('script'); sc.src = 'js/admin.js?v=' + ((document.querySelector('script[src*="js/app.js"]') || {}).src || '').split('v=')[1];
-      sc.onload = ok; sc.onerror = function () { adminLoading = null; bad(); }; document.body.appendChild(sc);
-    });
+    // Панель и шаблоны писем загружаются только тем, кто открыл админку, — покупателям они не нужны
+    if (!adminLoading) adminLoading = (function () {
+      var ver = ((document.querySelector('script[src*="js/app.js"]') || {}).src || '').split('v=')[1];
+      var load = function (src) { return new Promise(function (ok, bad) { var sc = document.createElement('script'); sc.src = src + '?v=' + ver; sc.onload = ok; sc.onerror = bad; document.body.appendChild(sc); }); };
+      return (window.Mail ? Promise.resolve() : load('js/mail.js')).then(function () { return load('js/admin.js'); }).catch(function (e) { adminLoading = null; throw e; });
+    })();
     adminLoading.then(function () { if (window.Admin && $('#view') === v) window.Admin.render(v, parts, q); },
       function () { v.innerHTML = '<div class="wrap"><div class="empty"><h3>Не удалось загрузить панель</h3><p>Проверьте интернет и обновите страницу.</p></div></div>'; });
   }

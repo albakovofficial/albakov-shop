@@ -453,7 +453,7 @@ async function refundOrder(o, b) {
     deducted: plan.deducted || 0
   };
   if (plan.deducted && Array.isArray(o.returns)) o.returns.forEach((r) => { if (r.cost && !r.deducted) r.deducted = true; });
-  o.refunds = o.refunds || []; o.refunds.push(refund);
+  o.refunds = o.refunds || []; o.refunds.push(refund); hist(o, 'Возврат денег: ' + Pricing.format(refund.amount) + (refund.reason ? ' — ' + refund.reason : ''), 'admin');
   plan.sel.forEach((x) => {
     const it = o.items[x.idx]; it.refundedQty = (it.refundedQty || 0) + x.qty;
     if (b.restock) { const st = sizeEntry(it.productId, it.colorId, it.size); if (st) st.stock += x.qty; }
@@ -498,13 +498,18 @@ async function createPayment(order) {
   order.payUrl = p.confirmation && p.confirmation.confirmation_url;
   return order.payUrl;
 }
+// История заказа: что и когда менялось (статус, оплата, трек-номер, возвраты) — видна в карточке заказа в панели
+const ST_RU = { new: 'Новый', processing: 'Собирается', shipped: 'Передан в доставку', done: 'Выполнен', canceled: 'Отменён', returned: 'Возврат' };
+const PAY_RU = { pending: 'ожидает оплаты', paid: 'оплачен', canceled: 'оплата отменена', refunded: 'деньги возвращены' };
+function hist(o, text, by) { (o.history = o.history || []).push({ at: new Date().toISOString(), text: String(text).slice(0, 300), by: by || 'system' }); if (o.history.length > 200) o.history = o.history.slice(-200); }
 function applyPayment(order, p) {
   if (!order || !p) return;
   if (p.test) order.test = true;
-  if (p.status === 'succeeded' && p.paid) { if (order.payment.status !== 'paid') { order.payment.status = 'paid'; sendOrderMails(order); giftActivate(order); } }
+  if (p.status === 'succeeded' && p.paid) { if (order.payment.status !== 'paid') { order.payment.status = 'paid'; hist(order, 'Оплата получена онлайн'); sendOrderMails(order); giftActivate(order); } }
   else if (p.status === 'canceled') {
     // оплата не прошла: возвращаем товар и промокод, если заказ ещё не был отменён вручную
     if (order.status !== 'canceled') {
+      hist(order, 'Онлайн-оплата не прошла — заказ отменён, товар вернулся на склад');
       restock(order); giftReturn(order);
       if (order.kind === 'gift') { const g = db.giftcards.find((x) => x.id === order.giftId); if (g && g.status === 'pending') g.status = 'canceled'; }
       const pc = order.promoCode && db.promocodes.find((x) => x.code === order.promoCode);
@@ -618,7 +623,7 @@ async function placeOrder(req, b) {
   const idem = /^[a-z0-9]{16,64}$/i.test(String(b.idem || '')) ? String(b.idem) : '';
   if (idem && recentOrders.has(idem)) {
     const prev = db.orders.find((o) => o.id === recentOrders.get(idem).id);
-    if (prev) return { order: orderView(prev), token: prev.token, payUrl: prev.payment.status === 'paid' ? null : prev.payUrl || null, user: publicUser(currentUser(req)), repeated: true };
+    if (prev) return { order: customerView(prev), token: prev.token, payUrl: prev.payment.status === 'paid' ? null : prev.payUrl || null, user: publicUser(currentUser(req)), repeated: true };
   }
   const user = currentUser(req), c = b.customer || {};
   const customer = { firstName: String(c.firstName || '').trim().slice(0, 60), lastName: String(c.lastName || '').trim().slice(0, 60), phone: normPhone(c.phone), email: String(c.email || '').trim().toLowerCase().slice(0, 120) };
@@ -682,6 +687,7 @@ async function placeOrder(req, b) {
   if (q.giftUsed) { const g = findGift(q.gift.code); g.balance -= q.giftUsed; (g.log = g.log || []).push({ at: order.createdAt, orderId: order.id, number: order.number, amount: -q.giftUsed, type: 'spend' }); }
   // Весь заказ оплачен бонусами — платить деньгами нечего
   if (order.total === 0) order.payment = { method: order.giftUsed ? 'gift' : 'bonus', status: 'paid', provider: null };
+  hist(order, 'Заказ оформлен на сайте', 'customer');
   db.orders.push(order);
   const spent = q.bonusUsed ? Pricing.bonusMove(user, -q.bonusUsed, 'spend', order, uid) : null;
   let payUrl = null;
@@ -700,7 +706,7 @@ async function placeOrder(req, b) {
   if (order.payment.method !== 'online') sendOrderMails(order); // при онлайн-оплате письмо уйдёт после оплаты
   stockMail(q.lines);
   console.log(`Новый заказ № ${order.number} на ${order.total} ₽`);
-  return { order: orderView(order), token: order.token, payUrl, user: publicUser(user) };
+  return { order: customerView(order), token: order.token, payUrl, user: publicUser(user) };
 }
 /* Отправка письма: картинки с нашего сайта (логотип, фото товаров) вкладываем в само письмо,
    иначе Mail.ru, Яндекс и другие прячут их, пока получатель не нажмёт «Показать изображения» */
@@ -1066,6 +1072,7 @@ function createExchangeOrder(o, r) {
     total: 0, payment: { method: 'exchange', status: 'paid', provider: null }, status: 'new', bonusUsed: 0, bonusEarn: 0, exchangeOf: { id: o.id, number: o.number }
   };
   delete order.delivery.tariff;
+  hist(order, 'Создан заказ-обмен по заказу № ' + o.number, 'admin');
   db.orders.push(order);
   return order;
 }
@@ -1205,6 +1212,8 @@ function createUser(res, f, hash, extra) {
 function welcomeInfo() { const b = Pricing.bonusConf(db.settings); return { bonusPercent: b.earn ? b.percent : 0, promo: welcomePromo() }; }
 
 function orderView(o) { const c = Object.assign({}, o); delete c.token; c.requestState = requestState(o); c.doneAt = doneAtOf(o) || undefined; return c; }
+// Покупателю — без служебного: заметка магазина и история изменений видны только в панели
+function customerView(o) { const c = orderView(o); delete c.adminNote; delete c.history; return c; }
 
 /* ---------------- Маршруты API ---------------- */
 async function api(req, res, url, body) {
@@ -1344,13 +1353,20 @@ async function api(req, res, url, body) {
     if (!validEmail(email)) fail(400, 'Проверьте электронную почту');
     if (db.users.some((x) => x.id !== u.id && x.email === email)) fail(409, 'Эта почта уже используется');
     if (db.users.some((x) => x.id !== u.id && x.phone === phone)) fail(409, 'Этот телефон уже используется');
+    // Смена пароля или почты (почта — это логин) — только с текущим паролем: иначе чужой человек с открытым кабинетом мог бы забрать аккаунт
+    if (body.newPassword || email !== u.email) {
+      const tk = throttle(req, 'pwcheck', 15);
+      if (!String(body.currentPassword || '')) fail(400, body.newPassword ? 'Введите текущий пароль, чтобы сменить его' : 'Введите текущий пароль, чтобы сменить почту');
+      if (!pwOk(body.currentPassword) || !checkPassword(body.currentPassword, u.hash)) fail(400, 'Текущий пароль указан неверно');
+      throttleOk(tk);
+    }
     Object.assign(u, { firstName: body.firstName.trim().slice(0, 60), lastName: body.lastName.trim().slice(0, 60), email, phone });
     if (body.newPassword) { if (String(body.newPassword).length < 6) fail(400, 'Пароль должен быть не короче 6 символов'); if (!pwOk(body.newPassword)) fail(400, 'Слишком длинный пароль'); u.hash = hashPassword(body.newPassword); }
     save(); return { user: publicUser(u) };
   }
 
   if (p[0] === 'orders') {
-    if (!p[1] && M === 'GET') { const u = user(); if (!u) fail(401, 'Войдите в личный кабинет'); return { orders: db.orders.filter((o) => o.userId === u.id).reverse().map(orderView) }; }
+    if (!p[1] && M === 'GET') { const u = user(); if (!u) fail(401, 'Войдите в личный кабинет'); return { orders: db.orders.filter((o) => o.userId === u.id).reverse().map(customerView) }; }
     if (!p[1] && M === 'POST') { throttle(req, 'order', 20); return await placeOrder(req, body); }
     if (p[1] && p[2] === 'request' && M === 'POST') {
       throttle(req, 'request', 20);
@@ -1358,7 +1374,7 @@ async function api(req, res, url, body) {
       const allowed = o && ((u && o.userId === u.id) || safeEqual(String(body.t || ''), o.token));
       if (!allowed) fail(404, 'Заказ не найден');
       const r = await createRequest(o, body);
-      return { order: orderView(o), request: r };
+      return { order: customerView(o), request: r };
     }
     if (p[1] && M === 'GET') {
       const o = db.orders.find((x) => x.id === p[1]); const u = user();
@@ -1366,7 +1382,7 @@ async function api(req, res, url, body) {
       const allowed = o && ((u && o.userId === u.id) || safeEqual(t, o.token) || getSession(req, 'admin'));
       if (!allowed) fail(404, 'Заказ не найден');
       await syncPayment(o);
-      return { order: orderView(o) };
+      return { order: getSession(req, 'admin') ? orderView(o) : customerView(o) };
     }
   }
 
@@ -1427,7 +1443,7 @@ async function api(req, res, url, body) {
     try { payUrl = await createPayment(order); }
     catch (e) { db.giftcards = db.giftcards.filter((x) => x.id !== g.id); db.orders = db.orders.filter((x) => x.id !== order.id); save(); throw e; }
     save();
-    return { order: orderView(order), token: order.token, payUrl };
+    return { order: customerView(order), token: order.token, payUrl };
   }
   // «Где мой заказ» без входа: номер заказа и телефон из него → секретная ссылка на страницу заказа
   if (p[0] === 'track' && M === 'POST') {
@@ -1728,9 +1744,10 @@ async function api(req, res, url, body) {
         if (body.status !== 'canceled' && o.status === 'canceled' && pc) pc.used = (pc.used || 0) + 1;
         if (o.status === 'canceled' && body.status !== 'canceled') { unrestock(o); giftReapply(o); }
         if (body.status === 'done' && o.status !== 'done') o.doneAt = new Date().toISOString();
+        if (o.status !== body.status) hist(o, 'Статус: ' + (ST_RU[o.status] || o.status) + ' → ' + (ST_RU[body.status] || body.status) + (body.status === 'canceled' ? ' (товар вернулся на склад)' : ''), 'admin');
         o.status = body.status;
       }
-      if (body.paymentStatus && pays.includes(body.paymentStatus)) { o.payment.status = body.paymentStatus; giftActivate(o); }
+      if (body.paymentStatus && pays.includes(body.paymentStatus)) { if (o.payment.status !== body.paymentStatus) hist(o, 'Оплата: ' + (PAY_RU[body.paymentStatus] || body.paymentStatus), 'admin'); o.payment.status = body.paymentStatus; giftActivate(o); }
       // Трек-номер СДЭК: сохраняем, ставим «Передан в доставку» и пишем покупателю
       let tracked = false;
       if (typeof body.track === 'string') {
@@ -1740,15 +1757,16 @@ async function api(req, res, url, body) {
         if (!t) delete o.tracking;
         else if (t !== prev) {
           o.tracking = { carrier: 'СДЭК', number: t, url: CDEK_TRACK + encodeURIComponent(t), at: new Date().toISOString() };
-          if (o.status === 'new' || o.status === 'processing') o.status = 'shipped';
+          hist(o, 'Трек-номер СДЭК: ' + t, 'admin');
+          if (o.status === 'new' || o.status === 'processing') { hist(o, 'Статус: ' + (ST_RU[o.status] || o.status) + ' → Передан в доставку', 'admin'); o.status = 'shipped'; }
           tracked = true;
         }
       }
-      if (typeof body.note === 'string') o.adminNote = body.note.slice(0, 2000);
+      if (typeof body.note === 'string') { if ((o.adminNote || '') !== body.note.slice(0, 2000)) hist(o, 'Изменена заметка к заказу', 'admin'); o.adminNote = body.note.slice(0, 2000); }
       syncBonus(o);
       save();
       let mailed = false;
-      if (tracked && body.notify !== false && mailReady()) { try { await sendTrackingMail(o); o.tracking.mailedAt = new Date().toISOString(); save(); mailed = true; } catch (e) { console.error('Письмо с трек-номером не отправлено:', e.message); } }
+      if (tracked && body.notify !== false && mailReady()) { try { await sendTrackingMail(o); o.tracking.mailedAt = new Date().toISOString(); hist(o, 'Покупателю отправлено письмо с трек-номером'); save(); mailed = true; } catch (e) { console.error('Письмо с трек-номером не отправлено:', e.message); } }
       const notify = await processWaitlist(); return { order: orderView(o), notify, trackMailed: mailed };
     }
     if (p[1] === 'users' && p[2] && p[3] === 'bonus' && M === 'POST') {
@@ -1873,7 +1891,9 @@ function serveStatic(req, res, pathname) {
   const ext = path.extname(file).toLowerCase();
   // Фото товаров не меняются (новое фото — новый файл) — кэшируем надолго. Остальное браузер перепроверяет
   // при каждом заходе (ответ 304 без загрузки), поэтому новая версия сайта видна сразу после обновления
-  const immutable = file.includes(path.sep + 'uploads' + path.sep) || ext === '.woff2';
+  // Скрипты и стили подключаются с номером версии (app.js?v=13.44.0): новая версия — новый адрес, поэтому их тоже кэшируем надолго
+  const versioned = (ext === '.js' || ext === '.css') && /[?&]v=\d+\.\d+\.\d+/.test(String(req.url || ''));
+  const immutable = file.includes(path.sep + 'uploads' + path.sep) || ext === '.woff2' || versioned;
   const st = fs.statSync(file), lm = new Date(Math.floor(st.mtimeMs / 1000) * 1000).toUTCString();
   if (!immutable && req.headers['if-modified-since'] === lm) { res.writeHead(304, { 'Cache-Control': 'no-cache', 'Last-Modified': lm }); return res.end(); }
   res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache', 'Last-Modified': lm });

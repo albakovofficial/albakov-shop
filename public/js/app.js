@@ -1364,13 +1364,13 @@
     box.innerHTML = '<div class="pship is-load"><div class="pship-head"><span class="pship-ic">' + TRUCK_IC + '</span><span class="pship-t">Доставка в <button type="button" class="pship-city" data-ship-city>' + esc(inCity(c.city)) + '</button></span></div><div class="pship-rows"><span class="pship-skel"></span><span class="pship-skel"></span></div></div>';
     var r = null; try { r = await API.shipEstimate(c.code, p.id); } catch (e) { r = null; }
     if (my !== shipSeq || !document.body.contains(box)) return;
-    var list = (r && r.methods) || ms.map(function (m) { return { name: m.name, kind: Pricing.cdekMode(m), price: Number(m.price) || 0, days: '', freeFrom: Number(m.freeFrom) || 0 }; });
+    var list = (r && r.methods) || ms.map(function (m) { return { name: m.name, kind: Pricing.cdekMode(m), price: Number(m.price) || 0, known: !m.priceAuto, days: '', freeFrom: Number(m.freeFrom) || 0 }; });
     var price = priceOf(p).price;
     box.innerHTML = '<div class="pship"><div class="pship-head"><span class="pship-ic">' + TRUCK_IC + '</span><span class="pship-t">Доставка в <button type="button" class="pship-city" data-ship-city aria-label="Изменить город, сейчас ' + esc(c.city) + '">' + esc(inCity(c.city)) + '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button></span></div>' +
       '<div class="pship-rows">' + list.map(function (m) {
         var free = m.freeFrom && price >= m.freeFrom;
         return '<div class="pship-row"><span class="pship-n">' + (m.kind === 'door' ? 'Курьером до двери' : 'В пункт выдачи СДЭК') + (m.days ? '<small>' + esc(daysWord(m.days)) + '</small>' : '') + '</span>' +
-          '<span class="pship-p">' + (free ? '<b class="ok">Бесплатно</b>' : m.price ? fmt(m.price) : '<b class="ok">Бесплатно</b>') + (m.freeFrom && !free ? '<small>бесплатно от ' + fmt(m.freeFrom) + '</small>' : '') + '</span></div>';
+          '<span class="pship-p">' + (free ? '<b class="ok">Бесплатно</b>' : m.known === false ? 'по тарифу СДЭК<small>цену покажем при оформлении</small>' : m.price ? fmt(m.price) : '<b class="ok">Бесплатно</b>') + (m.freeFrom && !free ? '<small>бесплатно от ' + fmt(m.freeFrom) + '</small>' : '') + '</span></div>';
       }).join('') + '</div>' +
       (r && list.some(function (m) { return m.days; }) ? '<p class="pship-note">Срок СДЭК — со дня отправки заказа. Точную цену покажем при оформлении.</p>' : '') + '</div>';
   }

@@ -1753,12 +1753,14 @@ async function api(req, res, url, body) {
     const out = [];
     for (const m of ms) {
       const kind = Pricing.cdekMode(m) === 'door' ? 'door' : 'pvz';
-      let price = Math.round(Number(m.price) || 0), days = '';
+      // known — цена точно известна: фиксированная из настроек или посчитанная СДЭК. Цена «по тарифу», которую СДЭК не посчитал, не 0 ₽
+      let price = Math.round(Number(m.price) || 0), days = '', known = !m.priceAuto;
       if (cdek.ready() && from) {
-        try { const r = await cdekShipPrice(m, city, kind, [{ productId: prod.id, qty: 1 }]); if (r) { if (m.priceAuto) price = r.price; days = r.days; } }
+        try { const r = await cdekShipPrice(m, city, kind, [{ productId: prod.id, qty: 1 }]); if (r) { if (m.priceAuto && Number(r.price) > 0) { price = Math.round(r.price); known = true; } days = r.days; } }
         catch (e) { console.error('СДЭК срок:', e.message); }
       }
-      out.push({ id: m.id, name: m.name, kind, price, days, freeFrom: Math.round(Number(m.freeFrom) || 0) });
+      if (!known) price = 0;
+      out.push({ id: m.id, name: m.name, kind, price, known, days, freeFrom: Math.round(Number(m.freeFrom) || 0) });
     }
     return { methods: out };
   }

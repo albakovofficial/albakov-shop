@@ -34,6 +34,8 @@
   }
 
   /* ================= SERVER ================= */
+  // Вход и выход: подписка на push-уведомления этого устройства переходит к аккаунту (push.js)
+  function authChanged() { try { document.dispatchEvent(new CustomEvent('auth:change')); } catch (e) { /* старый браузер */ } }
   async function call(method, url, body) {
     var r;
     try { r = await fetch(url, { method: method, credentials: 'same-origin', headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined }); }
@@ -48,13 +50,16 @@
   var Server = {
     async init(state) { this.user = state.user || null; this.isAdmin = !!state.isAdmin; if (this.user) Fav.merge(this.user); Cart.merge(this.user); return state.data; },
     // Ответ: { user, welcome } — аккаунт создан сразу; { pending } — на почту ушёл код, ждём его
-    async register(f) { var r = await call('POST', 'api/auth/register', f); if (r.user) { this.user = r.user; Fav.merge(r.user); Cart.merge(r.user); } return r; },
-    async verify(id, code) { var r = await call('POST', 'api/auth/verify', { id: id, code: code }); this.user = r.user; Fav.merge(r.user); Cart.merge(r.user); return r; },
+    async register(f) { var r = await call('POST', 'api/auth/register', f); if (r.user) { this.user = r.user; Fav.merge(r.user); Cart.merge(r.user); authChanged(); } return r; },
+    async verify(id, code) { var r = await call('POST', 'api/auth/verify', { id: id, code: code }); this.user = r.user; Fav.merge(r.user); Cart.merge(r.user); authChanged(); return r; },
     async resendCode(id) { return await call('POST', 'api/auth/resend', { id: id }); },
     async forgot(l) { return await call('POST', 'api/auth/forgot', { login: l }); },
     async resetPassword(id, code, password) { this.user = (await call('POST', 'api/auth/reset', { id: id, code: code, password: password })).user; Fav.merge(this.user); Cart.merge(this.user); return this.user; },
-    async login(l, p) { var r = await call('POST', 'api/auth/login', { login: l, password: p }); this.user = r.user; this.isAdmin = !!r.isAdmin; Fav.merge(this.user); Cart.merge(this.user); return this.user; },
-    async logout() { await call('POST', 'api/auth/logout'); this.user = null; this.isAdmin = false; Fav.set([], true); Cart.set([], true); },
+    // Вход сотрудника с нового устройства: сервер вместо входа просит код из письма — { confirm: { id, email, minutes, resendIn } }
+    async loginConfirm(id, code) { var r = await call('POST', 'api/auth/login-confirm', { id: id, code: code }); this.user = r.user; this.isAdmin = !!r.isAdmin; Fav.merge(this.user); Cart.merge(this.user); authChanged(); return r; },
+    async loginResend(id) { return await call('POST', 'api/auth/login-resend', { id: id }); },
+    async login(l, p) { var r = await call('POST', 'api/auth/login', { login: l, password: p }); if (r.confirm) return { confirm: r.confirm }; this.user = r.user; this.isAdmin = !!r.isAdmin; Fav.merge(this.user); Cart.merge(this.user); authChanged(); return this.user; },
+    async logout() { await call('POST', 'api/auth/logout'); this.user = null; this.isAdmin = false; Fav.set([], true); Cart.set([], true); authChanged(); },
     async geoStreet(q, city, region) { return (await call('GET', 'api/geo/street?q=' + encodeURIComponent(q) + '&city=' + encodeURIComponent(city || '') + '&region=' + encodeURIComponent(region || ''))).items; },
     async cdekCities(q) { return (await call('GET', 'api/cdek/cities?q=' + encodeURIComponent(q))).cities; },
     async shipEstimate(city, pid) { return await call('GET', 'api/cdek/estimate?city=' + encodeURIComponent(city) + '&pid=' + encodeURIComponent(pid)); },
@@ -111,6 +116,11 @@
     async adminOrderDelete(id) { return await call('DELETE', 'api/admin/orders/' + encodeURIComponent(id)); },
     // Финансы: ставки и категории, себестоимость, операции вручную
     // Сотрудники: список, выдать роль по телефону, сменить роль, забрать доступ
+    // Push-уведомления: настройки покупателя и сотрудника, рассылка акций
+    async pushPrefs(prefs) { return await call(prefs ? 'PUT' : 'GET', 'api/me/push', prefs ? { prefs: prefs } : undefined); },
+    async adminAudit(q) { return await call('GET', 'api/admin/audit?' + new URLSearchParams(q || {}).toString()); },
+    async adminPush(prefs) { return await call(prefs ? 'PUT' : 'GET', 'api/admin/push', prefs ? { prefs: prefs } : undefined); },
+    async adminPushBroadcast(b) { return await call('POST', 'api/admin/push/broadcast', b); },
     async adminStaff(m, id, body) { return (await call(m, 'api/admin/staff' + (id ? '/' + encodeURIComponent(id) : ''), body)).staff; },
     async adminFinance(value) { return (await call('PUT', 'api/admin/finance/settings', { value: value })).finance; },
     async adminCosts(costs) { return (await call('PUT', 'api/admin/finance/costs', { costs: costs })).finance; },

@@ -232,17 +232,20 @@
   /* Код подтверждения почты. ctx: { store, logo, code, minutes, name } */
   function renderCode(ctx) {
     var code = String(ctx.code), spaced = code.slice(0, 3) + ' ' + code.slice(3);
-    var reset = ctx.purpose === 'reset';
-    var subject = spaced + (reset ? ' — код для нового пароля ' : ' — код подтверждения ') + ctx.store;
+    // purpose: 'reset' — новый пароль, 'login' — вход в панель с нового устройства, иначе — подтверждение почты при регистрации
+    var P = ({
+      reset: { subj: ' — код для нового пароля ', eyebrow: 'Восстановление пароля', lead: 'Введите его на сайте и придумайте новый пароль.', foot: 'Если вы не запрашивали новый пароль, просто удалите это письмо — без кода пароль не изменится.', text: 'Код для нового пароля' },
+      login: { subj: ' — код для входа в панель ', eyebrow: 'Вход с нового устройства', lead: 'Кто-то вошёл в ваш аккаунт с доступом к панели магазина с нового устройства' + (ctx.device ? ' (' + ctx.device + ')' : '') + '. Если это вы — введите код на сайте.', foot: 'Если это были не вы — не вводите код и смените пароль: ваш пароль знает кто-то ещё.', text: 'Код для входа в панель' }
+    })[ctx.purpose] || { subj: ' — код подтверждения ', eyebrow: 'Подтверждение почты', lead: 'Введите его на сайте, чтобы закончить регистрацию.', foot: 'Если вы не регистрировались на сайте ' + esc(ctx.store) + ', просто удалите это письмо — без кода аккаунт не создастся.', text: 'Код подтверждения' };
+    var subject = spaced + P.subj + ctx.store;
     var cells = code.split('').map(function (dg) {
       return '<td align="center" style="width:48px;height:62px;background:' + K.soft + ';border:1px solid ' + K.line + ';border-radius:14px;font-family:' + F + ';font-size:30px;font-weight:500;color:' + K.ink + ';">' + esc(dg) + '</td>';
     });
     var boxes = '<table role="presentation" class="code" cellpadding="0" cellspacing="6" border="0" style="margin:0 -6px;border-collapse:separate;"><tr>' + cells.slice(0, 3).join('') + '<td style="width:12px;"></td>' + cells.slice(3).join('') + '</tr></table>';
-    var body = hero(reset ? 'Восстановление пароля' : 'Подтверждение почты', ctx.name ? ctx.name + ', ваш код' : 'Ваш код', reset ? 'Введите его на сайте и придумайте новый пароль.' : 'Введите его на сайте, чтобы закончить регистрацию.') +
+    var body = hero(P.eyebrow, ctx.name ? ctx.name + ', ваш код' : 'Ваш код', esc(P.lead)) +
       gap(30) + sec(boxes) + gap(18) + sec(p('Код действует ' + ctx.minutes + ' минут. Никому его не сообщайте — сотрудники ' + esc(ctx.store) + ' никогда не спрашивают коды.', 'font-size:13px;color:' + K.dim + ';'));
-    var footer = reset ? 'Если вы не запрашивали новый пароль, просто удалите это письмо — без кода пароль не изменится.' : 'Если вы не регистрировались на сайте ' + esc(ctx.store) + ', просто удалите это письмо — без кода аккаунт не создастся.';
-    var text = reset ? 'Код для нового пароля: ' + code + '\nВведите его на сайте и придумайте новый пароль. Код действует ' + ctx.minutes + ' минут.\n\nЕсли вы не запрашивали новый пароль, просто удалите это письмо.' : 'Код подтверждения: ' + code + '\nВведите его на сайте, чтобы закончить регистрацию. Код действует ' + ctx.minutes + ' минут.\n\nЕсли вы не регистрировались на сайте ' + ctx.store + ', просто удалите это письмо.';
-    return { subject: subject, html: shell(ctx, { subject: subject, preheader: 'Код: ' + spaced + '. Действует ' + ctx.minutes + ' минут.', body: body, footer: footer }), text: text };
+    var text = P.text + ': ' + code + '\n' + P.lead + ' Код действует ' + ctx.minutes + ' минут.\n\n' + P.foot.replace(/<[^>]+>/g, '');
+    return { subject: subject, html: shell(ctx, { subject: subject, preheader: 'Код: ' + spaced + '. Действует ' + ctx.minutes + ' минут.', body: body, footer: P.foot }), text: text };
   }
 
   /* Письмо после регистрации. ctx: { store, logo, name, url, bonusPercent, promo: { code, text }, contacts } */

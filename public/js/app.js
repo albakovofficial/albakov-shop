@@ -210,14 +210,13 @@
   function drawerMenuHtml() {
     var nav = (D.settings.nav || []).filter(function (n) { return !navEmpty(n.link); });
     var gift = !D.giftCfg || D.giftCfg.enabled !== false;
-    var st = D.settings, legal = String(st.legal || '').split(/\s*[,;]\s*/).filter(Boolean);
+    var st = D.settings;
     var docs = D.pages.filter(function (pg) { return pg.inFooter && pg.group === 'legal'; });
     // Владелец вошёл в панель — кнопка «Панель управления» первой строкой меню
     var admin = API.isAdmin ? '<a class="mm-admin" href="#/admin"><span class="mm-admin-ic">' + MM_IC.grid + '</span><span><b>Панель управления</b><small>Заказы, товары, финансы</small></span><span class="mm-ar">' + MM_IC.arrow + '</span></a>' : '';
-    // Внизу — продавец, документы и знак, как в подвале на компьютере
+    // Внизу — документы списком и знак; реквизиты продавца — в подвале сайта и в оферте
     var foot = '<div class="mm-foot">' +
-      (legal.length ? '<div class="mm-seller"><span class="mm-seller-t">Продавец</span>' + legal.map(function (x) { return '<span>' + esc(x) + '</span>'; }).join('') + '</div>' : '') +
-      (docs.length ? '<nav class="mm-docs" aria-label="Документы">' + docs.map(function (pg) { return '<a href="#/page/' + esc(pg.slug) + '">' + esc(pg.title) + '</a>'; }).join('') + '</nav>' : '') +
+      (docs.length ? '<div class="mm-h"><span>Документы</span></div><nav class="mm-docs" aria-label="Документы">' + docs.map(function (pg) { return '<a href="#/page/' + esc(pg.slug) + '"><span class="mm-doc-ic">' + MM_IC.page + '</span><span class="mm-doc-t">' + esc(pg.title) + '</span><span class="mm-ar">' + MM_IC.arrow + '</span></a>'; }).join('') + '</nav>' : '') +
       '<p class="mm-copy">© ' + new Date().getFullYear() + ' ' + esc(st.storeName) + ((st.brand || {}).trademark !== false ? '®. Все права защищены. ' + esc(st.storeName) + ' — зарегистрированный товарный знак' : '. Все права защищены') + '</p></div>';
     return admin + genderTabs('gtabs-drawer mm-seg') +
       '<div class="mm-quick">' +
@@ -435,7 +434,7 @@
     try { history.replaceState(null, '', location.hash.slice(1)); return true; } catch (e) { return false; }
   }
   fromOldHash();
-  window.ALB_NAV = { go: navTo, cur: curRoute, path: toPath };
+  window.ALB_NAV = { go: navTo, cur: curRoute };
   function parseHash() {
     var h = curRoute().replace(/^#\/?/, '');
     var qi = h.indexOf('?'), path = qi === -1 ? h : h.slice(0, qi), q = {};
@@ -3114,7 +3113,7 @@
       return;
     }
     API = c.api; D = c.data;
-    window.App = { careIcon: careIcon, API: API, D: D, plural: plural, slideHtml: slideHtml, slidePromo: slidePromo, slideVisible: slideVisible, brandHtml: brandHtml, brandMode: brandMode, esc: esc, fmt: fmt, md: md, toast: toast, errMsg: errMsg, imgOf: imgOf, refresh: refresh, go: go, openModal: openModal, closePanels: closePanels, fmtPhone: fmtPhone, fmtDate: fmtDate, STATUS: STATUS, PAY: PAY, chartTable: chartTable };
+    window.App = { careIcon: careIcon, API: API, D: D, plural: plural, slideHtml: slideHtml, brandHtml: brandHtml, brandMode: brandMode, esc: esc, fmt: fmt, toast: toast, errMsg: errMsg, imgOf: imgOf, refresh: refresh, go: go, openModal: openModal, closePanels: closePanels, fmtPhone: fmtPhone, fmtDate: fmtDate, STATUS: STATUS, PAY: PAY };
     renderShell();
     initAnalytics();
     document.addEventListener('click', function (e) {

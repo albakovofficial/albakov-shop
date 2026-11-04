@@ -101,5 +101,5 @@
     });
   }
 
-  root.Install = { isIOS: isIOS, isMobile: isMobile, isInstalled: isInstalled, canOffer: canOffer, showBanner: showBanner, hideBanner: hideBanner, open: open, IC: IC };
+  root.Install = { isMobile: isMobile, isInstalled: isInstalled, canOffer: canOffer, showBanner: showBanner, hideBanner: hideBanner, open: open };
 })(this);

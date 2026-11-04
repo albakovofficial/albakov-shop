@@ -369,7 +369,7 @@
     return { weight: Math.min(30000, Math.max(50, Math.round(w + (Number(pk.weight) || 0)))), length: pk.length, width: pk.width, height: pk.height, pack: pk.name, count: n };
   }
 
-  var api = { isPvzMethod: isPvzMethod, isDoorMethod: isDoorMethod, cdekMode: cdekMode, cdekPacks: cdekPacks, parcelFor: parcelFor, DEFAULT_PACKS: DEFAULT_PACKS, bonusConf: bonusConf, bonusFor: bonusFor, bonusMove: bonusMove, syncOrderBonus: syncOrderBonus, badgesOf: badgesOf, preorderLeft: preorderLeft, inkFor: inkFor, BADGE_KEYS: BADGE_KEYS, forGender: forGender, migrateData: migrateData, migrateProduct: migrateProduct, colorsOf: colorsOf, colorOf: colorOf, stockOf: stockOf, productPrice: productPrice, calcCart: calcCart, checkCode: checkCode, inWindow: inWindow, format: format };
+  var api = { isPvzMethod: isPvzMethod, isDoorMethod: isDoorMethod, cdekMode: cdekMode, cdekPacks: cdekPacks, parcelFor: parcelFor, bonusConf: bonusConf, bonusFor: bonusFor, bonusMove: bonusMove, syncOrderBonus: syncOrderBonus, badgesOf: badgesOf, preorderLeft: preorderLeft, inkFor: inkFor, BADGE_KEYS: BADGE_KEYS, forGender: forGender, migrateData: migrateData, migrateProduct: migrateProduct, colorsOf: colorsOf, colorOf: colorOf, stockOf: stockOf, productPrice: productPrice, calcCart: calcCart, inWindow: inWindow, format: format };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Pricing = api;
 })(this);

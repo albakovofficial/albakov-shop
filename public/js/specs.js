@@ -84,7 +84,7 @@
     return out;
   }
 
-  var api = { GROUPS: GROUPS, CARE: CARE, ITEMS: ITEMS, textOf: textOf, list: list, care: care, summary: summary, clean: clean };
+  var api = { GROUPS: GROUPS, CARE: CARE, textOf: textOf, list: list, care: care, summary: summary, clean: clean };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Specs = api;
 })(this);

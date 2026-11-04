@@ -2155,6 +2155,41 @@
       catch (e) { $('#pushErr', slot).textContent = errMsg(e); b.disabled = false; b.textContent = 'Включить уведомления'; }
     });
   }
+  /* Окно «Включите уведомления» при входе в приложение (13.60.1): только в установленном приложении,
+     пока уведомления на этом устройстве не включены. Системный запрос браузер разрешает показать только по нажатию,
+     поэтому сначала — своё окно с примером, а кнопка «Включить» уже вызывает системное «Разрешить».
+     «Не сейчас» — спросим снова через 7 дней, всего не больше 3 раз. Сотруднику одно нажатие включает и уведомления панели. */
+  var PUSH_ASK = 'albakov:push-ask';
+  async function appPushAsk() {
+    if (!window.Push || !Push.supported || !Push.installed()) return;
+    var cust = await Push.state('customer'), staff = API.isAdmin ? await Push.state('staff') : 'on';
+    if (cust !== 'off' && staff !== 'off') return;
+    var seen = {}; try { seen = JSON.parse(localStorage.getItem(PUSH_ASK) || '{}') || {}; } catch (e) { return; }
+    if ((seen.n || 0) >= 3 || (seen.at && Date.now() - seen.at < 7 * 864e5)) return;
+    if ($('.modal.open, .drawer.open')) { setTimeout(appPushAsk, 4000); return; }
+    var mark = function () { try { localStorage.setItem(PUSH_ASK, JSON.stringify({ n: (seen.n || 0) + 1, at: Date.now() })); } catch (e) { /* ничего */ } };
+    mark();
+    var adm = !!API.isAdmin;
+    var mock = adm ? pushMock('Новый заказ № 1042 · 5 798 ₽', 'Анна Смирнова, Москва\nФутболка AV, чёрная, L', '') : pushMock('Заказ ждёт в пункте выдачи', 'Пункт СДЭК · Тверская, 1. Можно примерить на месте', '');
+    var LI = function (t) { return '<li><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><span>' + t + '</span></li>'; };
+    openModal('<div class="pask">' + mock +
+      '<h3>Включите уведомления</h3>' +
+      '<ul class="pask-list">' + (adm
+        ? LI('Новые заказы и оплаты — сразу') + LI('Вопросы покупателей и заявки на обмен') + LI('Заканчиваются размеры, итоги дня')
+        : LI('Заказ в пути и ждёт в пункте выдачи') + LI('Ответы поддержки и обмен размера') + LI('Без рекламы — акции только по желанию')) + '</ul>' +
+      '<p class="form-error" id="paskErr"></p>' +
+      '<div class="pask-btns"><button class="btn" type="button" id="paskOn">Включить уведомления</button><button class="btn ghost" type="button" data-act="close">Не сейчас</button></div></div>');
+    var b = $('#paskOn'); if (!b) return;
+    b.addEventListener('click', async function () {
+      b.disabled = true; b.textContent = 'Включаем…';
+      try {
+        if (cust === 'off') await Push.enable('customer');
+        if (adm && staff === 'off') await Push.enable('staff');
+        try { localStorage.setItem(PUSH_ASK, JSON.stringify({ n: 9, at: Date.now() })); } catch (e) { /* ничего */ }
+        closePanels(); toast(adm ? 'Готово — заказы и вопросы будут приходить сразу' : 'Готово — сообщим, как только заказ сдвинется');
+      } catch (e) { var er = $('#paskErr'); if (er) er.textContent = errMsg(e); b.disabled = false; b.textContent = 'Включить уведомления'; }
+    });
+  }
   var PUSH_KINDS = [['orders', 'Заказы', 'В пути, ждёт в пункте выдачи, курьер везёт, напоминание забрать'], ['support', 'Ответы поддержки', 'Когда мы ответили на ваш вопрос'], ['returns', 'Обмен и возврат', 'Новый размер отправлен, деньги вернулись'], ['stock', 'Снова в наличии', 'Размер, о котором вы просили сообщить, появился'], ['bonus', 'Бонусы', 'Начисления на бонусный счёт'], ['promo', 'Акции и новинки', 'Редко и только о важном — по желанию']];
   async function pushSettings(box) {
     if (!box || !window.Push) return;
@@ -3208,6 +3243,7 @@
     window.App = { careIcon: careIcon, API: API, D: D, plural: plural, slideHtml: slideHtml, brandHtml: brandHtml, brandMode: brandMode, esc: esc, fmt: fmt, toast: toast, errMsg: errMsg, imgOf: imgOf, refresh: refresh, go: go, openModal: openModal, closePanels: closePanels, fmtPhone: fmtPhone, fmtDate: fmtDate, STATUS: STATUS, PAY: PAY };
     renderShell();
     initAnalytics();
+    setTimeout(appPushAsk, 2200);
     document.addEventListener('click', function (e) {
       var a = e.target.closest('[data-act]'); if (a) {
         var act = a.getAttribute('data-act');

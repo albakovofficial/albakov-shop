@@ -4052,3 +4052,14 @@ body::after { content: none; display: none; }
 .st-up { color: var(--ok); } .st-down { color: var(--danger); }
 @media (max-width: 640px) { .adm-bops { flex-basis: 100%; padding-left: 0; margin-left: 0; border-left: 0; } .adm-bops .select { flex: 1 1 auto; } }
 .adm-bops .select { background-image: linear-gradient(45deg, transparent 50%, #fff 50%), linear-gradient(135deg, #fff 50%, transparent 50%); }
+
+/* Окно «Включите уведомления» при входе в приложение (13.60.1) */
+.pask { display: grid; gap: 16px; }
+.pask .pn-stage { margin: -4px -4px 4px; padding-bottom: 26px; }
+.pask h3 { margin: 4px 0 0; font-size: clamp(24px, 3vw, 30px); font-weight: 400; line-height: 1.2; letter-spacing: -.01em; }
+.pask-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.pask-list li { display: flex; gap: 10px; align-items: flex-start; font-size: 15px; line-height: 1.5; color: var(--muted); }
+.pask-list svg { flex: none; margin-top: 2px; color: var(--text); }
+.pask-btns { display: grid; gap: 8px; margin-top: 4px; }
+.pask-btns .btn { width: 100%; }
+.pask .form-error:empty { display: none; }

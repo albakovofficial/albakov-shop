@@ -207,6 +207,18 @@
       return '<a class="mm-cat" href="#/catalog?cat=' + esc(c.slug) + '"><span class="mm-cat-ph"><img src="' + esc(c.image || Art.make(c.art)) + '" alt="" loading="lazy"></span><b>' + esc(c.name) + '</b></a>';
     }).join('') + '</div></div>';
   }
+  // Документы в меню телефона — плитками: короткое название и подпись (полное — в aria-label)
+  var MM_DOCS = {
+    offer: ['Оферта', 'Условия покупки', '<svg viewBox="0 0 24 24"><path d="M6 3.5h8l4 4V20.5H6z"/><path d="M14 3.5v4h4"/><path d="M9 16.5c1.1-1.7 2.1-1.7 2.5 0 .4 1.5 1.5 1.4 2.6-.7"/></svg>'],
+    privacy: ['Политика', 'Ваши данные', '<svg viewBox="0 0 24 24"><path d="M12 3l7 3v5.5c0 4.4-3 8-7 9.5-4-1.5-7-5.1-7-9.5V6z"/><rect x="9.25" y="11" width="5.5" height="4.5" rx="1"/><path d="M10.25 11V9.6a1.75 1.75 0 0 1 3.5 0V11"/></svg>'],
+    consent: ['Согласие', 'На обработку данных', '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M8.5 12.2l2.4 2.4 4.6-4.8"/></svg>']
+  };
+  function mmDocs(docs) {
+    var order = ['offer', 'privacy', 'consent'];
+    return docs.slice().sort(function (a, b) { var x = order.indexOf(a.slug), y = order.indexOf(b.slug); return (x < 0 ? 9 : x) - (y < 0 ? 9 : y); }).map(function (pg) {
+      var k = MM_DOCS[pg.slug]; return { pg: pg, t: k ? k[0] : pg.title, s: k ? k[1] : '', ic: k ? k[2] : MM_IC.page };
+    });
+  }
   function drawerMenuHtml() {
     var nav = (D.settings.nav || []).filter(function (n) { return !navEmpty(n.link); });
     var gift = !D.giftCfg || D.giftCfg.enabled !== false;
@@ -216,7 +228,9 @@
     var admin = API.isAdmin ? '<a class="mm-admin" href="#/admin"><span class="mm-admin-ic">' + MM_IC.grid + '</span><span><b>Панель управления</b><small>Заказы, товары, финансы</small></span><span class="mm-ar">' + MM_IC.arrow + '</span></a>' : '';
     // Внизу — документы списком и знак; реквизиты продавца — в подвале сайта и в оферте
     var foot = '<div class="mm-foot">' +
-      (docs.length ? '<div class="mm-h"><span>Документы</span></div><nav class="mm-docs" aria-label="Документы">' + docs.map(function (pg) { return '<a href="#/page/' + esc(pg.slug) + '"><span class="mm-doc-ic">' + MM_IC.page + '</span><span class="mm-doc-t">' + esc(pg.title) + '</span><span class="mm-ar">' + MM_IC.arrow + '</span></a>'; }).join('') + '</nav>' : '') +
+      (docs.length ? '<div class="mm-h"><span>Документы</span></div><nav class="mm-docs" aria-label="Документы">' + mmDocs(docs).map(function (d) {
+        return '<a href="#/page/' + esc(d.pg.slug) + '" aria-label="' + esc(d.pg.title) + '"><span class="mm-doc-ic">' + d.ic + '</span><span class="mm-doc-t"><b>' + esc(d.t) + '</b>' + (d.s ? '<small>' + esc(d.s) + '</small>' : '') + '</span></a>';
+      }).join('') + '</nav>' : '') +
       '<p class="mm-copy">© ' + new Date().getFullYear() + ' ' + esc(st.storeName) + ((st.brand || {}).trademark !== false ? '®. Все права защищены. ' + esc(st.storeName) + ' — зарегистрированный товарный знак' : '. Все права защищены') + '</p></div>';
     return admin + genderTabs('gtabs-drawer mm-seg') +
       '<div class="mm-quick">' +

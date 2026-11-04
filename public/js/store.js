@@ -205,5 +205,5 @@
     var err = new Error('offline'); err.cause = last; throw err;
   }
 
-  root.Store = { connect: connect, Cart: Cart, BuyNow: BuyNow, Fav: Fav, normPhone: normPhone, uid: uid, readImage: readImage };
+  root.Store = { connect: connect, Cart: Cart, BuyNow: BuyNow, Fav: Fav, normPhone: normPhone, uid: uid };
 })(this);

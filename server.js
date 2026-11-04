@@ -85,11 +85,20 @@ db.finance = Finance.cleanSettings(db.finance, db.finance);
 if (db.settings && db.settings.payment && db.settings.payment.parts) delete db.settings.payment.parts; // оплата частями убрана в 13.43
 if (db.settings && db.settings.telegram) delete db.settings.telegram; // уведомления в Telegram заменены письмами (13.43)
 if (db.secrets && db.secrets.telegram) delete db.secrets.telegram;
-if (!db.secrets.adminHash) {
-  const pw = process.env.ADMIN_PASSWORD || crypto.randomBytes(6).toString('base64url');
-  db.secrets.adminHash = hashPassword(pw);
-  if (!process.env.ADMIN_PASSWORD) console.log('\n  Пароль администратора: ' + pw + '\n  Смените его в разделе «Настройки» панели управления.\n');
+/* Панель управления (13.57): отдельного входа по паролю больше нет. Владелец — аккаунт покупателя с номером OWNER_PHONE,
+   сотрудники — аккаунты, которым владелец выдал роль. Владелец привязывается к уже существующему аккаунту один раз:
+   если аккаунта ещё нет, никто не получает доступ, пока его не назначат командой deploy/set-owner.sh */
+const OWNER_PHONE = String(process.env.OWNER_PHONE || '79111930794').replace(/\D/g, '');
+db.secrets.staff = Array.isArray(db.secrets.staff) ? db.secrets.staff : [];
+if (!db.secrets.ownerId) {
+  const o = db.users.find((u) => String(u.phone || '') === OWNER_PHONE);
+  if (o) { db.secrets.ownerId = o.id; console.log('Владелец панели: аккаунт ' + (o.firstName || '') + ' ' + (o.lastName || '') + ' (+' + o.phone + ')'); }
+  else console.log('\n  Владелец панели не назначен: нет аккаунта с номером +' + OWNER_PHONE + '.\n  Зарегистрируйтесь на сайте и выполните: sudo bash /var/www/albakov/deploy/set-owner.sh +' + OWNER_PHONE + '\n');
 }
+// прежний вход по паролю администратора убран: пароль и его сеансы больше не нужны
+delete db.secrets.adminHash;
+for (const k in db.sessions) if (db.sessions[k].kind === 'admin') delete db.sessions[k];
+delete (db.settings || {}).adminPathHash;
 // Изменения копятся 50 мс и пишутся в базу одной транзакцией
 let saveTimer = null;
 function flush() {
@@ -361,19 +370,78 @@ function setCookie(res, name, value, maxAgeSec) {
 }
 function createSession(res, kind, userId) {
   const token = crypto.randomBytes(32).toString('hex');
-  const days = kind === 'admin' ? 7 : 60;
+  const days = 60;
   db.sessions[token] = { kind, userId: userId || null, exp: Date.now() + days * 864e5 };
-  setCookie(res, kind === 'admin' ? 'asid' : 'sid', token, days * 86400);
+  setCookie(res, 'sid', token, days * 86400);
   save();
 }
 function getSession(req, kind) {
-  const token = parseCookies(req)[kind === 'admin' ? 'asid' : 'sid'];
+  const token = parseCookies(req).sid;
   const s = token && db.sessions[token];
   if (!s || s.kind !== kind || s.exp < Date.now()) return null;
   return Object.assign({ token }, s);
 }
 function currentUser(req) { const s = getSession(req, 'user'); return s ? db.users.find((u) => u.id === s.userId) || null : null; }
-function requireAdmin(req) { if (!getSession(req, 'admin')) fail(401, 'Войдите в панель управления'); }
+/* ---------- Доступ к панели (13.57): роли ----------
+   Права: orders — заказы, поддержка, обмены, покупатели, сертификаты; content — товары, категории, страницы, витрина;
+   finance — финансы и аналитика; marketing — бонусы, Метрика, поиск, уведомления; mail — раздел «Почта»;
+   payment — оплата, доставка, ключи СДЭК, ЮKassa и почты; settings — общие настройки; staff — сотрудники */
+const ROLES = {
+  owner: { name: 'Владелец', perms: ['orders', 'content', 'finance', 'marketing', 'mail', 'payment', 'settings', 'staff'] },
+  manager: { name: 'Управляющий', perms: ['orders', 'content', 'finance', 'marketing', 'mail'] },
+  orders: { name: 'Менеджер заказов', perms: ['orders', 'mail'] },
+  content: { name: 'Контент-менеджер', perms: ['content'] },
+  finance: { name: 'Финансы', perms: ['finance'] }
+};
+function staffRole(u) {
+  if (!u) return null;
+  if (u.id === db.secrets.ownerId) return 'owner';
+  const x = db.secrets.staff.find((y) => y.userId === u.id);
+  return x && ROLES[x.role] ? x.role : null;
+}
+function adminRole(req) { return staffRole(currentUser(req)); }
+function perms(req) { const r = adminRole(req); return r ? ROLES[r].perms : []; }
+function can(req, perm) { return perms(req).includes(perm); }
+function isAdmin(req) { return !!adminRole(req); }
+function requireAdmin(req) { if (!isAdmin(req)) fail(401, 'Войдите в личный кабинет аккаунтом с доступом к панели'); }
+function requirePerm(req, ...need) { if (!need.some((p) => can(req, p))) fail(403, 'У вашей роли нет доступа к этому разделу'); }
+// Какие поля настроек может менять роль (по разделам панели). Поля, которых здесь нет, — только с правом settings
+const SETTINGS_PERMS = {
+  brand: ['content'], tagline: ['content'], announcement: ['content'], socials: ['content'], nav: ['content'], contacts: ['content'],
+  slider: ['content'], genders: ['content'], gateway: ['content'], home: ['content'], badges: ['content'], footerNote: ['content'], sizeHint: ['content'],
+  exchange: ['orders'], notify: ['orders', 'mail'], ownerNotify: ['mail'],
+  bonus: ['marketing'], gifts: ['marketing'], metrika: ['marketing'], seo: ['marketing'],
+  payment: ['payment'], delivery: ['payment'], cdek: ['payment']
+};
+/* Сотрудники: владелец выдаёт роль существующему аккаунту по номеру телефона */
+function staffView(u, role) { return { userId: u.id, name: [u.firstName, u.lastName].filter(Boolean).join(' '), phone: u.phone, email: u.email, role, roleName: ROLES[role].name }; }
+function staffList() {
+  const out = [];
+  const owner = db.users.find((u) => u.id === db.secrets.ownerId);
+  if (owner) out.push(Object.assign(staffView(owner, 'owner'), { owner: true }));
+  db.secrets.staff.forEach((x) => { const u = db.users.find((y) => y.id === x.userId); if (u && ROLES[x.role]) out.push(Object.assign(staffView(u, x.role), { at: x.at })); });
+  return out;
+}
+function staffApi(p, M, body) {
+  const roles = Object.keys(ROLES).filter((r) => r !== 'owner');
+  if (!p[2] && M === 'GET') return { staff: staffList(), roles: roles.map((r) => ({ id: r, name: ROLES[r].name, perms: ROLES[r].perms })) };
+  if (!p[2] && M === 'POST') {
+    const ph = normPhone(body.phone);
+    if (ph.length !== 11) fail(400, 'Укажите номер телефона полностью');
+    if (!roles.includes(body.role)) fail(400, 'Выберите роль');
+    const u = db.users.find((x) => x.phone === ph);
+    if (!u) fail(404, 'Аккаунта с номером +' + ph + ' нет — пусть человек сначала зарегистрируется на сайте');
+    if (u.id === db.secrets.ownerId) fail(400, 'Это аккаунт владельца');
+    const was = db.secrets.staff.find((x) => x.userId === u.id);
+    if (was) was.role = body.role; else db.secrets.staff.push({ userId: u.id, role: body.role, at: new Date().toISOString() });
+    save(); return { staff: staffList() };
+  }
+  const x = p[2] && db.secrets.staff.find((y) => y.userId === p[2]);
+  if (!x) fail(404, 'Сотрудник не найден');
+  if (M === 'PUT') { if (!roles.includes(body.role)) fail(400, 'Выберите роль'); x.role = body.role; save(); return { staff: staffList() }; }
+  if (M === 'DELETE') { db.secrets.staff = db.secrets.staff.filter((y) => y !== x); save(); return { staff: staffList() }; }
+  fail(404, 'Не найдено');
+}
 setInterval(() => {
   const now = Date.now(); let ch = false;
   for (const k in db.sessions) if (db.sessions[k].exp < now) { delete db.sessions[k]; ch = true; }
@@ -1478,7 +1546,7 @@ async function api(req, res, url, body) {
   const M = req.method;
   const user = () => currentUser(req);
 
-  if (p[0] === 'state' && M === 'GET') return { data: publicState(), user: publicUser(user()), isAdmin: !!getSession(req, 'admin') };
+  if (p[0] === 'state' && M === 'GET') return { data: publicState(), user: publicUser(user()), isAdmin: isAdmin(req) };
 
   if (p[0] === 'auth') {
     if (p[1] === 'register' && M === 'POST') {
@@ -1537,7 +1605,7 @@ async function api(req, res, url, body) {
       const u = db.users.find((x) => x.email === l || (ph.length === 11 && x.phone === ph));
       if (!u || !pwOk(body.password) || !checkPassword(body.password, u.hash)) fail(401, 'Неверный логин или пароль');
       throttleOk(tk); createSession(res, 'user', u.id);
-      return { user: publicUser(u) };
+      return { user: publicUser(u), isAdmin: !!staffRole(u) };
     }
     // Восстановление пароля: код на почту аккаунта, потом новый пароль. Есть ли такой аккаунт — не сообщаем
     if (p[1] === 'forgot' && M === 'POST') {
@@ -1635,10 +1703,10 @@ async function api(req, res, url, body) {
     if (p[1] && M === 'GET') {
       const o = db.orders.find((x) => x.id === p[1]); const u = user();
       const t = url.searchParams.get('t') || '';
-      const allowed = o && ((u && o.userId === u.id) || safeEqual(t, o.token) || getSession(req, 'admin'));
+      const allowed = o && ((u && o.userId === u.id) || safeEqual(t, o.token) || isAdmin(req));
       if (!allowed) fail(404, 'Заказ не найден');
       await syncPayment(o);
-      return { order: getSession(req, 'admin') ? orderView(o) : customerView(o) };
+      return { order: isAdmin(req) ? orderView(o) : customerView(o) };
     }
   }
 
@@ -1647,7 +1715,7 @@ async function api(req, res, url, body) {
     if (/bot|crawl|spider|slurp|yandex(bot|images)|googlebot|headless|lighthouse|preview/i.test(String(req.headers['user-agent'] || ''))) return {};
     const e = String(body.e || ''); if (!['v', 'p', 'c', 'k', 'pv'].includes(e)) fail(400, 'Неизвестное событие');
     throttle(req, e === 'pv' ? 'statpv' : 'stat', e === 'pv' ? 600 : 400);
-    if (getSession(req, 'admin')) return {}; // заходы владельца с открытой админкой не считаем, даже если браузер забыл пометку
+    if (isAdmin(req)) return {}; // заходы владельца с открытой админкой не считаем, даже если браузер забыл пометку
     const day = new Date(Date.now() + 3 * 36e5).toISOString().slice(0, 10); // по Москве
     // Повторы за день не считаем: браузер шлёт свой случайный номер; без номера — отпечаток адреса и браузера (только в памяти, с солью)
     const sid = /^[a-z0-9]{12,40}$/.test(String(body.id || '')) ? String(body.id) : 'h' + crypto.createHash('sha256').update(STAT_SALT + clientIp(req) + '|' + String(req.headers['user-agent'] || '')).digest('hex').slice(0, 24);
@@ -1788,29 +1856,46 @@ async function api(req, res, url, body) {
 
   /* ----- Админ ----- */
   if (p[0] === 'admin') {
-    if (p[1] === 'login' && M === 'POST') {
-      const tk = throttle(req, 'admin');
-      if (!pwOk(body.password) || !checkPassword(body.password, db.secrets.adminHash)) fail(401, 'Неверный пароль');
-      throttleOk(tk); createSession(res, 'admin'); return {};
-    }
-    if (p[1] === 'logout' && M === 'POST') { const s = getSession(req, 'admin'); if (s) { delete db.sessions[s.token]; save(); } setCookie(res, 'asid', '', 0); return {}; }
     requireAdmin(req);
+    // Права на каждый раздел: чего нет в списке — только владельцу
+    const ROUTE_PERMS = {
+      data: [], health: ['settings'], upload: [], 'order-seq': ['settings'], staff: ['staff'],
+      orders: ['orders'], support: ['orders'], 'cdek-print': ['orders'], 'cdek-intake': ['orders'], 'cdek-calc': ['orders'], gifts: ['orders', 'marketing'], users: ['orders', 'marketing'], waitlist: ['orders', 'content'],
+      products: ['content'], categories: ['content'], sizeCharts: ['content'], pages: ['content'], promotions: ['content', 'marketing'], promocodes: ['content', 'marketing'],
+      finance: ['finance'], 'seo-ping': ['marketing'], 'owner-notify': ['mail'], 'mail-catalog': ['mail'],
+      mail: !p[2] && M === 'POST' ? ['payment'] : ['mail'], // пароль почты для отправки меняет только тот, кому доверены ключи
+      cdek: ['payment'], 'payment-secret': ['payment'], settings: []
+    };
+    const need = Object.prototype.hasOwnProperty.call(ROUTE_PERMS, p[1]) ? ROUTE_PERMS[p[1]] : ['staff'];
+    if (need.length) requirePerm(req, ...need);
     if (p[1] === 'data' && M === 'GET') {
-      const d = {}; for (const k of ['settings', ...COLLECTIONS, 'orders']) d[k] = db[k];
+      // Каждая роль получает только свои данные: личные данные покупателей — тем, кто работает с заказами, деньги — финансам
+      const has = (...x) => x.some((k) => can(req, k)), role = adminRole(req);
+      const d = { settings: db.settings, role, roleName: ROLES[role].name, perms: perms(req), me: publicUser(currentUser(req)) };
+      for (const k of COLLECTIONS) d[k] = db[k];
       // Тестовые заказы (оплата в тестовом режиме) в панели не показываются и не считаются
-      d.orders = db.orders.filter((o) => !o.test).map(orderView); d.testOrders = db.orders.filter((o) => o.test).length; d.users = db.users.map((u) => Object.assign(publicUser(u), { bonusLog: (u.bonusLog || []).slice(0, 100) }));
-      d.waitlist = db.waitlist.map((w) => { const c = Object.assign({}, w); delete c.token; return c; });
-      d.supportNew = db.tickets.filter((t) => t.unreadShop).length;
-      // Состояние ночных резервных копий (файл пишет tools/backup.js)
-      try { d.backup = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'backup-status.json'), 'utf8')); } catch (e) { d.backup = null; }
-      // Автообновление из GitHub (файл пишет deploy/autoupdate.sh)
-      try { d.update = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'update-status.json'), 'utf8')); } catch (e) { d.update = null; }
-      d.giftcards = db.giftcards.map((g) => Object.assign({}, g, { state: giftState(g) }));
-      d.stats = db.stats || {};
-      d.expenses = db.expenses; d.finance = db.finance; d.receipts = db.receipts; d.intakes = db.intakes; d.problems = siteProblems();
-      d.seo = { indexnow: seoPingOn(), https: /^https:/.test(PUBLIC_URL), url: PUBLIC_URL, last: db.seoPing || null, pages: Seo.urls().length };
+      d.orders = has('orders', 'finance', 'marketing') ? db.orders.filter((o) => !o.test).map(orderView) : [];
+      d.testOrders = d.orders.length ? db.orders.filter((o) => o.test).length : 0;
+      d.users = has('orders', 'marketing') ? db.users.map((u) => Object.assign(publicUser(u), { bonusLog: (u.bonusLog || []).slice(0, 100) })) : [];
+      d.waitlist = has('orders', 'content', 'mail') ? db.waitlist.map((w) => { const c = Object.assign({}, w); delete c.token; return c; }) : [];
+      d.supportNew = has('orders') ? db.tickets.filter((t) => t.unreadShop).length : 0;
+      if (has('settings')) {
+        // Состояние ночных резервных копий (файл пишет tools/backup.js) и автообновления из GitHub (deploy/autoupdate.sh)
+        try { d.backup = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'backup-status.json'), 'utf8')); } catch (e) { d.backup = null; }
+        try { d.update = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'update-status.json'), 'utf8')); } catch (e) { d.update = null; }
+      }
+      d.giftcards = has('orders', 'marketing') ? db.giftcards.map((g) => Object.assign({}, g, { state: giftState(g) })) : [];
+      d.stats = has('finance', 'marketing') ? db.stats || {} : {};
+      d.expenses = has('finance') ? db.expenses : [];
+      d.finance = has('finance') ? db.finance : Finance.defaults();
+      d.receipts = has('content', 'finance') ? db.receipts : [];
+      d.intakes = has('orders') ? db.intakes : [];
+      d.problems = has('settings') ? siteProblems() : [];
+      d.seo = has('marketing') ? { indexnow: seoPingOn(), https: /^https:/.test(PUBLIC_URL), url: PUBLIC_URL, last: db.seoPing || null, pages: Seo.urls().length } : null;
+      if (has('staff')) d.staff = staffList();
       return { data: d };
     }
+    if (p[1] === 'staff') return staffApi(p, M, body);
     if (p[1] === 'health' && M === 'GET') return { health: health() };
     if (p[1] === 'finance') return financeApi(p, M, body);
     if (p[1] === 'cdek-print' || p[1] === 'cdek-intake') return await cdekBatchApi(p, M, body, url);
@@ -1831,14 +1916,6 @@ async function api(req, res, url, body) {
       if (!Number.isInteger(n) || n < 1 || n > 999999999) fail(400, 'Укажите целое число от 1');
       if (db.orders.some((o) => o.number === String(n))) fail(400, 'Заказ № ' + n + ' уже есть — укажите другой номер');
       db.orderSeq = n - 1; save(); return { next: n };
-    }
-    if (p[1] === 'password' && M === 'POST') {
-      if (String(body.password || '').length < 8) fail(400, 'Пароль должен быть не короче 8 символов');
-      if (!pwOk(body.password)) fail(400, 'Слишком длинный пароль');
-      db.secrets.adminHash = hashPassword(body.password);
-      const keep = getSession(req, 'admin').token;
-      for (const k in db.sessions) if (db.sessions[k].kind === 'admin' && k !== keep) delete db.sessions[k];
-      save(); return {};
     }
     // Ключи СДЭК: Account хранится в настройках, Secure password — только на сервере
     if (p[1] === 'cdek' && M === 'POST') {
@@ -2121,7 +2198,16 @@ async function api(req, res, url, body) {
       }
     }
     if (p[1] === 'settings' && M === 'PUT') {
-      if (!body.value || typeof body.value !== 'object') fail(400, 'Пустые настройки');
+      if (!body.value || typeof body.value !== 'object' || Array.isArray(body.value)) fail(400, 'Пустые настройки');
+      // Сотрудник меняет только поля своих разделов; остальные должны прийти без изменений
+      if (!can(req, 'settings')) {
+        const keys = new Set(Object.keys(db.settings).concat(Object.keys(body.value)));
+        for (const k of keys) {
+          if (JSON.stringify(db.settings[k]) === JSON.stringify(body.value[k])) continue;
+          const need = SETTINGS_PERMS[k] || ['settings'];
+          if (!need.some((x) => can(req, x))) fail(403, 'У вашей роли нет прав менять эту настройку (' + k + ')');
+        }
+      }
       db.settings = body.value; if (db.settings.payment) delete db.settings.payment.parts; save(); return {};
     }
     if (COLLECTIONS.includes(p[1])) {

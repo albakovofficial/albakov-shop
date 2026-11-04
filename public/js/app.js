@@ -502,11 +502,11 @@
     document.body.classList.toggle('hero-under', !!$('#view > .slider:first-child'));
     var fab = $('#fab'); if (fab) { fab.hidden = fn === adminPage || (name === 'account' && r.q.tab === 'support'); fabSet(false); }
     syncHeaderH();
-    v.classList.remove('view-in'); void v.offsetWidth; v.classList.add('view-in');
+    if (!routeQuiet) { v.classList.remove('view-in'); void v.offsetWidth; v.classList.add('view-in'); }
     if (!routeKeepScroll) window.scrollTo({ top: 0, behavior: 'instant' });
-    routeKeepScroll = false;
+    routeKeepScroll = false; routeQuiet = false;
   }
-  var routeKeepScroll = false;
+  var routeKeepScroll = false, routeQuiet = false, slideKeep = 0;
   // Высота шапки в обычном состоянии: на столько первый экран заходит под прозрачную шапку
   function syncHeaderH() {
     var hd = $('.header'), w = hd && $('.wrap', hd); if (!w) return;
@@ -593,7 +593,7 @@
       dots.forEach(function (d, k) { d.classList.remove('on'); if (k === idx) { void d.offsetWidth; d.classList.add('on'); } });
       var num = $('#slNum'); if (num) num.textContent = idx + 1;
     }
-    show(0);
+    show(slideKeep < n ? slideKeep : 0); slideKeep = 0;
     el.addEventListener('click', function (e) {
       var d = e.target.closest('[data-sl]'); if (d) { show(+d.getAttribute('data-sl')); return; }
       var a = e.target.closest('[data-sl-step]'); if (a) { show(idx + +a.getAttribute('data-sl-step')); return; }
@@ -3103,7 +3103,9 @@
   async function refresh() {
     try { var r = await fetch('api/state', { credentials: 'same-origin' }); var j = await r.json(); if (j.ok) D = j.data; } catch (e) {}
     window.App.D = D;
-    var scroll = window.scrollY; renderShell(); routeKeepScroll = true; route(); restoreScroll(scroll);
+    // Тихое обновление: та же прокрутка и тот же слайд, страница не мигает
+    var act = $('#slider .slide.is-active'); slideKeep = act ? $$('#slider .slide').indexOf(act) : 0;
+    var scroll = window.scrollY; renderShell(); routeKeepScroll = true; routeQuiet = true; route(); restoreScroll(scroll);
   }
 
   /* ---------- Запуск ---------- */
@@ -3218,8 +3220,10 @@
     function onScroll() {
       ticking = false;
       var y = window.scrollY;
-      var hd = $('.header'); if (hd) { var was = hd.classList.contains('scrolled'); if (!was && y > 48) hd.classList.add('scrolled'); else if (was && y < 8) hd.classList.remove('scrolled'); }
-      var tt = $('#toTop'); if (tt) tt.hidden = y < 900;
+      // Шапка становится плотной чуть раньше, чем прилипает к верху (когда уезжает строка объявления), —
+      // чтобы под прозрачной шапкой не просвечивал текст страницы
+      var hd = $('.header'); if (hd) { var tb = $('.topbar'), th = tb ? tb.offsetHeight : 0, was = hd.classList.contains('scrolled'); if (!was && y > Math.max(2, th - 16)) hd.classList.add('scrolled'); else if (was && y < Math.max(1, th - 28)) hd.classList.remove('scrolled'); }
+      var tt = $('#toTop'); if (tt) { if (tt.hidden) tt.hidden = false; tt.classList.toggle('show', y >= 900); }
     }
     window.addEventListener('scroll', function () { if (!ticking) { ticking = true; requestAnimationFrame(onScroll); } }, { passive: true });
     document.addEventListener('click', function (e) { if (e.target.closest('#toTop')) window.scrollTo({ top: 0, behavior: 'smooth' }); });

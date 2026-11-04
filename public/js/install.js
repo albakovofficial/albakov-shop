@@ -46,16 +46,29 @@
     add: '<svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8.5v7M8.5 12h7"/></svg>',
     ok: '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
     dots: '<svg viewBox="0 0 24 24"><circle cx="12" cy="5.5" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="12" cy="18.5" r="1.3"/></svg>',
-    phone: '<svg viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/></svg>'
+    phone: '<svg viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/></svg>',
+    page: '<svg viewBox="0 0 24 24"><path d="M5 7h14M5 12h14M5 17h9"/></svg>',
+    hdots: '<svg viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18.5" cy="12" r="1.3"/></svg>',
+    toggle: '<svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="10" rx="5"/><circle cx="16" cy="12" r="3"/></svg>'
   };
+  /* Версия Safari на iPhone: в iOS 26 «Поделиться» — в меню «•••» справа от адреса, в iOS 27 — в меню страницы «≡» слева от адреса.
+     Номер версии берём из Version/… — номер iOS в строке браузера с iOS 26 «заморожен» и не меняется */
+  var safariVer = (function () { var m = /Version\/(\d+)/.exec(ua); return m ? Number(m[1]) : 0; })();
+  var iosChrome = /CriOS|EdgiOS|FxiOS|YaBrowser/.test(ua);
   // Пошаговая подсказка для браузеров без окна установки
   function howTo() {
     var A = app(); if (!A.openModal) return;
     var step = function (ic, html) { return '<li><span class="inst-ic" aria-hidden="true">' + IC[ic] + '</span><span>' + html + '</span></li>'; };
+    var share = iosChrome ? step('share', 'Нажмите <b>«Поделиться»</b> — значок в адресной строке справа вверху')
+      : safariVer >= 27 ? step('page', 'Нажмите <b>≡</b> слева от адреса сайта (или подержите палец на адресной строке) и выберите <b>«Поделиться»</b>')
+      : safariVer === 26 ? step('hdots', 'Нажмите <b>•••</b> справа от адреса сайта и выберите <b>«Поделиться»</b>')
+      : step('share', 'Нажмите <b>«Поделиться»</b> внизу экрана');
     var steps = isIOS
-      ? [step('share', 'Нажмите <b>«Поделиться»</b> — в Safari внизу экрана, в Chrome — справа вверху'),
-         step('add', 'Пролистайте вниз и выберите <b>«На экран „Домой“»</b>'),
-         step('ok', 'Нажмите <b>«Добавить»</b> — значок ALBAKOV появится рядом с другими приложениями')]
+      ? [share,
+         step('add', 'Выберите <b>«На экран „Домой“»</b>' + (safariVer >= 26 ? ' — если не видно, нажмите <b>«Ещё»</b>' : ', пролистав список вниз')),
+         safariVer >= 26 && !iosChrome
+           ? step('toggle', 'Оставьте включённым <b>«Открыть как веб-приложение»</b> и нажмите <b>«Добавить»</b>')
+           : step('ok', 'Нажмите <b>«Добавить»</b> — значок ALBAKOV появится рядом с другими приложениями')]
       : isAndroid
       ? [step('dots', 'Откройте меню браузера <b>⋮</b> справа вверху (в Яндекс Браузере — <b>≡</b> внизу)'),
          step('phone', 'Выберите <b>«Установить приложение»</b> или <b>«Добавить на главный экран»</b>'),
@@ -64,8 +77,9 @@
          step('ok', 'Нажмите <b>«Установить»</b> — магазин откроется в своём окне, как программа'),
          step('phone', 'На телефоне откройте ' + A.esc(location.host) + ' и добавьте на экран «Домой» так же')];
     A.openModal('<div class="inst">' +
-      '<img class="inst-logo" src="img/icon-192.png" alt="" width="72" height="72">' +
-      '<h3>ALBAKOV на экране «Домой»</h3>' +
+      '<span class="inst-logo-wrap"><img class="inst-logo" src="img/icon-192.png" alt="" width="76" height="76"></span>' +
+      '<span class="inst-eyebrow">Приложение</span>' +
+      '<h3>ALBAKOV на экране «Домой»<i aria-hidden="true">.</i></h3>' +
       '<p class="muted">Магазин открывается одним нажатием и на весь экран — как обычное приложение. Скачивать из магазина приложений ничего не нужно.</p>' +
       '<ol class="inst-steps">' + steps.join('') + '</ol>' +
       '<div class="inst-btns"><button class="btn" data-act="close">Понятно</button></div>' +

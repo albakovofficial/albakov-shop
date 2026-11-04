@@ -3955,3 +3955,24 @@ body::after { content: none; display: none; }
 .mm-tile.sale { background: var(--ink); color: #fff; }
 .mm-tile.wide { grid-column: 1 / -1; min-height: 0; flex-direction: row; align-items: center; justify-content: flex-start; gap: 12px; padding: 18px 16px; }
 .mm-tile.wide .mm-tag { position: static; margin-left: auto; order: 3; }
+
+/* Окно «ALBAKOV на экране „Домой“» (13.57): в стиле сайта, с акцентом бренда */
+.inst { gap: 14px; padding-top: 4px; }
+.inst-logo-wrap { position: relative; isolation: isolate; display: grid; place-items: center; margin-bottom: 4px; }
+.inst-logo-wrap::before { content: ""; position: absolute; inset: -14px; border-radius: 50%; background: var(--acc-grad); filter: blur(26px); opacity: .35; z-index: -1; }
+.inst-logo { width: 76px; height: 76px; border: 0; border-radius: 22px; box-shadow: 0 14px 30px -14px rgba(13, 14, 16, .7); }
+.inst-eyebrow { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px; border-radius: 999px; background: #fff; box-shadow: var(--ring); font-size: 11px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.inst-eyebrow::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--acc-grad); }
+.inst h3 { font-weight: 200; letter-spacing: -.035em; font-size: clamp(28px, 7.4vw, 34px); }
+.inst h3 i { font-style: normal; background: var(--acc-grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.inst p { color: var(--muted); font-size: 14.5px; }
+.inst-steps { counter-reset: ist; border: 0; border-radius: var(--r-lg); background: #fff; box-shadow: var(--ring); overflow: hidden; margin-top: 4px; }
+.inst-steps li { counter-increment: ist; position: relative; grid-template-columns: 44px minmax(0, 1fr); padding: 14px 16px 14px 14px; border-bottom: 1px solid var(--line); font-size: 14.5px; line-height: 1.5; }
+.inst-steps li:last-child { border-bottom: 0; }
+.inst-steps b { font-weight: 500; color: var(--text); }
+.inst-ic { position: relative; width: 44px; height: 44px; border-radius: 14px; background: var(--surface); }
+/* номер шага — оранжевой меткой на значке: 1, 2, 3 */
+.inst-ic::after { content: counter(ist); position: absolute; top: -5px; right: -5px; min-width: 18px; height: 18px; border-radius: 99px; background: var(--acc-grad); color: #fff; font-size: 10.5px; font-weight: 600; line-height: 18px; text-align: center; box-shadow: 0 0 0 2px #fff; }
+.inst-btns .btn { border-radius: 999px; }
+.mnav-app-btn img, .inst-banner img { border: 0; border-radius: 10px; }
+.inst-banner img { border-radius: 12px; }

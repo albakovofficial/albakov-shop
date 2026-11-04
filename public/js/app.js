@@ -2108,7 +2108,7 @@
       v.innerHTML = '<div class="wrap"><div class="success"><span class="eyebrow">Заказ № ' + esc(o.number) + '</span><h1>' + (o.status === 'returned' ? 'Возврат оформлен' : 'Спасибо за заказ') + '</h1>' +
         '<p class="muted" style="max-width:46ch">' + (D.mailReady ? 'Подтверждение придёт на ' + esc(o.customer.email) + (o.payment.method === 'online' && o.payment.status !== 'paid' ? ' после оплаты' : '') + '. ' : '') + orderNext(o) + '</p>' +
         '<div style="display:flex;gap:18px;flex-wrap:wrap;justify-content:center"><span class="status ' + esc(o.status) + '">' + esc(STATUS[o.status] || o.status) + '</span><span class="status ' + esc(o.payment.status) + '">' + esc(payLabel) + '</span></div>' +
-        trackHtml(o) + returnsHtml(o) + (API.user || o.requestState ? requestsHtml(o) : '') +
+        trackHtml(o) + '<div class="push-slot" id="pushSlot"></div>' + returnsHtml(o) + (API.user || o.requestState ? requestsHtml(o) : '') +
         '<div class="order-card" style="width:100%;text-align:left">' + o.items.map(function (i) { return '<div class="mini-line"><img src="' + esc(i.image || Art.make(i.art)) + '" alt=""><div><div>' + esc(i.name) + '</div><div class="sub">' + (i.color ? esc(i.color) + ' · ' : '') + esc(i.size) + ' · ' + i.qty + ' шт.</div>' + (i.preorder ? preTag(i) : '') + '</div><span class="num">' + fmt(i.price * i.qty) + '</span></div>'; }).join('') +
           (o.promoDiscount ? '<div class="sum-row disc"><span>Промокод ' + esc(o.promoCode) + '</span><span>−' + fmt(o.promoDiscount) + '</span></div>' : '') +
           '<div class="sum-row"><span>' + esc(o.delivery && o.delivery.name || 'Доставка') + '</span><span>' + (o.delivery && o.delivery.price ? fmt(o.delivery.price) : 'Бесплатно') + '</span></div>' +
@@ -2118,8 +2118,77 @@
           (o.bonusEarn > 0 && o.status !== 'canceled' && o.status !== 'returned' ? '<div class="sum-row bonus-earn"><span><i class="b-ic" aria-hidden="true">Б</i>' + (o.bonusCredited ? 'Начислено бонусов' : 'Начислим ' + (bonusCfg().creditOn === 'done' ? 'после получения' : 'после оплаты')) + '</span><span>+' + bonusNum(o.bonusEarn) + '</span></div>' : '') + '</div>' +
         '<div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">' + (o.payUrl && o.payment.status === 'pending' ? '<a class="btn" href="' + esc(o.payUrl) + '">Оплатить заказ</a>' : '') + '<a class="btn ghost" href="#/catalog">Продолжить покупки</a>' + (API.user ? '<a class="btn ghost" href="#/account">Мои заказы</a><a class="btn ghost" href="#/account?tab=support&new=1&order=' + esc(o.id) + '">Вопрос по заказу</a>' : '') + '</div></div></div>';
       var ro = $('#reqOpen'); if (ro) ro.addEventListener('click', function () { openRequest(o, function () { orderPage(v, parts); }); });
+      mountOrderPush(o);
       if (API.user) refreshBonus(); // после оплаты бонусы могли прийти — обновим счёт и покажем уведомление
     } catch (e) { v.innerHTML = '<div class="wrap"><div class="empty"><h3>Заказ не найден</h3><p>' + esc(errMsg(e)) + '</p><a class="btn ghost" href="#/">На главную</a></div></div>'; }
+  }
+
+  /* ---------- Push-уведомления (13.60): карточка на странице заказа и настройки в кабинете ----------
+     Как будет выглядеть уведомление, показываем заранее — на «экране телефона» рядом с кнопкой. */
+  var BELL = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2H4.5z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/></svg>';
+  function pushMock(title, body, img) {
+    return '<div class="pn-stage" aria-hidden="true"><span class="pn-clock">' + new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) + '</span>' +
+      '<div class="pn"><div class="pn-head"><img class="pn-app" src="img/icon-192.png" alt=""><span>' + esc(D.settings.storeName || 'ALBAKOV') + '</span><time>сейчас</time></div>' +
+      '<div class="pn-main"><div class="pn-txt"><b>' + esc(title) + '</b><p>' + esc(body) + '</p></div>' + (img ? '<img class="pn-thumb" src="' + esc(img) + '" alt="">' : '') + '</div></div></div>';
+  }
+  function orderToken(id) { try { return (JSON.parse(localStorage.getItem('vanta:otok') || '{}') || {})[id] || ''; } catch (e) { return ''; } }
+  async function mountOrderPush(o) {
+    var slot = $('#pushSlot'); if (!slot || !window.Push) return;
+    if (['done', 'canceled', 'returned'].indexOf(o.status) !== -1) { slot.remove(); return; }
+    var st = await Push.state('customer'), extra = { orderId: o.id, t: orderToken(o.id) };
+    if (!document.body.contains(slot)) return;
+    if (st === 'on') { Push.link('customer', extra); slot.innerHTML = '<p class="push-on">' + BELL + '<span>Уведомления о заказе включены — сообщим, когда он будет в пути и когда приедет в пункт выдачи.</span></p>'; return; }
+    if (st === 'unsupported') { slot.remove(); return; }
+    var pv = o.delivery && o.delivery.pvz, img = (o.items.find(function (i) { return i.image; }) || {}).image || '';
+    var mock = pv ? pushMock(pv.type === 'postamat' ? 'Заказ ждёт в постамате' : 'Заказ ждёт в пункте выдачи', (pv.type === 'postamat' ? 'Постамат' : 'Пункт СДЭК') + ' · ' + (pv.address || ''), img)
+      : pushMock('Курьер везёт заказ № ' + o.number, 'Сегодня привезём по вашему адресу. Курьер позвонит перед приездом.', img);
+    var ios = st === 'ios-install', denied = st === 'denied';
+    slot.innerHTML = '<div class="pushc"><div class="pushc-t"><span class="pushc-ic">' + BELL + '</span>' +
+      '<h3>Узнайте первым, когда заказ приедет</h3>' +
+      '<p>' + (ios ? 'На iPhone уведомления приходят из приложения ALBAKOV. Добавьте магазин на экран «Домой», откройте заказ оттуда и включите их.' : denied ? 'Уведомления для этого сайта запрещены в настройках браузера. Разрешите их — и сообщим, когда заказ будет в пути и в пункте выдачи.' : 'Одно нажатие — и сообщим, когда заказ будет в пути, когда приедет в пункт выдачи, и напомним забрать. Без рекламы.') + '</p>' +
+      (denied ? '' : '<button class="btn" type="button" id="pushGo">' + (ios ? 'Добавить на экран «Домой»' : 'Включить уведомления') + '</button>') + '<p class="form-error" id="pushErr"></p></div>' + mock + '</div>';
+    var b = $('#pushGo', slot); if (!b) return;
+    b.addEventListener('click', async function () {
+      if (ios) { if (window.Install) Install.open(); return; }
+      b.disabled = true; b.textContent = 'Включаем…';
+      try { await Push.enable('customer', extra); toast('Готово — сообщим, как только заказ сдвинется'); mountOrderPush(o); }
+      catch (e) { $('#pushErr', slot).textContent = errMsg(e); b.disabled = false; b.textContent = 'Включить уведомления'; }
+    });
+  }
+  var PUSH_KINDS = [['orders', 'Заказы', 'В пути, ждёт в пункте выдачи, курьер везёт, напоминание забрать'], ['support', 'Ответы поддержки', 'Когда мы ответили на ваш вопрос'], ['returns', 'Обмен и возврат', 'Новый размер отправлен, деньги вернулись'], ['stock', 'Снова в наличии', 'Размер, о котором вы просили сообщить, появился'], ['bonus', 'Бонусы', 'Начисления на бонусный счёт'], ['promo', 'Акции и новинки', 'Редко и только о важном — по желанию']];
+  async function pushSettings(box) {
+    if (!box || !window.Push) return;
+    var st = await Push.state('customer'), r = null;
+    try { r = await API.pushPrefs(); } catch (e) { box.remove(); return; }
+    if (!document.body.contains(box)) return;
+    var kinds = PUSH_KINDS.filter(function (k) { return k[0] !== 'bonus' || bonusCfg().enabled; });
+    var dev = st === 'on' ? '<span class="pushs-st on">Включены на этом устройстве</span><span class="pushs-btns"><button class="btn ghost sm" type="button" data-ps="test">Проверить</button><button class="btn ghost sm" type="button" data-ps="off">Выключить</button></span>'
+      : st === 'ios-install' ? '<span class="pushs-st">На iPhone — из приложения на экране «Домой»</span><button class="btn sm" type="button" data-ps="install">Как добавить</button>'
+      : st === 'denied' ? '<span class="pushs-st">Запрещены в настройках браузера для этого сайта</span>'
+      : st === 'unsupported' ? '<span class="pushs-st">Этот браузер не поддерживает уведомления</span>'
+      : '<span class="pushs-st">Выключены на этом устройстве</span><button class="btn sm" type="button" data-ps="on">Включить</button>';
+    box.innerHTML = '<legend>Уведомления на телефон</legend><p>Приходят сразу, даже когда сайт закрыт' + (r.devices > 1 ? ' · включены на ' + r.devices + ' ' + plural(r.devices, 'устройстве', 'устройствах', 'устройствах') : '') + '.</p>' +
+      '<div class="pushs-dev">' + BELL + dev + '</div>' +
+      '<div class="pushs-list">' + kinds.map(function (k) { return '<label class="pushs-row"><span><b>' + k[1] + '</b><small>' + k[2] + '</small></span><span class="adm-switch"><input type="checkbox" data-pk="' + k[0] + '"' + (r.prefs[k[0]] ? ' checked' : '') + '><span></span></span></label>'; }).join('') + '</div>' +
+      '<p class="form-error" data-ps-err></p>';
+    box._r = r; if (box._bound) return; box._bound = true;
+    var err = function () { return $('[data-ps-err]', box) || {}; };
+    box.addEventListener('change', async function (e) {
+      var i = e.target.closest('[data-pk]'); if (!i) return; var r = box._r;
+      r.prefs[i.getAttribute('data-pk')] = i.checked;
+      try { await API.pushPrefs(r.prefs); toast('Сохранено'); } catch (ex) { err().textContent = errMsg(ex); i.checked = !i.checked; r.prefs[i.getAttribute('data-pk')] = i.checked; }
+    });
+    box.addEventListener('click', async function (e) {
+      var b = e.target.closest('[data-ps]'); if (!b) return; var a = b.getAttribute('data-ps'); err().textContent = '';
+      if (a === 'install') { if (window.Install) Install.open(); return; }
+      b.disabled = true;
+      try {
+        if (a === 'on') { await Push.enable('customer'); toast('Уведомления включены'); }
+        if (a === 'off') { await Push.disable('customer'); toast('Уведомления на этом устройстве выключены'); }
+        if (a === 'test') { await Push.test('customer'); toast('Отправили — уведомление появится через пару секунд'); }
+        if (a !== 'test') pushSettings(box); else b.disabled = false;
+      } catch (ex) { err().textContent = errMsg(ex); b.disabled = false; }
+    });
   }
 
   /* ---------- Личный кабинет ---------- */
@@ -2268,9 +2337,10 @@
       '<fieldset><legend>Пароль</legend><p>Заполните, только если хотите сменить пароль.</p>' +
         '<label class="field"><span>Новый пароль</span><input class="input" id="pf-pass" type="password" autocomplete="new-password" placeholder="Не короче 6 символов"></label>' +
         '<label class="field" id="pfCurRow" hidden><span>Текущий пароль</span><input class="input" id="pf-cur" type="password" autocomplete="current-password" placeholder="Для смены пароля или почты"></label></fieldset>' +
+      '<fieldset class="pushs" id="pushPrefs"><legend>Уведомления на телефон</legend><div class="loader">…</div></fieldset>' +
       '<fieldset><legend>Письма</legend><p>Только по делу — никаких рассылок.</p><label class="check"><input type="checkbox" data-remind' + (u.cartRemind ? ' checked' : '') + '> <span>Напоминать о товарах в корзине, если я не оформил заказ<br><small class="muted">Одно письмо на корзину, через несколько часов</small></span></label></fieldset>' +
       '<p class="form-error" id="pfErr"></p><div class="acc-profile-act"><button class="btn">Сохранить изменения</button><button class="btn ghost" type="button" id="pfOut">Выйти из аккаунта</button></div></form>';
-    phoneMask($('#pf-phone'));
+    phoneMask($('#pf-phone')); pushSettings($('#pushPrefs'));
     // Поле «Текущий пароль» появляется, когда меняют пароль или почту
     var curNeed = function () { var need = !!$('#pf-pass').value || $('#pf-email').value.trim().toLowerCase() !== String(u.email || '').toLowerCase(); $('#pfCurRow').hidden = !need; };
     ['#pf-pass', '#pf-email'].forEach(function (q) { $(q).addEventListener('input', curNeed); });
@@ -2519,7 +2589,8 @@
       try {
         if (mode === 'login') {
           if (!$('#lg-login').value.trim() || !$('#lg-pass').value) { err.textContent = 'Введите логин и пароль'; return; }
-          await API.login($('#lg-login').value, $('#lg-pass').value);
+          var lr = await API.login($('#lg-login').value, $('#lg-pass').value);
+          if (lr && lr.confirm) { codeStep(v, lr.confirm, { login: $('#lg-login').value }, back, 'login'); return; }
           toast('С возвращением, ' + API.user.firstName); markBonusDot(); setTimeout(showBonusNews, 600);
         } else {
           var f = { firstName: $('#rg-first').value.trim(), lastName: $('#rg-last').value.trim(), phone: $('#rg-phone').value, email: $('#rg-email').value.trim(), password: $('#rg-pass').value };
@@ -2543,14 +2614,16 @@
   }
 
   /* ---------- Подтверждение почты: код из 6 цифр ---------- */
-  function codeStep(v, pend, f, back) {
+  // mode 'login' — вход в панель с нового устройства (13.60): тот же ввод кода, другой текст и проверка
+  function codeStep(v, pend, f, back, mode) {
+    var LG = mode === 'login';
     var cells = ''; for (var i = 0; i < 6; i++) cells += '<input class="code-cell" inputmode="numeric" pattern="[0-9]*" maxlength="6" aria-label="Цифра ' + (i + 1) + ' из 6"' + (i === 0 ? ' autocomplete="one-time-code"' : ' autocomplete="off"') + '>';
-    v.innerHTML = '<div class="wrap"><div class="page-head" style="text-align:center;justify-items:center"><span class="eyebrow">Регистрация</span><h1>Подтвердите почту</h1></div>' +
+    v.innerHTML = '<div class="wrap"><div class="page-head" style="text-align:center;justify-items:center"><span class="eyebrow">' + (LG ? 'Вход в панель' : 'Регистрация') + '</span><h1>' + (LG ? 'Подтвердите вход' : 'Подтвердите почту') + '</h1></div>' +
       '<div class="auth code-step">' +
-        '<p class="code-lead">Отправили код из 6 цифр на <b>' + esc(pend.email) + '</b>. Код действует ' + pend.minutes + ' минут.</p>' +
+        '<p class="code-lead">' + (LG ? 'Вы входите с нового устройства в аккаунт с доступом к панели. Для защиты отправили код из 6 цифр на <b>' + esc(pend.email) + '</b>. На этом устройстве код больше не понадобится 90 дней.' : 'Отправили код из 6 цифр на <b>' + esc(pend.email) + '</b>. Код действует ' + pend.minutes + ' минут.') + '</p>' +
         '<form id="codeForm" novalidate><div class="code-cells" role="group" aria-label="Код из письма">' + cells + '</div>' +
           '<p class="form-error" id="codeErr" aria-live="polite"></p><button class="btn block" id="codeBtn">Подтвердить</button></form>' +
-        '<div class="code-more"><button class="link" id="codeResend" type="button"></button><button class="link" id="codeBack" type="button">Изменить данные</button></div>' +
+        '<div class="code-more"><button class="link" id="codeResend" type="button"></button><button class="link" id="codeBack" type="button">' + (LG ? 'Войти другим аккаунтом' : 'Изменить данные') + '</button></div>' +
         '<p class="auth-note">Письма нет? Проверьте папку «Спам» — иногда код попадает туда.</p>' +
       '</div></div>';
     var box = $$('.code-cell', v), err = $('#codeErr'), btn = $('#codeBtn'), rs = $('#codeResend'), busy = false, timer = null;
@@ -2586,7 +2659,10 @@
       if (busy) return;
       var c = code(); if (c.length < 6) { bad('Введите все 6 цифр из письма'); return; }
       busy = true; btn.disabled = true; btn.textContent = 'Проверяем…';
-      try { var r = await API.verify(pend.id, c); clearInterval(timer); afterRegister(back, r.welcome, true); }
+      try {
+        if (LG) { await API.loginConfirm(pend.id, c); clearInterval(timer); toast('С возвращением, ' + API.user.firstName); markBonusDot(); renderShell(); go(backTo(back)); return; }
+        var r = await API.verify(pend.id, c); clearInterval(timer); afterRegister(back, r.welcome, true);
+      }
       catch (ex) {
         busy = false; btn.disabled = false; btn.textContent = 'Подтвердить';
         bad(errMsg(ex), true);
@@ -2605,10 +2681,10 @@
     }
     rs.addEventListener('click', async function () {
       rs.disabled = true;
-      try { var r = await API.resendCode(pend.id); toast('Отправили новый код на ' + pend.email); err.textContent = ''; box.forEach(function (c) { c.value = ''; }); box[0].focus(); countdown(r.resendIn || 60); }
+      try { var r = await (LG ? API.loginResend(pend.id) : API.resendCode(pend.id)); toast('Отправили новый код на ' + pend.email); err.textContent = ''; box.forEach(function (c) { c.value = ''; }); box[0].focus(); countdown(r.resendIn || 60); }
       catch (ex) { err.textContent = errMsg(ex); rs.disabled = false; }
     });
-    $('#codeBack').addEventListener('click', function () { clearInterval(timer); authPage(v, 'register', back, Object.assign({}, f)); });
+    $('#codeBack').addEventListener('click', function () { clearInterval(timer); authPage(v, LG ? 'login' : 'register', back, LG ? {} : Object.assign({}, f)); });
     countdown(pend.resendIn || 60);
     setTimeout(function () { box[0].focus(); }, 60);
   }

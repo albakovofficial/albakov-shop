@@ -11,7 +11,7 @@
   var SECTIONS = [
     ['overview', 'Обзор'], ['orders', 'Заказы'], ['support', 'Поддержка'], ['products', 'Товары'], ['categories', 'Категории'], ['sizeCharts', 'Размерные сетки'],
     ['promotions', 'Акции'], ['promocodes', 'Промокоды'], ['bonus', 'Бонусы'], ['exchange', 'Обмен и возвраты'], ['customers', 'Покупатели'], ['mail', 'Почта'], ['analytics', 'Аналитика'], ['finance', 'Финансы'], ['gifts', 'Подарочные сертификаты'], ['sections', 'Разделы: женщинам / мужчинам'], ['brand', 'Логотип и название'], ['slider', 'Слайдер на главной'], ['home', 'Главная страница'], ['pages', 'Страницы'],
-    ['menu', 'Меню, контакты, соцсети'], ['payment', 'Оплата и доставка'], ['staff', 'Сотрудники'], ['settings', 'Настройки']
+    ['menu', 'Меню, контакты, соцсети'], ['payment', 'Оплата и доставка'], ['push', 'Push-уведомления'], ['staff', 'Сотрудники'], ['audit', 'Журнал действий'], ['settings', 'Настройки']
   ];
   /* Какие разделы видит роль (13.57): права приходят с сервера в DATA.perms, сервер проверяет их на каждом запросе */
   var SECTION_PERMS = {
@@ -19,7 +19,7 @@
     products: ['content'], categories: ['content'], sizeCharts: ['content'], promotions: ['content', 'marketing'], promocodes: ['content', 'marketing'],
     sections: ['content'], brand: ['content'], slider: ['content'], home: ['content'], pages: ['content'], menu: ['content'],
     bonus: ['marketing'], mail: ['mail'], analytics: ['finance', 'marketing'], finance: ['finance'],
-    payment: ['payment'], staff: ['staff'], settings: ['settings']
+    payment: ['payment'], push: [], staff: ['staff'], audit: ['staff'], settings: ['settings']
   };
   function can(perm) { return (DATA.perms || []).indexOf(perm) !== -1; }
   function canSection(key) { var need = SECTION_PERMS[key]; return !!need && (!need.length || need.some(can)); }
@@ -214,7 +214,7 @@
       '<div class="adm-side-foot"><a href="#/" class="muted">← В магазин</a><button class="muted" id="admOut">Выйти из аккаунта</button></div></aside><section class="adm-main" id="admMain"></section></div>';
     $('#admOut').addEventListener('click', async function () { await API.logout(); DATA = null; window.ALB_NAV.go('#/'); await A().refresh(); });
     var main = $('#admMain');
-    var fn = { overview: overview, orders: orders, support: supportSection, products: products, categories: categories, sizeCharts: sizeCharts, promotions: promotions, promocodes: promocodes, bonus: bonusSection, exchange: exchangeSection, customers: customers,  mail: mailHub, staff: staffSection,  analytics: analyticsSection, finance: financeSection, gifts: giftsSection, sections: sectionsSettings, brand: brandSection, slider: sliderSection, home: homeSettings, pages: pages, menu: menuSettings, payment: paymentSettings, settings: generalSettings }[s] || overview;
+    var fn = { overview: overview, orders: orders, support: supportSection, products: products, categories: categories, sizeCharts: sizeCharts, promotions: promotions, promocodes: promocodes, bonus: bonusSection, exchange: exchangeSection, customers: customers,  mail: mailHub, push: pushSection, staff: staffSection, audit: auditSection,  analytics: analyticsSection, finance: financeSection, gifts: giftsSection, sections: sectionsSettings, brand: brandSection, slider: sliderSection, home: homeSettings, pages: pages, menu: menuSettings, payment: paymentSettings, settings: generalSettings }[s] || overview;
     fn(main, q);
   }
   function waitBadge() { var n = (DATA.waitlist || []).filter(function (w) { return w.status === 'waiting' || w.status === 'failed'; }).length; return n ? ' <span class="adm-badge muted-badge">' + n + '</span>' : ''; }
@@ -780,15 +780,16 @@
     var list = cfg.sort ? items.slice().sort(cfg.sort) : items;
     var term = (q.q || '').toLowerCase();
     if (term) list = list.filter(function (x) { return JSON.stringify(cfg.row(x)).toLowerCase().indexOf(term) !== -1; });
-    m.innerHTML = head(cfg.title, (cfg.searchable ? '<input class="input" id="cSearch" placeholder="Поиск" value="' + esc(q.q || '') + '" style="min-height:40px;width:200px">' : '') + '<a class="btn sm" href="#/admin?s=' + cfg.key + '&id=new">+ ' + esc(cfg.addLabel) + '</a>', cfg.sub) +
+    m.innerHTML = head(cfg.title, (cfg.searchable ? '<input class="input" id="cSearch" placeholder="Поиск" value="' + esc(q.q || '') + '" style="min-height:40px;width:200px">' : '') + (cfg.headExtra || '') + '<a class="btn sm" href="#/admin?s=' + cfg.key + '&id=new">+ ' + esc(cfg.addLabel) + '</a>', cfg.sub) + (cfg.listTop || '') +
       (list.length ? '<div class="table-wrap adm-table"><table class="sizes' + (cfg.bulk ? ' adm-bulk-table' : '') + '"><thead><tr>' +
         (cfg.bulk ? '<th class="adm-pick-cell"><label class="check adm-pick" title="Выбрать все"><input type="checkbox" id="pickAll" aria-label="Выбрать все"></label></th>' : '') +
         cfg.cols.map(function (c) { return '<th>' + esc(c) + '</th>'; }).join('') + '</tr></thead><tbody>' +
         list.map(function (x) { return '<tr data-href="#/admin?s=' + cfg.key + '&id=' + esc(x.id) + '">' + (cfg.bulk ? '<td class="adm-pick-cell"><label class="check adm-pick"><input type="checkbox" data-pick="' + esc(x.id) + '" aria-label="Выбрать"></label></td>' : '') + cfg.row(x).map(function (c) { return '<td>' + c + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>' +
-        (cfg.bulk ? '<div class="adm-bar adm-bulk-bar" id="bulkBar" hidden><span class="adm-bulk-n" id="bulkN"></span><button class="btn ghost sm" id="bulkAll"></button><button class="btn ghost sm" id="bulkNone">Снять выбор</button><button class="btn sm" id="bulkDel"></button></div>' : '')
+        (cfg.bulk ? '<div class="adm-bar adm-bulk-bar" id="bulkBar" hidden><span class="adm-bulk-n" id="bulkN"></span><button class="btn ghost sm" id="bulkAll"></button><button class="btn ghost sm" id="bulkNone">Снять выбор</button>' + (cfg.bulkOps || '') + '<button class="btn sm" id="bulkDel"></button></div>' : '')
         : '<div class="empty"><h3>Пока пусто</h3><a class="btn ghost" href="#/admin?s=' + cfg.key + '&id=new">' + esc(cfg.addLabel) + '</a></div>');
     var cs = $('#cSearch'); if (cs) cs.addEventListener('change', function () { window.ALB_NAV.go('#/admin?s=' + cfg.key + '&q=' + encodeURIComponent(cs.value)); });
     if (cfg.bulk && list.length) bindBulk(m, cfg, list, q);
+    if (cfg.mountList) cfg.mountList(m, q);
   }
   /* Выбор нескольких строк галочками и удаление выбранных (сейчас — в «Товарах») */
   function bindBulk(m, cfg, list, q) {
@@ -813,6 +814,7 @@
     });
     $('#bulkAll', m).addEventListener('click', function () { picks.forEach(function (c) { c.checked = true; }); sync(); });
     $('#bulkNone', m).addEventListener('click', function () { picks.forEach(function (c) { c.checked = false; }); sync(); });
+    if (cfg.onBulkOps) cfg.onBulkOps(m, chosen, q);
     del.addEventListener('click', async function () {
       var ids = chosen(); if (!ids.length) return;
       if (!armed) {
@@ -829,6 +831,56 @@
     });
     sync();
   }
+  /* Массовые изменения товаров (13.60): цена, ±%, скидка, показать или скрыть — для выбранных галочками */
+  function bindProductOps(m, chosen, q) {
+    var act = $('#bopAct', m), val = $('#bopVal', m), go = $('#bopGo', m); if (!act) return;
+    var NEED = { price: 'Новая цена', percent: '+10 или −10', discount: 'Скидка, %' };
+    var sync = function () { var a = act.value; val.hidden = !NEED[a]; val.placeholder = NEED[a] || ''; go.disabled = !a || (NEED[a] && val.value === ''); };
+    act.addEventListener('change', function () { val.value = ''; sync(); if (!val.hidden) val.focus(); });
+    val.addEventListener('input', sync);
+    go.addEventListener('click', async function () {
+      var ids = chosen(); if (!ids.length || !act.value) return;
+      go.disabled = true; go.textContent = 'Применяю…';
+      try {
+        var r = await A().API.adminPost('products/bulk', { ids: ids, action: act.value, value: Number(val.value) || 0 });
+        await afterSave('Изменено: ' + r.changed + ' ' + plural(r.changed, 'товар', 'товара', 'товаров'), '#/admin?s=products' + (q.q ? '&q=' + encodeURIComponent(q.q) : ''));
+      } catch (e) { toast(A().errMsg(e), true); go.textContent = 'Применить'; sync(); }
+    });
+  }
+  /* Остатки в Excel (CSV) и обратно: выгрузили, поправили числа в колонке «Остаток», загрузили — сначала показываем, что изменится */
+  function bindStockFile(m) {
+    var ex = $('#stExport', m), im = $('#stImport', m), pv = $('#stPreview', m); if (!ex) return;
+    ex.addEventListener('click', async function () {
+      ex.disabled = true;
+      try {
+        var r = await fetch('api/admin/products/stock.csv', { credentials: 'same-origin' }); if (!r.ok) throw new Error('Не удалось выгрузить остатки');
+        var b = await r.blob(), a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'ostatki-' + new Date().toISOString().slice(0, 10) + '.csv';
+        document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+        toast('Файл скачан — откройте в Excel, поменяйте «Остаток» и загрузите обратно');
+      } catch (e) { toast(A().errMsg(e), true); }
+      ex.disabled = false;
+    });
+    im.addEventListener('change', async function () {
+      var f = im.files && im.files[0]; im.value = ''; if (!f) return;
+      if (f.size > 2 * 1024 * 1024) { toast('Файл слишком большой', true); return; }
+      var text = await f.text();
+      try {
+        var r = await A().API.adminPost('products/stock', { csv: text, dry: true });
+        if (!r.changes.length) { pv.innerHTML = '<div class="adm-card st-pv"><b>Изменений нет</b><p class="muted">Остатки в файле совпадают с сайтом' + (r.errors.length ? '. Не распознано строк: ' + r.errors.length : '') + '.</p></div>'; return; }
+        pv.innerHTML = '<div class="adm-card st-pv"><div class="st-pv-h"><b>Изменится ' + r.changes.length + ' ' + plural(r.changes.length, 'размер', 'размера', 'размеров') + '</b><span><button class="btn ghost sm" type="button" id="stCancel">Отмена</button><button class="btn sm" type="button" id="stApply">Применить</button></span></div>' +
+          '<div class="table-wrap"><table class="sizes"><thead><tr><th>Товар</th><th>Цвет</th><th>Размер</th><th>Было</th><th>Станет</th></tr></thead><tbody>' +
+          r.changes.slice(0, 300).map(function (c) { return '<tr><td>' + esc(c.name) + '</td><td>' + esc(c.color) + '</td><td>' + esc(c.size) + '</td><td class="num">' + c.from + '</td><td class="num"><b class="' + (c.to > c.from ? 'st-up' : 'st-down') + '">' + c.to + '</b></td></tr>'; }).join('') + '</tbody></table></div>' +
+          (r.errors.length ? '<p class="form-error">Пропущено строк: ' + r.errors.length + ' — ' + esc(r.errors.slice(0, 3).join('; ')) + '</p>' : '') + '</div>';
+        $('#stCancel', pv).addEventListener('click', function () { pv.innerHTML = ''; });
+        $('#stApply', pv).addEventListener('click', async function () {
+          this.disabled = true;
+          try { var x = await A().API.adminPost('products/stock', { csv: text }); await afterSave('Остатки обновлены: ' + x.changed + (x.notify && x.notify.sent ? ' · письма о поступлении: ' + x.notify.sent : ''), '#/admin?s=products'); }
+          catch (e) { toast(A().errMsg(e), true); this.disabled = false; }
+        });
+        pv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch (e) { toast(A().errMsg(e), true); }
+    });
+  }
   function onOff(b) { return b ? '<span class="status done">Да</span>' : '<span class="status canceled">Нет</span>'; }
   function catOpts() { return DATA.categories.map(function (c) { return [c.id, c.name]; }); }
 
@@ -839,6 +891,10 @@
     collection(m, q, {
       key: 'products', prefix: 'p', title: 'Товары', newTitle: 'Новый товар', addLabel: 'Добавить товар', searchable: true,
       bulk: { one: 'товар', few: 'товара', many: 'товаров' },
+      headExtra: '<button class="btn ghost sm" type="button" id="stExport">Остатки в Excel</button><label class="btn ghost sm" id="stImportL">Загрузить остатки<input type="file" id="stImport" accept=".csv,text/csv,.txt" hidden></label>',
+      listTop: '<div id="stPreview"></div>',
+      bulkOps: '<span class="adm-bops"><select class="select" id="bopAct" aria-label="Что сделать с выбранными"><option value="">Изменить…</option><option value="price">Цена, ₽</option><option value="percent">Цена ±%</option><option value="discount">Скидка %</option><option value="nodiscount">Убрать скидку</option><option value="show">Показать на сайте</option><option value="hide">Скрыть с сайта</option></select><input class="input num" id="bopVal" type="number" step="1" placeholder="0" hidden aria-label="Значение"><button class="btn sm" type="button" id="bopGo" disabled>Применить</button></span>',
+      onBulkOps: bindProductOps, mountList: bindStockFile,
       sub: 'Нажмите на строку, чтобы изменить товар: цены, цвета, фото, размеры и остатки. Галочками можно выбрать несколько товаров или все сразу и удалить их.',
       itemTitle: function (x) { return x.name; },
       view: function (x) { return '<a class="btn ghost sm" href="#/product/' + esc(x.slug) + '">Открыть на сайте</a>'; },
@@ -1892,6 +1948,139 @@
         try { var r = await A().API.adminPost('gifts', { amount: Number($('#gn-amount').value), toName: $('#gn-name').value, toEmail: $('#gn-email').value, message: $('#gn-msg').value }); A().closePanels(); await afterSave('Сертификат ' + r.gift.code + ' выпущен' + (r.sent ? ' и отправлен' : '')); }
         catch (ex) { $('#gnErr').textContent = A().errMsg(ex); }
       });
+    });
+  }
+
+  /* ================= Журнал действий (13.60) =================
+     Кто, когда и что поменял в панели. Фильтры: раздел, сотрудник, поиск по тексту. Ссылка ведёт к заказу или товару. */
+  var AUDIT_AREAS = [['', 'Все разделы'], ['orders', 'Заказы'], ['support', 'Поддержка'], ['content', 'Товары и витрина'], ['customers', 'Покупатели'], ['marketing', 'Рассылки'], ['finance', 'Финансы'], ['settings', 'Настройки'], ['staff', 'Сотрудники'], ['security', 'Входы']];
+  var AUDIT_IC = { orders: '<path d="M5 7h14l-1.2 12H6.2z"/><path d="M9 7a3 3 0 0 1 6 0"/>', support: '<path d="M5 6h14v10H9l-4 3z"/>', content: '<path d="M8 4l-4 3 2 3 2-1v11h8V9l2 1 2-3-4-3a4 4 0 0 1-8 0z"/>', customers: '<circle cx="12" cy="9" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/>', marketing: '<path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2H4.5z"/>', finance: '<path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/>', settings: '<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/>', staff: '<circle cx="9" cy="9" r="3"/><path d="M3 19a6 6 0 0 1 12 0M16 6a3 3 0 0 1 0 6M18 19a6 6 0 0 0-2-4.5"/>', security: '<rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>' };
+  async function auditSection(m, q) {
+    var f = { area: q.area || '', by: q.by || '', q: q.q || '' };
+    m.innerHTML = head('Журнал действий', '', 'Все изменения в панели: заказы, товары, цены и остатки, настройки, доступы и входы. Хранятся последние 5000 записей.') +
+      '<div class="au-bar"><select class="select" id="auArea" aria-label="Раздел">' + AUDIT_AREAS.map(function (a) { return '<option value="' + a[0] + '"' + (a[0] === f.area ? ' selected' : '') + '>' + a[1] + '</option>'; }).join('') + '</select>' +
+      '<select class="select" id="auBy" aria-label="Сотрудник"><option value="">Все сотрудники</option></select>' +
+      '<input class="input" id="auQ" type="search" placeholder="Поиск: номер заказа, товар, слово" value="' + esc(f.q) + '"></div><div id="auList"><div class="loader">…</div></div>';
+    var list = $('#auList'), items = [], seq = 0;
+    var day = function (iso) { var d = new Date(iso), t = new Date(), y = new Date(Date.now() - 864e5); return d.toDateString() === t.toDateString() ? 'Сегодня' : d.toDateString() === y.toDateString() ? 'Вчера' : d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: d.getFullYear() === t.getFullYear() ? undefined : 'numeric' }); };
+    var row = function (x) {
+      var link = x.ref && x.ref.order ? '#/admin?s=orders&id=' + encodeURIComponent(x.ref.order) : x.ref && x.ref.product ? '#/admin?s=products&id=' + encodeURIComponent(x.ref.product) : '';
+      return '<div class="au-row"><span class="au-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">' + (AUDIT_IC[x.area] || AUDIT_IC.settings) + '</svg></span>' +
+        '<div class="au-t">' + (link ? '<a href="' + link + '">' + esc(x.text) + '</a>' : '<span>' + esc(x.text) + '</span>') + '<small>' + esc(x.name || 'Система') + (x.role ? ' · ' + esc(x.role) : '') + '</small></div>' +
+        '<time class="num">' + new Date(x.at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) + '</time></div>';
+    };
+    var draw = function (more) {
+      if (!items.length) { list.innerHTML = '<div class="adm-card au-empty"><p class="muted">' + (f.area || f.by || f.q ? 'Ничего не нашлось — измените фильтры' : 'Пока пусто. Здесь появится каждое изменение в панели') + '</p></div>'; return; }
+      var html = '', cur = '';
+      items.forEach(function (x) { var d = day(x.at); if (d !== cur) { html += (cur ? '</div>' : '') + '<h3 class="au-day">' + d + '</h3><div class="adm-card au-group">'; cur = d; } html += row(x); });
+      list.innerHTML = html + '</div>' + (more ? '<button class="btn ghost" id="auMore" type="button">Показать ещё</button>' : '');
+      var mb = $('#auMore'); if (mb) mb.addEventListener('click', function () { load(true); });
+    };
+    async function load(append) {
+      var n = ++seq, prm = { area: f.area, by: f.by, q: f.q }; if (append && items.length) prm.before = items[items.length - 1].at;
+      try {
+        var r = await A().API.adminAudit(prm); if (n !== seq) return;
+        items = append ? items.concat(r.items) : r.items;
+        var sel = $('#auBy'); if (sel && sel.options.length === 1) r.people.forEach(function (pp) { var o = document.createElement('option'); o.value = pp.id; o.textContent = pp.name; if (pp.id === f.by) o.selected = true; sel.appendChild(o); });
+        draw(r.more);
+      } catch (e) { list.innerHTML = '<p class="form-error">' + esc(A().errMsg(e)) + '</p>'; }
+    }
+    var t = 0;
+    $('#auArea').addEventListener('change', function () { f.area = this.value; load(); });
+    $('#auBy').addEventListener('change', function () { f.by = this.value; load(); });
+    $('#auQ').addEventListener('input', function () { var v = this.value; clearTimeout(t); t = setTimeout(function () { f.q = v.trim(); load(); }, 300); });
+    load();
+  }
+
+  /* ================= Push-уведомления (13.60) =================
+     Каждый сотрудник включает их на своём телефоне и выбирает, что присылать (в пределах своей роли).
+     С правом «маркетинг» — рассылка акций покупателям, которые сами согласились их получать. */
+  var STAFF_PUSH = {
+    order: ['Новый заказ', 'С оплатой при получении — сразу после оформления'], paid: ['Заказ оплачен', 'Онлайн-оплата прошла — пора собирать'],
+    support: ['Вопрос покупателя', 'Новые обращения и сообщения в поддержку'], request: ['Заявка на обмен или возврат', 'Покупатель оформил заявку в заказе'],
+    returnIn: ['Возврат пришёл на склад', 'Проверьте вещь и завершите возврат'], stock: ['Заканчивается размер', 'После заказа осталось 2 штуки или меньше'],
+    digest: ['Итоги дня', 'В 21:00 по Москве: заказы, выручка, вопросы без ответа'], security: ['Вход в панель', 'Кто-то из команды вошёл с нового устройства']
+  };
+  var PBELL = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2H4.5z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/></svg>';
+  function pnMock(title, body, img, big) {
+    return '<div class="pn"><div class="pn-head"><img class="pn-app" src="img/icon-192.png" alt=""><span>' + esc(A().D.settings.storeName || 'ALBAKOV') + '</span><time>сейчас</time></div>' +
+      '<div class="pn-main"><div class="pn-txt"><b>' + esc(title) + '</b><p>' + esc(body) + '</p></div>' + (img && !big ? '<img class="pn-thumb" src="' + esc(img) + '" alt="">' : '') + '</div>' +
+      (img && big ? '<img class="pn-big" src="' + esc(img) + '" alt="">' : '') + '</div>';
+  }
+  function pnStage(inner, cls) { return '<div class="pn-stage' + (cls ? ' ' + cls : '') + '" aria-hidden="true"><span class="pn-clock">' + new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) + '</span>' + inner + '</div>'; }
+  async function pushSection(m) {
+    m.innerHTML = head('Push-уведомления', '', 'Мгновенные уведомления на телефон и компьютер — даже когда панель закрыта. Включите их на каждом своём устройстве. Покупателям уведомления о заказе приходят сами, если они их включили.') + '<div class="loader">…</div>';
+    var r, st = window.Push ? await Push.state('staff') : 'unsupported';
+    try { r = await A().API.adminPush(); } catch (e) { m.querySelector('.loader').outerHTML = '<p class="form-error">' + esc(A().errMsg(e)) + '</p>'; return; }
+    var keys = Object.keys(r.prefs || {});
+    var dev = st === 'on' ? '<span class="pushs-st on">Включены на этом устройстве</span><span class="pushs-btns"><button class="btn ghost sm" type="button" data-sp="test">Проверить</button><button class="btn ghost sm" type="button" data-sp="off">Выключить</button></span>'
+      : st === 'ios-install' ? '<span class="pushs-st">На iPhone уведомления приходят только из приложения: добавьте сайт на экран «Домой» и откройте панель оттуда</span><button class="btn sm" type="button" data-sp="install">Как добавить</button>'
+      : st === 'denied' ? '<span class="pushs-st">Запрещены в настройках браузера — разрешите уведомления для этого сайта и обновите страницу</span>'
+      : st === 'unsupported' ? '<span class="pushs-st">Этот браузер не умеет показывать уведомления</span>'
+      : '<span class="pushs-st">Выключены на этом устройстве</span><button class="btn sm" type="button" data-sp="on">Включить на этом устройстве</button>';
+    var mk = r.audience !== null && r.audience !== undefined;
+    m.innerHTML = head('Push-уведомления', '', 'Мгновенные уведомления на телефон и компьютер — даже когда панель закрыта. Включите их на каждом своём устройстве. Покупателям уведомления о заказе приходят сами, если они их включили.') +
+      '<div class="adm-two"><div class="adm-card ps-dev"><h3 class="adm-h3">Это устройство</h3>' +
+        pnStage(pnMock('Новый заказ № 1042 · 5 798 ₽', 'Анна Смирнова, Москва\nФутболка Оверсайз L, Футболка Оверсайз M', 'img/icon-192.png')) +
+        '<div class="pushs-dev">' + PBELL + dev + '</div>' + (r.devices > 1 ? '<p class="al-hint">Всего ваших устройств с уведомлениями: ' + r.devices + '</p>' : '') + '<p class="form-error" id="spErr"></p></div>' +
+      '<div class="adm-card"><h3 class="adm-h3">Что присылать мне</h3><p class="al-hint">Только то, что относится к вашей роли. Настройка общая для всех ваших устройств.</p><div class="al-events">' +
+        keys.map(function (k) { var x = STAFF_PUSH[k] || [k, '']; return '<label class="al-ev"><span><b>' + x[0] + '</b><small>' + x[1] + '</small></span><span class="adm-switch"><input type="checkbox" data-spk="' + k + '"' + (r.prefs[k] ? ' checked' : '') + '><span></span></span></label>'; }).join('') +
+      '</div></div></div>' +
+      (mk ? '<div class="adm-card ps-bc"><div class="ps-bc-form"><h3 class="adm-h3">Рассылка покупателям</h3>' +
+        '<p class="al-hint">Уходит только тем, кто сам включил «Акции и новинки» в кабинете: сейчас это <b>' + r.audience + ' ' + plural(r.audience, 'устройство', 'устройства', 'устройств') + '</b>' + (r.customers ? ' из ' + r.customers + ' с уведомлениями' : '') + '. Пишите редко и по делу — частые рассылки заставляют отключать уведомления совсем.</p>' +
+        '<label class="field"><span>Заголовок <small class="muted" data-cnt="pbT">0/60</small></span><input class="input" id="pbT" maxlength="60" placeholder="Новая коллекция уже на сайте"></label>' +
+        '<label class="field"><span>Текст <small class="muted" data-cnt="pbB">0/180</small></span><textarea class="textarea" id="pbB" rows="3" maxlength="180" placeholder="Три футболки с вышивкой AV — размеры разбирают быстро"></textarea></label>' +
+        '<label class="field"><span>Куда ведёт</span><input class="input" id="pbU" value="/catalog" placeholder="/catalog"><small class="muted" style="font-size:13px">Адрес страницы на сайте: /catalog, /sale, /product/… — скопируйте из адресной строки всё после домена</small></label>' +
+        '<div class="field"><span>Картинка (необязательно)</span><div class="adm-imgs" data-imgs="pushImage" data-single="1"></div><small class="muted" style="font-size:13px">На Android покажется крупно, на iPhone — миниатюрой справа</small></div>' +
+        '<div class="ps-bc-act"><button class="btn ghost" type="button" id="pbTest">Прислать пробное мне</button><button class="btn" type="button" id="pbSend"' + (r.audience ? '' : ' disabled') + '>Отправить ' + r.audience + ' ' + plural(r.audience, 'покупателю', 'покупателям', 'покупателям') + '</button></div><p class="form-error" id="pbErr"></p></div>' +
+        '<div class="ps-bc-pv"><span class="adm-h3">Так увидят покупатели</span><div class="ps-phones"><div><small>iPhone</small><div id="pvIos"></div></div><div><small>Android</small><div id="pvAnd"></div></div></div></div>' +
+        (r.broadcasts && r.broadcasts.length ? '<div class="ps-hist"><h3 class="adm-h3">Отправленные</h3>' + r.broadcasts.map(function (b) { return '<div class="ps-hrow"><span class="num">' + esc(new Date(b.at).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })) + '</span><span><b>' + esc(b.title) + '</b><small>' + esc(b.body) + '</small></span><span class="ps-hn">' + b.sent + ' из ' + b.to + (b.by ? '<small>' + esc(b.by) + '</small>' : '') + '</span></div>'; }).join('') + '</div>' : '') +
+      '</div>' : '');
+    var err = $('#spErr');
+    m.onchange = async function (e) {
+      var i = e.target.closest('[data-spk]'); if (!i) return;
+      r.prefs[i.getAttribute('data-spk')] = i.checked;
+      try { await A().API.adminPush(r.prefs); toast('Сохранено'); } catch (ex) { err.textContent = A().errMsg(ex); i.checked = !i.checked; r.prefs[i.getAttribute('data-spk')] = i.checked; }
+    };
+    $$('[data-sp]', m).forEach(function (b) { b.addEventListener('click', async function () {
+      var a = b.getAttribute('data-sp'); err.textContent = '';
+      if (a === 'install') { if (window.Install) Install.open(); return; }
+      b.disabled = true;
+      try {
+        if (a === 'on') { await Push.enable('staff'); toast('Уведомления панели включены'); }
+        if (a === 'off') { await Push.disable('staff'); toast('Уведомления на этом устройстве выключены'); }
+        if (a === 'test') { await Push.test('staff'); toast('Отправили — уведомление появится через пару секунд'); b.disabled = false; return; }
+        pushSection(m);
+      } catch (ex) { err.textContent = A().errMsg(ex); b.disabled = false; }
+    }); });
+    if (!mk) return;
+    mountImages(m, { pushImage: '' });
+    var T = $('#pbT'), B = $('#pbB'), U = $('#pbU'), bErr = $('#pbErr'), armed = false;
+    var img = function () { return (imgState.pushImage || [])[0] || ''; };
+    var draw = function () {
+      $$('[data-cnt]', m).forEach(function (c) { var el = $('#' + c.getAttribute('data-cnt')); c.textContent = el.value.length + '/' + el.maxLength; });
+      var t = T.value.trim() || 'Заголовок уведомления', b = B.value.trim() || 'Текст — одна-две строки о главном';
+      $('#pvIos').innerHTML = pnStage(pnMock(t, b, img(), false), 'ios');
+      $('#pvAnd').innerHTML = pnStage(pnMock(t, b, img(), true), 'and');
+      if (armed) { armed = false; $('#pbSend').textContent = 'Отправить ' + r.audience + ' ' + plural(r.audience, 'покупателю', 'покупателям', 'покупателям'); $('#pbSend').classList.remove('danger'); }
+    };
+    [T, B, U].forEach(function (el) { el.addEventListener('input', draw); });
+    new MutationObserver(draw).observe($('[data-imgs="pushImage"]', m), { childList: true });
+    draw();
+    var payload = function (test) { return { title: T.value.trim(), body: B.value.trim(), url: U.value.trim() || '/', image: img(), test: !!test }; };
+    $('#pbTest').addEventListener('click', async function () {
+      var b = this; b.disabled = true; bErr.textContent = '';
+      try { await A().API.adminPushBroadcast(payload(true)); toast('Пробное уведомление отправлено на ваши устройства'); } catch (ex) { bErr.textContent = A().errMsg(ex); }
+      b.disabled = false;
+    });
+    // Отправка — в два нажатия: сначала кнопка спрашивает «Точно?», без всплывающих окон
+    $('#pbSend').addEventListener('click', async function () {
+      var b = this; bErr.textContent = '';
+      if (!T.value.trim() || !B.value.trim()) { bErr.textContent = 'Напишите заголовок и текст'; return; }
+      if (!armed) { armed = true; b.textContent = 'Точно отправить? Нажмите ещё раз'; b.classList.add('danger'); return; }
+      b.disabled = true; b.textContent = 'Отправляем…';
+      try { var x = await A().API.adminPushBroadcast(payload(false)); toast('Доставлено: ' + x.sent + ' из ' + x.to); pushSection(m); }
+      catch (ex) { bErr.textContent = A().errMsg(ex); b.disabled = false; armed = false; draw(); }
     });
   }
 

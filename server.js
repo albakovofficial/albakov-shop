@@ -13,6 +13,8 @@ const Finance = require('./public/js/finance.js'); // раздел «Финан�
 const smtp = require('./lib/smtp.js');
 const Store = require('./lib/db.js');
 const CdekLib = require('./lib/cdek.js');
+const WebPush = require('./lib/webpush.js');
+const Audit = require('./lib/audit.js'); // уведомления в браузер и приложение на телефоне
 
 loadEnv(path.join(__dirname, '.env'));
 const PORT = Number(process.env.PORT || 3000);
@@ -254,6 +256,7 @@ function cdekOrderBody(o, pkg) {
 const CDEK_WAIT = ['', 'ACCEPTED', 'CREATED', 'INVALID', 'REMOVED'];
 async function applyCdek(o, info) {
   if (!o.cdek || !info) return;
+  const was = o.cdek.status || '', wasDone = o.status === 'done';
   Object.assign(o.cdek, { number: info.number || o.cdek.number || '', status: info.status || o.cdek.status, statusName: info.statusName || o.cdek.statusName, statusAt: info.statusAt || o.cdek.statusAt, error: info.error || '' });
   if (info.cost > 0) o.fin = Object.assign({}, o.fin, { cdekCost: info.cost }); // сколько СДЭК берёт с магазина — для «Финансов»
   let mail = false;
@@ -265,7 +268,18 @@ async function applyCdek(o, info) {
   if (o.cdek.status === 'DELIVERED' && o.status !== 'done' && o.status !== 'returned') { o.status = 'done'; o.doneAt = o.doneAt || info.statusAt || new Date().toISOString(); }
   // при получении покупатель заплатил СДЭК — отмечаем оплату (деньги придут от СДЭК по договору)
   if (o.cdek.status === 'DELIVERED' && o.payment.method === 'cod' && o.payment.status === 'pending') { o.payment.status = 'paid'; o.payment.collectedBy = 'cdek'; o.payment.paidAt = info.statusAt || new Date().toISOString(); }
-  syncBonus(o); save();
+  syncBonus(o);
+  // Push покупателю: каждое событие — один раз
+  const st = o.cdek.status, PICK = ['ACCEPTED_AT_PICK_UP_POINT', 'POSTOMAT_POSTED'];
+  o.pushed = o.pushed || {};
+  const once = (ev) => { if (o.pushed[ev]) return; o.pushed[ev] = new Date().toISOString(); pushOrderEvent(o, ev); };
+  if (!o.test) {
+    if (st === 'DELIVERED') { if (!wasDone) once('done'); }
+    else if (PICK.includes(st) && !PICK.includes(was)) { o.pickupAt = o.pickupAt || info.statusAt || new Date().toISOString(); once('pickup'); }
+    else if (st === 'TAKEN_BY_COURIER' && was !== st) once('courier');
+    else if (mail) once('shipped');
+  }
+  save();
   if (mail && mailReady()) { try { await sendTrackingMail(o); o.tracking.mailedAt = new Date().toISOString(); save(); } catch (e) { console.error('Письмо с трек-номером не отправлено:', e.message); } }
 }
 /* ---------- Возврат через СДЭК: обратная заявка от покупателя на ваш пункт ---------- */
@@ -314,7 +328,9 @@ async function syncReturns(o) {
   for (const r of o.returns || []) {
     if (!r.uuid || r.status === 'DELIVERED' || r.status === 'REMOVED') continue;
     const info = await cdek.order(r.uuid);
+    const was = r.status;
     Object.assign(r, { number: info.number || r.number, status: info.status || r.status, statusName: info.statusName || r.statusName, statusAt: info.statusAt || r.statusAt, error: info.error || '' }, info.cost > 0 ? { cost: info.cost } : {});
+    if (r.status === 'DELIVERED' && was !== 'DELIVERED') pushStaff('returnIn', { title: 'Возврат пришёл на склад', body: 'Заказ № ' + o.number + ': ' + r.items.map((x) => x.name + ' ' + x.size + (x.qty > 1 ? ' ×' + x.qty : '')).join(', ') + '. Проверьте вещи и завершите возврат.', url: '/admin', tag: 'ret-' + o.id, icon: firstImg(o) });
     if (r.number && !r.mailedAt && mailReady()) { try { await sendReturnShipMail(o, r); r.mailedAt = new Date().toISOString(); } catch (e) { console.error('Письмо о возврате не отправлено:', e.message); } }
   }
   save();
@@ -604,6 +620,7 @@ async function refundOrder(o, b) {
   }
   syncBonus(o);
   save();
+  if (!o.test) pushOrderEvent(o, 'refund', { amount: refund.amount });
   if (mailReady()) { try { await sendRefundMail(o, refund); refund.mailedAt = new Date().toISOString(); save(); } catch (e) { console.error('Письмо о возврате не отправлено:', e.message); } }
   if (b.restock) processWaitlist().catch(() => {});
   return { refund };
@@ -875,6 +892,13 @@ function sendMail(msg) { const e = embedImages(msg.html); return smtp.send(mailC
 
 /* ---------------- Письма о заказе: покупателю и магазину ---------------- */
 function sendOrderMails(order) {
+  if (!order.test && order.payment.method !== 'exchange' && !(order.pushed && order.pushed.staff)) {
+    order.pushed = Object.assign({}, order.pushed, { staff: new Date().toISOString() });
+    const paid = order.payment.status === 'paid', c = order.customer || {}, pv = order.delivery && order.delivery.pvz;
+    pushStaff(paid ? 'paid' : 'order', { title: (paid ? 'Оплачен заказ № ' : 'Новый заказ № ') + order.number + ' · ' + money(order.total),
+      body: [c.firstName, c.lastName].filter(Boolean).join(' ') + (pv && pv.city ? ', ' + pv.city : '') + '\n' + itemsLine(order) + (paid ? '' : '\nОплата при получении'),
+      url: '/admin?s=orders&id=' + order.id, tag: 'order-' + order.id, icon: firstImg(order), urgent: true, actions: [{ action: 'open', title: 'Открыть заказ' }] });
+  }
   if (!mailReady()) return;
   const pay = db.settings.payment || {}, cs = db.settings.contacts || {};
   const m = order.payment.method;
@@ -980,6 +1004,146 @@ const statSeen = { day: '', keys: new Set() };
 const STAT_SALT = crypto.randomBytes(16).toString('hex');
 setInterval(() => { if (statDirty) { statDirty = false; save(); } }, 60e3).unref();
 
+/* ---------------- Push-уведомления (13.60) ----------------
+   Покупателю — о его заказе, ответах поддержки, обмене и возврате, поступлении, бонусах и (по желанию) акциях.
+   Владельцу и сотрудникам — по их роли: новые заказы, оплаты, вопросы, заявки, возвраты, остатки, входы в панель, итоги дня.
+   Подписка — это устройство: телефон или браузер. Ключи VAPID создаются один раз и хранятся в базе. */
+if (!db.secrets.vapid || !db.secrets.vapid.publicKey) { db.secrets.vapid = WebPush.generateKeys(); save(); }
+// Что можно включать покупателю (по умолчанию всё, кроме акций)
+const PUSH_CUSTOMER = { orders: true, support: true, returns: true, stock: true, bonus: true, promo: false };
+// Что приходит сотрудникам и кому по праву роли
+const PUSH_STAFF = {
+  order: { perm: 'orders', on: true }, paid: { perm: 'orders', on: true }, support: { perm: 'orders', on: true }, request: { perm: 'orders', on: true },
+  returnIn: { perm: 'orders', on: true }, stock: { perm: 'content', on: true }, digest: { perm: 'finance', on: true }, security: { perm: 'staff', on: true }
+};
+const pushPrefsOf = (u) => Object.assign({}, PUSH_CUSTOMER, (u && u.pushPrefs) || {});
+function staffPushPrefs(u) {
+  const role = staffRole(u); if (!role) return null;
+  const has = ROLES[role].perms, out = {};
+  for (const k of Object.keys(PUSH_STAFF)) if (has.includes(PUSH_STAFF[k].perm)) out[k] = !(u.staffPush && u.staffPush[k] === false);
+  return out;
+}
+const pushIcon = (src) => absUrl(src) || absUrl('img/icon-192.png');
+function pushPayload(m) {
+  return { title: String(m.title || db.settings.storeName || 'ALBAKOV').slice(0, 80), body: String(m.body || '').slice(0, 240), url: m.url || '/',
+    tag: m.tag || '', icon: pushIcon(m.icon), image: m.image ? absUrl(m.image) : '', badge: absUrl('img/push-badge.png'),
+    actions: (m.actions || []).slice(0, 2), links: m.links || {}, renotify: !!m.tag, urgent: !!m.urgent };
+}
+const pushStats = { sent: 0, failed: 0, gone: 0 };
+async function pushTo(subs, m) {
+  if (!subs.length) return 0;
+  const data = pushPayload(m), keys = db.secrets.vapid, subject = 'mailto:' + ((db.settings.contacts || {}).email || 'info@albakovofficial.ru');
+  let ok = 0, dirty = false;
+  await Promise.all(subs.map(async (x) => {
+    const r = await WebPush.send(x, data, keys, { subject, urgency: m.urgent ? 'high' : 'normal', ttl: m.ttl || 86400 * 2 });
+    if (r.status >= 200 && r.status < 300) { ok++; pushStats.sent++; x.lastOk = new Date().toISOString(); x.fails = 0; dirty = true; }
+    else if (r.status === 404 || r.status === 410) { db.pushsubs = db.pushsubs.filter((y) => y !== x); pushStats.gone++; dirty = true; }
+    else { pushStats.failed++; x.fails = (x.fails || 0) + 1; dirty = true; if (x.fails >= 20) db.pushsubs = db.pushsubs.filter((y) => y !== x); console.error('Push не доставлен:', r.status, r.error || ''); }
+  }));
+  if (dirty) save();
+  return ok;
+}
+// Покупателю: его устройства и устройства, подписанные на этот заказ без входа в кабинет
+function pushCustomer(o, kind, m) {
+  const u = o && o.userId && db.users.find((x) => x.id === o.userId);
+  if (u && pushPrefsOf(u)[kind] === false) return Promise.resolve(0);
+  const subs = db.pushsubs.filter((x) => x.scope !== 'staff' && ((u && x.userId === u.id) || (o && (x.orderIds || []).includes(o.id))));
+  return pushTo(subs, m).catch((e) => { console.error('Push покупателю:', e.message); return 0; });
+}
+function pushUser(u, kind, m) {
+  if (!u || pushPrefsOf(u)[kind] === false) return Promise.resolve(0);
+  return pushTo(db.pushsubs.filter((x) => x.scope !== 'staff' && x.userId === u.id), m).catch(() => 0);
+}
+// Сотрудникам с подходящей ролью, у кого это уведомление включено
+function pushStaff(kind, m) {
+  const ids = [db.secrets.ownerId].concat(db.secrets.staff.map((x) => x.userId)).filter(Boolean);
+  const to = [];
+  for (const id of ids) { const u = db.users.find((x) => x.id === id), pr = u && staffPushPrefs(u); if (pr && pr[kind]) to.push(u.id); }
+  const subs = db.pushsubs.filter((x) => x.scope === 'staff' && to.includes(x.userId));
+  return pushTo(subs, m).catch((e) => { console.error('Push сотрудникам:', e.message); return 0; });
+}
+const money = (n) => Pricing.format(n);
+const itemsLine = (o) => o.items.map((i) => i.name + (i.size ? ' ' + i.size : '') + (i.qty > 1 ? ' ×' + i.qty : '')).join(', ');
+const firstImg = (o) => (o.items.find((i) => i.image) || {}).image || '';
+// --- События заказа для покупателя ---
+function pushOrderEvent(o, ev, extra) {
+  if (ev === 'shipped' && o.payment && o.payment.method === 'exchange') { ev = 'exchange'; extra = { text: 'Отправили новый размер' + (o.exchangeOf ? ' по заказу № ' + o.exchangeOf.number : '') + (o.tracking ? ', трек ' + o.tracking.number : '') + '. Сообщим, когда приедет.' }; }
+  const n = o.number, url = '/order/' + o.id, img = firstImg(o), d = o.delivery || {};
+  const pv = d.pvz, where = pv ? (pv.type === 'postamat' ? 'Постамат' : 'Пункт СДЭК') + ' · ' + (pv.address || d.address || '') : (d.address || '');
+  const M = {
+    shipped: { title: 'Заказ № ' + n + ' в пути', body: 'Передали в СДЭК' + (o.tracking ? ', трек ' + o.tracking.number : '') + '. Сообщим, когда приедет.', actions: [{ action: 'track', title: 'Отследить' }] },
+    pickup: { title: pv && pv.type === 'postamat' ? 'Заказ ждёт в постамате' : 'Заказ ждёт в пункте выдачи', body: where + (o.cdek && o.cdek.number ? '\nНазовите номер ' + o.cdek.number : '') + (pv && pv.fitting && pv.type !== 'postamat' ? '. Можно примерить на месте' : ''), urgent: true, actions: [{ action: 'route', title: 'Как добраться' }] },
+    courier: { title: 'Курьер везёт заказ № ' + n, body: 'Сегодня привезём по адресу ' + (d.address || '') + '. Курьер позвонит перед приездом.', urgent: true },
+    remind: { title: 'Заказ ещё ждёт вас', body: where + '. Заберите в ближайшие дни — потом СДЭК вернёт посылку нам.', urgent: true },
+    done: { title: 'Спасибо за покупку', body: 'Заказ № ' + n + ' получен.' + (o.bonusEarn > 0 ? ' +' + o.bonusEarn + ' бонусов на ваш счёт.' : '') + ' Если размер не подошёл — обменяем в пару нажатий.' },
+    refund: { title: 'Деньги возвращены', body: money((extra && extra.amount) || 0) + ' по заказу № ' + n + '. На карту обычно приходят за 1–3 рабочих дня.' },
+    exchange: { title: 'Новый размер уже едет', body: (extra && extra.text) || 'Отправили обмен по заказу № ' + n + '.' }
+  }[ev];
+  if (!M) return Promise.resolve(0);
+  const kind = ev === 'refund' || ev === 'exchange' ? 'returns' : 'orders';
+  const links = { track: o.tracking ? o.tracking.url : '', route: where ? 'https://yandex.ru/maps/?text=' + encodeURIComponent((pv && pv.city ? pv.city + ', ' : '') + (pv ? pv.address : d.address || '')) : '' };
+  return pushCustomer(o, kind, Object.assign({ url, links, tag: 'order-' + o.id, icon: img, image: ev === 'pickup' || ev === 'done' ? img : '' }, M));
+}
+// --- Напоминания забрать заказ: через 3 и через 6 дней в пункте ---
+setInterval(() => {
+  const now = Date.now();
+  for (const o of db.orders) {
+    if (!o.pickupAt || o.status === 'done' || o.status === 'canceled' || o.status === 'returned') continue;
+    if (!o.cdek || !['ACCEPTED_AT_PICK_UP_POINT', 'POSTOMAT_POSTED'].includes(o.cdek.status)) continue;
+    const days = (now - Date.parse(o.pickupAt)) / 864e5; o.pickupReminders = o.pickupReminders || [];
+    for (const d of [3, 6]) if (days >= d && !o.pickupReminders.includes(d)) { o.pickupReminders.push(d); save(); pushOrderEvent(o, 'remind'); }
+  }
+}, 30 * 60e3).unref();
+// --- Итоги дня владельцу и финансам: в 21:00 по Москве ---
+let digestDay = '';
+setInterval(() => {
+  const msk = new Date(Date.now() + 3 * 3600e3), day = msk.toISOString().slice(0, 10);
+  if (msk.getUTCHours() !== 21 || digestDay === day) return;
+  digestDay = day;
+  const from = Date.parse(day + 'T00:00:00+03:00');
+  const list = db.orders.filter((o) => !o.test && Date.parse(o.createdAt) >= from && o.status !== 'canceled' && (!o.payment || o.payment.method !== 'exchange'));
+  const sum = list.reduce((a, o) => a + (o.total || 0), 0), q = db.tickets.filter((t) => t.unreadShop).length;
+  const reqs = db.orders.reduce((a, o) => a + (o.requests || []).filter((r) => r.status === 'new').length, 0);
+  pushStaff('digest', { title: 'Итоги дня', body: (list.length ? list.length + ' ' + (list.length === 1 ? 'заказ' : list.length < 5 ? 'заказа' : 'заказов') + ' на ' + money(sum) : 'Сегодня заказов не было') + (q ? ' · вопросов без ответа: ' + q : '') + (reqs ? ' · заявок на обмен и возврат: ' + reqs : ''), url: '/admin', tag: 'digest' });
+}, 5 * 60e3).unref();
+function pushSubscribe(req, b) {
+  throttle(req, 'push', 60);
+  const sub = b.sub || {}, keys = sub.keys || {};
+  const endpoint = String(sub.endpoint || '');
+  if (!/^https:\/\/[^\s]{10,1000}$/.test(endpoint) || !keys.p256dh || !keys.auth || String(keys.p256dh).length > 200 || String(keys.auth).length > 100) fail(400, 'Неверная подписка');
+  // Браузер сменил ключи (pushsubscriptionchange): переносим все прежние подписки устройства на новый адрес
+  if (b.old) {
+    const olds = db.pushsubs.filter((y) => y.endpoint === String(b.old));
+    olds.forEach((y) => { if (!db.pushsubs.some((z) => z !== y && z.endpoint === endpoint && z.scope === y.scope)) Object.assign(y, { endpoint, p256dh: String(keys.p256dh), auth: String(keys.auth) }); });
+    db.pushsubs = db.pushsubs.filter((y) => y.endpoint !== String(b.old));
+    save(); return { ok: true, moved: olds.length };
+  }
+  const u = currentUser(req), staff = b.scope === 'staff';
+  if (staff && !(u && staffRole(u))) fail(403, 'Уведомления панели — только для сотрудников');
+  let x = db.pushsubs.find((y) => y.endpoint === endpoint && (y.scope === 'staff') === staff);
+  if (!x) { x = { id: uid('ps'), endpoint, at: new Date().toISOString(), orderIds: [] }; db.pushsubs.push(x); }
+  Object.assign(x, { p256dh: String(keys.p256dh), auth: String(keys.auth), scope: staff ? 'staff' : 'customer', ua: String(req.headers['user-agent'] || '').slice(0, 160) });
+  if (staff) x.userId = u.id; else x.userId = u ? u.id : null; // вышел из кабинета — уведомления аккаунта сюда больше не идут
+  if (!staff && b.orderId) {
+    const o = db.orders.find((y) => y.id === b.orderId);
+    if (o && ((u && o.userId === u.id) || safeEqual(String(b.t || ''), o.token))) { if (!x.orderIds.includes(o.id)) x.orderIds.push(o.id); x.orderIds = x.orderIds.slice(-30); }
+  }
+  if (db.pushsubs.length > 20000) db.pushsubs.splice(0, db.pushsubs.length - 20000);
+  save();
+  return { ok: true, id: x.id };
+}
+
+/* ---------------- Журнал действий (13.60) ----------------
+   Все изменения в панели: кто, когда, что. Хранится 5000 последних записей; смотрит владелец (право «сотрудники»). */
+function auditAdd(req, e, who) {
+  if (!e || !e.text) return;
+  const u = who || currentUser(req), role = u ? staffRole(u) : null;
+  db.audit.push({ id: uid('a'), at: new Date().toISOString(), by: u ? u.id : '', name: u ? [u.firstName, u.lastName].filter(Boolean).join(' ') || '+' + u.phone : '', role: role ? ROLES[role].name : '',
+    area: e.area || 'other', text: e.text, ref: e.ref || null, ip: clientIp(req) });
+  if (db.audit.length > 5000) db.audit.splice(0, db.audit.length - 5000);
+  save();
+}
+
 /* ---------------- Уведомления владельцу на почту ----------------
    Новые заказы, вопросы покупателей и заканчивающиеся размеры — письмом на основную почту магазина.
    Адрес и что присылать — в панели, раздел «Уведомления на почту». */
@@ -993,6 +1157,7 @@ function ownerTo(kind) {
 function stockMail(lines, sample) {
   const low = sample || [];
   if (!sample) lines.forEach((l) => { const sz = sizeEntry(l.productId, l.colorId, l.size); if (sz && sz.stock <= 2 && !l.preorder) low.push([l.name, [l.color, l.size].filter(Boolean).join(' · '), sz.stock > 0 ? 'осталось ' + sz.stock + ' шт.' : 'закончился']); });
+  if (low.length && !sample) pushStaff('stock', { title: low.length === 1 ? 'Заканчивается размер' : 'Заканчиваются размеры', body: low.slice(0, 4).map((x) => x[0] + ' ' + x[1] + ' — ' + x[2]).join('\n') + (low.length > 4 ? '\nи ещё ' + (low.length - 4) : ''), url: '/admin?s=products', tag: 'stock' });
   const to = ownerTo('stock'); if (!low.length || !to || !mailReady()) return Promise.resolve(false);
   const m = Mail.renderNotice({ store: db.settings.storeName, logo: brandLogo(), test: !!sample, subject: 'Заканчивается: ' + low.map((x) => x[0] + ' ' + x[1]).slice(0, 2).join(', ') + (low.length > 2 ? ' и ещё ' + (low.length - 2) : ''),
     eyebrow: 'Остатки', title: low.length === 1 ? 'Заканчивается размер' : 'Заканчиваются размеры', lead: 'После последнего заказа на складе осталось совсем немного — пора пополнить или снять с продажи.', rows: low, button: 'Открыть товары', url: PUBLIC_URL + '/admin?s=products' });
@@ -1062,8 +1227,11 @@ function ticketForUser(t) {
     unread: !!t.unreadUser, messages: t.messages.map((m) => ({ id: m.id, from: m.from, text: m.text, at: m.at })) };
 }
 function supportMail(t, kind) {
-  if (!mailReady()) return;
   const cs = db.settings.contacts || {}, last = t.messages[t.messages.length - 1];
+  const short = String(last.text || '').replace(/\s+/g, ' ').slice(0, 140);
+  if (kind === 'customer') pushUser(db.users.find((x) => x.id === t.userId), 'support', { title: 'Ответ поддержки ALBAKOV', body: short, url: '/account?tab=support&id=' + t.id, tag: 'ticket-' + t.id, actions: [{ action: 'open', title: 'Ответить' }] });
+  else if (!(t.request && t.messages.length === 1)) pushStaff('support', { title: 'Вопрос от ' + (t.name || 'покупателя') + (t.orderNumber ? ' · заказ № ' + t.orderNumber : ''), body: t.topic + ': ' + short, url: '/admin?s=support&id=' + t.id, tag: 'ticket-' + t.id, urgent: true, actions: [{ action: 'open', title: 'Ответить' }] });
+  if (!mailReady()) return;
   const to = kind === 'customer' ? t.email : ownerTo('support');
   if (!to) return;
   const url = kind === 'customer' ? `${PUBLIC_URL}/account?tab=support&id=${t.id}` : `${PUBLIC_URL}/admin?s=support&id=${t.id}`;
@@ -1331,6 +1499,7 @@ function requestText(o, r) {
 }
 function requestTicket(o, r) {
   const u = o.userId && db.users.find((x) => x.id === o.userId);
+  pushStaff('request', { title: (r.kind === 'refund' ? 'Заявка на возврат' : 'Заявка на обмен') + ' · заказ № ' + o.number, body: requestText(o, r).replace(/\s+/g, ' ').slice(0, 200), url: '/admin?s=orders&id=' + o.id, tag: 'req-' + o.id, icon: firstImg(o), urgent: true, actions: [{ action: 'open', title: 'Открыть заявку' }] });
   if (!u) { // заказ без личного кабинета: просто пишем магазину
     const cs = db.settings.contacts || {}, to = cs.email || mailCfg().fromEmail;
     if (mailReady() && to) sendMail({ to, subject: `Заявка по заказу № ${o.number}`, text: requestText(o, r) + `\n\n${PUBLIC_URL}/admin?s=orders&id=${o.id}`, html: '<p>' + requestText(o, r).replace(/[<>&]/g, '') + `</p><p><a href="${PUBLIC_URL}/admin?s=orders&id=${o.id}">Открыть заказ</a></p>` }).catch((e) => console.error('Письмо о заявке не отправлено:', e.message));
@@ -1340,7 +1509,7 @@ function requestTicket(o, r) {
   db.ticketSeq = (db.ticketSeq || 1000) + 1;
   const t = { id: uid('t'), number: String(db.ticketSeq), userId: u.id, name: [u.firstName, u.lastName].filter(Boolean).join(' '), email: u.email, phone: u.phone,
     topic: 'Возврат и обмен', orderId: o.id, orderNumber: o.number, status: 'open', createdAt: now, updatedAt: now, unreadUser: false, unreadShop: true,
-    messages: [{ id: uid('m'), from: 'user', text: requestText(o, r), at: now }] };
+    messages: [{ id: uid('m'), from: 'user', text: requestText(o, r), at: now }], request: true };
   db.tickets.push(t); r.ticketId = t.id; supportMail(t, 'shop');
 }
 // Ответ магазина в переписке по заявке (и письмо покупателю)
@@ -1455,6 +1624,14 @@ async function processWaitlist() {
   const tpl = Mail.tplOf(db.settings);
   const ready = Mail.readyRequests(db.waitlist, db.products);
   const res = { ready: ready.length, sent: 0, failed: 0, disabled: !tpl.enabled, noMail: !mailReady() };
+  // Push тем, у кого есть кабинет с этой почтой и включены уведомления, — сразу, не дожидаясь письма
+  for (const w of ready) {
+    if (w.pushedAt || res.disabled) continue;
+    const u = db.users.find((x) => x.email && x.email.toLowerCase() === String(w.email).toLowerCase()); w.pushedAt = new Date().toISOString();
+    const p = db.products.find((x) => x.id === w.productId), c = p && p.colors.find((x) => x.id === w.colorId); if (!u || !p) continue;
+    const img = c && c.images && c.images[0];
+    pushUser(u, 'stock', { title: 'Снова в наличии', body: p.name + (c ? ', ' + c.name : '') + (w.size ? ', размер ' + w.size : '') + '. Размеры разбирают быстро.', url: '/product/' + (p.slug || p.id) + (c ? '?color=' + c.id : ''), tag: 'stock-' + p.id, icon: img, image: img, actions: [{ action: 'open', title: 'Посмотреть' }] });
+  }
   if (!ready.length || res.disabled || res.noMail || waitlistBusy) return res;
   waitlistBusy = true;
   try {
@@ -1503,14 +1680,38 @@ function htmlPage(title, text) {
 // новый код — не чаще раза в минуту и не больше 5 раз. Если почта магазина не настроена,
 // регистрация работает как раньше — сразу, без кода.
 const VERIFY_MIN = 15, VERIFY_TRIES = 5, VERIFY_RESEND_SEC = 60, VERIFY_SENDS = 5;
-const pendingRegs = new Map(), pendingResets = new Map();
+const pendingRegs = new Map(), pendingResets = new Map(), pendingLogins = new Map();
 const codeHash = (id, code) => crypto.createHash('sha256').update(id + ':' + code).digest('hex');
-function sweepPending() { const now = Date.now(); for (const m of [pendingRegs, pendingResets]) for (const [k, r] of m) if (r.exp < now) m.delete(k); }
+/* Доверенные устройства сотрудников (13.60): после входа по коду устройство получает cookie «dev» на 90 дней.
+   В базе — только хэш, не больше 10 устройств на человека */
+const DEV_DAYS = 90;
+const devHash = (t) => crypto.createHash('sha256').update('dev:' + t).digest('hex');
+function trustedDevice(req, u) {
+  const t = parseCookies(req).dev; if (!t || !Array.isArray(u.devices)) return false;
+  const h = devHash(t), d = u.devices.find((x) => x.h === h);
+  return !!(d && Date.now() - Date.parse(d.at) < DEV_DAYS * 864e5);
+}
+function touchDevice(req, res, u, fresh) {
+  let t = parseCookies(req).dev;
+  if (!t || !/^[a-f0-9]{64}$/.test(t)) t = crypto.randomBytes(32).toString('hex');
+  const h = devHash(t); u.devices = (u.devices || []).filter((x) => Date.now() - Date.parse(x.at) < DEV_DAYS * 864e5);
+  let d = u.devices.find((x) => x.h === h);
+  if (!d) { if (!fresh) return; d = { h, at: new Date().toISOString(), name: deviceName(req) }; u.devices.push(d); u.devices = u.devices.slice(-10); setCookie(res, 'dev', t, DEV_DAYS * 86400); }
+  d.last = new Date().toISOString(); save();
+}
+// «iPhone, Safari» — чтобы в письме и журнале было понятно, что за устройство
+function deviceName(req) {
+  const ua = String(req.headers['user-agent'] || '');
+  const os = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android' : /Mac OS X/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : /Linux/.test(ua) ? 'Linux' : 'устройство';
+  const br = /YaBrowser/.test(ua) ? 'Яндекс Браузер' : /Edg\//.test(ua) ? 'Edge' : /CriOS|Chrome\//.test(ua) ? 'Chrome' : /FxiOS|Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : 'браузер';
+  return os + ', ' + br;
+}
+function sweepPending() { const now = Date.now(); for (const m of [pendingRegs, pendingResets, pendingLogins]) for (const [k, r] of m) if (r.exp < now) m.delete(k); }
 const maskEmail = (e) => { const [n, d] = String(e).split('@'); return (n.length <= 2 ? n[0] + '*' : n.slice(0, 2) + '*'.repeat(Math.min(6, n.length - 2))) + '@' + d; };
 async function sendCode(r, purpose) {
   const code = String(crypto.randomInt(0, 1e6)).padStart(6, '0');
   r.code = codeHash(r.id, code); r.tries = 0; r.sentAt = Date.now(); r.sends = (r.sends || 0) + 1; r.exp = Date.now() + VERIFY_MIN * 60e3;
-  const m = Mail.renderCode({ store: db.settings.storeName, logo: brandLogo(), code, minutes: VERIFY_MIN, name: r.f.firstName, purpose });
+  const m = Mail.renderCode({ store: db.settings.storeName, logo: brandLogo(), code, minutes: VERIFY_MIN, name: r.f.firstName, purpose, device: r.device });
   try { await sendMail({ to: r.f.email, subject: m.subject, html: m.html, text: m.text }); }
   catch (e) { console.error('Письмо с кодом не отправлено:', e && e.message); fail(502, 'Не удалось отправить письмо с кодом. Проверьте адрес почты или попробуйте ещё раз чуть позже'); }
 }
@@ -1604,8 +1805,45 @@ async function api(req, res, url, body) {
       const l = String(body.login || '').trim().toLowerCase(), ph = normPhone(l);
       const u = db.users.find((x) => x.email === l || (ph.length === 11 && x.phone === ph));
       if (!u || !pwOk(body.password) || !checkPassword(body.password, u.hash)) fail(401, 'Неверный логин или пароль');
-      throttleOk(tk); createSession(res, 'user', u.id);
+      throttleOk(tk);
+      // Владелец и сотрудники с нового устройства входят только по коду из письма (13.60)
+      if (staffRole(u) && mailReady() && u.email && !trustedDevice(req, u)) {
+        sweepPending();
+        for (const [k, r] of pendingLogins) if (r.userId === u.id) pendingLogins.delete(k);
+        const r = { id: crypto.randomBytes(16).toString('hex'), userId: u.id, f: { email: u.email, firstName: u.firstName }, device: deviceName(req) };
+        await sendCode(r, 'login'); pendingLogins.set(r.id, r);
+        return { confirm: { id: r.id, email: maskEmail(u.email), minutes: VERIFY_MIN, resendIn: VERIFY_RESEND_SEC } };
+      }
+      createSession(res, 'user', u.id);
+      if (staffRole(u)) { touchDevice(req, res, u); auditAdd(req, { area: 'security', text: 'Вход в панель · ' + deviceName(req) }, u); }
       return { user: publicUser(u), isAdmin: !!staffRole(u) };
+    }
+    if (p[1] === 'login-confirm' && M === 'POST') {
+      throttle(req, 'verify', 40);
+      sweepPending();
+      const r = pendingLogins.get(String(body.id || ''));
+      if (!r) fail(410, 'Код устарел. Войдите ещё раз — пришлём новый');
+      const code = String(body.code || '').replace(/\D/g, '');
+      if (code.length !== 6) fail(400, 'Введите все 6 цифр кода');
+      if (r.tries >= VERIFY_TRIES) { pendingLogins.delete(r.id); fail(429, 'Слишком много неверных попыток. Войдите ещё раз'); }
+      if (!safeEqual(codeHash(r.id, code), r.code)) { r.tries++; const left = VERIFY_TRIES - r.tries; fail(400, left > 0 ? 'Неверный код. Осталось попыток: ' + left : 'Слишком много неверных попыток. Войдите ещё раз'); }
+      pendingLogins.delete(r.id);
+      const u = db.users.find((x) => x.id === r.userId); if (!u) fail(400, 'Аккаунт не найден');
+      createSession(res, 'user', u.id); touchDevice(req, res, u, true);
+      auditAdd(req, { area: 'security', text: 'Вход в панель с нового устройства · ' + r.device }, u);
+      pushStaff('security', { title: 'Вход в панель с нового устройства', body: [u.firstName, u.lastName].filter(Boolean).join(' ') + (staffRole(u) ? ' (' + ROLES[staffRole(u)].name + ')' : '') + ' · ' + r.device + '. Если это не ваш сотрудник — заберите доступ в «Сотрудниках».', url: '/admin?s=audit', tag: 'sec-' + u.id, urgent: true });
+      return { user: publicUser(u), isAdmin: !!staffRole(u) };
+    }
+    if (p[1] === 'login-resend' && M === 'POST') {
+      throttle(req, 'resend', 20);
+      sweepPending();
+      const r = pendingLogins.get(String(body.id || ''));
+      if (!r) fail(410, 'Код устарел. Войдите ещё раз — пришлём новый');
+      const wait = Math.ceil((r.sentAt + VERIFY_RESEND_SEC * 1000 - Date.now()) / 1000);
+      if (wait > 0) fail(429, 'Новый код можно запросить через ' + wait + ' с');
+      if (r.sends >= VERIFY_SENDS) fail(429, 'Код уже отправлялся несколько раз. Проверьте папку «Спам»');
+      await sendCode(r, 'login');
+      return { resendIn: VERIFY_RESEND_SEC };
     }
     // Восстановление пароля: код на почту аккаунта, потом новый пароль. Есть ли такой аккаунт — не сообщаем
     if (p[1] === 'forgot' && M === 'POST') {
@@ -1644,6 +1882,11 @@ async function api(req, res, url, body) {
     if (p[1] === 'logout' && M === 'POST') { const s = getSession(req, 'user'); if (s) { delete db.sessions[s.token]; save(); } setCookie(res, 'sid', '', 0); return {}; }
   }
 
+  if (p[0] === 'me' && p[1] === 'push') {
+    const u = user(); if (!u) fail(401, 'Войдите в личный кабинет');
+    if (M === 'PUT') { const v = body.prefs || {}; u.pushPrefs = {}; for (const k of Object.keys(PUSH_CUSTOMER)) u.pushPrefs[k] = !!v[k]; if (u.pushPrefs.promo && !u.pushPromoAt) u.pushPromoAt = new Date().toISOString(); save(); }
+    return { prefs: pushPrefsOf(u), devices: db.pushsubs.filter((x) => x.scope !== 'staff' && x.userId === u.id).length };
+  }
   if (p[0] === 'me' && M === 'GET') {
     const u = user(); if (!u) fail(401, 'Войдите в личный кабинет');
     return { user: publicUser(u), bonusLog: (u.bonusLog || []).slice(0, 100) };
@@ -1789,6 +2032,21 @@ async function api(req, res, url, body) {
     return { id: o.id, token: o.token };
   }
   if (p[0] === 'support') { const u = user(); if (!u) fail(401, 'Войдите в личный кабинет'); return supportApi(req, p, M, body, u); }
+  // Push-уведомления: ключ, подписка устройства, настройки покупателя, проверка
+  if (p[0] === 'push') {
+    if (p[1] === 'key' && M === 'GET') return { key: db.secrets.vapid.publicKey };
+    if (p[1] === 'subscribe' && M === 'POST') return pushSubscribe(req, body);
+    if (p[1] === 'unsubscribe' && M === 'POST') { const e = String(body.endpoint || ''); const n = db.pushsubs.length; db.pushsubs = db.pushsubs.filter((x) => !(x.endpoint === e && (body.scope === 'staff') === (x.scope === 'staff'))); if (n !== db.pushsubs.length) save(); return {}; }
+    if (p[1] === 'test' && M === 'POST') {
+      throttle(req, 'pushtest', 20);
+      const e = String(body.endpoint || ''), x = db.pushsubs.find((y) => y.endpoint === e && (body.scope === 'staff') === (y.scope === 'staff')); if (!x) fail(404, 'Устройство не подписано');
+      const n = await pushTo([x], body.scope === 'staff'
+        ? { title: 'Уведомления панели включены', body: 'Сюда будут приходить новые заказы, вопросы и заявки — по вашей роли.', url: '/admin', tag: 'test' }
+        : { title: 'Уведомления включены', body: 'Сообщим, когда заказ будет в пути и когда приедет в пункт выдачи.', url: '/account', tag: 'test' });
+      if (!n) fail(502, 'Не получилось доставить уведомление. Проверьте, что они разрешены в настройках телефона');
+      return { sent: n };
+    }
+  }
 
   if (p[0] === 'quote' && M === 'POST') return { quote: await quoteFull(req, body) };
   // Уведомление СДЭК о движении посылки. Статус перепроверяем через API
@@ -1864,10 +2122,45 @@ async function api(req, res, url, body) {
       products: ['content'], categories: ['content'], sizeCharts: ['content'], pages: ['content'], promotions: ['content', 'marketing'], promocodes: ['content', 'marketing'],
       finance: ['finance'], 'seo-ping': ['marketing'], 'owner-notify': ['mail'], 'mail-catalog': ['mail'],
       mail: !p[2] && M === 'POST' ? ['payment'] : ['mail'], // пароль почты для отправки меняет только тот, кому доверены ключи
-      cdek: ['payment'], 'payment-secret': ['payment'], settings: []
+      cdek: ['payment'], 'payment-secret': ['payment'], settings: [], push: []
     };
     const need = Object.prototype.hasOwnProperty.call(ROUTE_PERMS, p[1]) ? ROUTE_PERMS[p[1]] : ['staff'];
     if (need.length) requirePerm(req, ...need);
+    if (p[1] === 'audit' && M === 'GET') {
+      const area = url.searchParams.get('area') || '', by = url.searchParams.get('by') || '', q = String(url.searchParams.get('q') || '').toLowerCase().slice(0, 80), till = url.searchParams.get('before') || '';
+      let list = db.audit.slice().reverse();
+      if (area) list = list.filter((x) => x.area === area);
+      if (by) list = list.filter((x) => x.by === by);
+      if (q) list = list.filter((x) => (x.text + ' ' + x.name).toLowerCase().includes(q));
+      if (till) list = list.filter((x) => x.at < till);
+      const people = {}; db.audit.forEach((x) => { if (x.by) people[x.by] = x.name; });
+      return { items: list.slice(0, 100), more: list.length > 100, people: Object.keys(people).map((id) => ({ id, name: people[id] })) };
+    }
+    // Push сотрудника: свои настройки; рассылка акций — с правом marketing
+    if (p[1] === 'push') {
+      const u = currentUser(req);
+      if (!p[2] && M === 'PUT') { const v = body.prefs || {}; u.staffPush = {}; for (const k of Object.keys(PUSH_STAFF)) if (k in v) u.staffPush[k] = !!v[k]; save(); }
+      if (!p[2] && (M === 'GET' || M === 'PUT')) {
+        const promoUsers = new Set(db.users.filter((x) => pushPrefsOf(x).promo).map((x) => x.id));
+        return { prefs: staffPushPrefs(u), devices: db.pushsubs.filter((x) => x.scope === 'staff' && x.userId === u.id).length,
+          audience: can(req, 'marketing') ? db.pushsubs.filter((x) => x.scope !== 'staff' && promoUsers.has(x.userId)).length : null,
+          customers: can(req, 'marketing') ? db.pushsubs.filter((x) => x.scope !== 'staff').length : null,
+          broadcasts: can(req, 'marketing') ? (db.pushBroadcasts || []).slice(0, 20) : [] };
+      }
+      if (p[2] === 'broadcast' && M === 'POST') {
+        requirePerm(req, 'marketing');
+        const title = String(body.title || '').trim().slice(0, 60), text = String(body.body || '').trim().slice(0, 180);
+        if (!title || !text) fail(400, 'Напишите заголовок и текст');
+        const link = String(body.url || '/').trim(); if (!/^\/[^\s]*$/.test(link)) fail(400, 'Ссылка — адрес на сайте, например /sale или /product/…');
+        const image = String(body.image || '').trim(); if (image && !/^(uploads|img)\/[\w./-]+$/.test(image.replace(/^\//, ''))) fail(400, 'Картинка — из загруженных на сайт');
+        const promoUsers = new Set(db.users.filter((x) => pushPrefsOf(x).promo).map((x) => x.id));
+        const subs = db.pushsubs.filter((x) => x.scope !== 'staff' && promoUsers.has(x.userId));
+        if (body.test) { const mine = db.pushsubs.filter((x) => x.userId === u.id); const n = await pushTo(mine, { title, body: text, url: link, image, icon: image, tag: 'promo-test' }); if (!n) fail(400, 'Включите уведомления на этом устройстве — пришлём пробное сюда'); return { sent: n, test: true }; }
+        const n = await pushTo(subs, { title, body: text, url: link, image, icon: image, tag: 'promo' });
+        db.pushBroadcasts = [{ at: new Date().toISOString(), title, body: text, url: link, image, to: subs.length, sent: n, by: [u.firstName, u.lastName].filter(Boolean).join(' ') }].concat(db.pushBroadcasts || []).slice(0, 50);
+        save(); return { sent: n, to: subs.length };
+      }
+    }
     if (p[1] === 'data' && M === 'GET') {
       // Каждая роль получает только свои данные: личные данные покупателей — тем, кто работает с заказами, деньги — финансам
       const has = (...x) => x.some((k) => can(req, k)), role = adminRole(req);
@@ -2029,6 +2322,7 @@ async function api(req, res, url, body) {
       const c = (db.waitlist || [])[0], np = pr, ncol = Pricing.colorsOf(np)[0] || { name: 'Графит', images: [] };
       const list = [
         { key: 'code', title: 'Код подтверждения почты', when: 'При регистрации — покупатель вводит код на сайте', to: 'Покупателю', m: Mail.renderCode(Object.assign({ code: '483920', minutes: VERIFY_MIN, name: 'Анна' }, base)) },
+        { key: 'code-login', title: 'Код для входа в панель', when: 'Сотрудник или владелец входит с нового устройства — без кода вход не пускает', to: 'Сотруднику', m: Mail.renderCode(Object.assign({ code: '715304', minutes: VERIFY_MIN, name: 'Ибрагим', purpose: 'login', device: 'iPhone, Safari' }, base)) },
         { key: 'welcome', title: 'Добро пожаловать', when: 'Сразу после регистрации: бонусы и промокод на первый заказ', to: 'Покупателю', m: Mail.renderWelcome(Object.assign({ name: 'Анна', url: PUBLIC_URL + '/', bonusPercent: String(Pricing.bonusConf(db.settings).percent || 5), promo: welcomePromo() }, base)) },
         { key: 'order', title: 'Заказ принят / оплачен', when: 'Оплата онлайн — после оплаты; при получении — сразу после оформления', to: 'Покупателю', m: ord('customer') },
         { key: 'order-shop', title: 'Новый заказ', when: 'Одновременно с письмом покупателю', to: 'Магазину — ' + (cs.email || mc.fromEmail || 'почта для связи'), m: ord('shop') },
@@ -2143,6 +2437,7 @@ async function api(req, res, url, body) {
       }
       if (typeof body.note === 'string') { if ((o.adminNote || '') !== body.note.slice(0, 2000)) hist(o, 'Изменена заметка к заказу', 'admin'); o.adminNote = body.note.slice(0, 2000); }
       syncBonus(o);
+      if (tracked && body.notify !== false && !o.test) { o.pushed = Object.assign({}, o.pushed, { shipped: new Date().toISOString() }); pushOrderEvent(o, 'shipped'); }
       save();
       let mailed = false;
       if (tracked && body.notify !== false && mailReady()) { try { await sendTrackingMail(o); o.tracking.mailedAt = new Date().toISOString(); hist(o, 'Покупателю отправлено письмо с трек-номером'); save(); mailed = true; } catch (e) { console.error('Письмо с трек-номером не отправлено:', e.message); } }
@@ -2156,6 +2451,7 @@ async function api(req, res, url, body) {
       if (amount < 0) amount = -Math.min(u.bonus || 0, -amount);
       if (!amount) fail(400, 'На счёте покупателя нет бонусов');
       Pricing.bonusMove(u, amount, 'manual', null, uid, String(body.note || '').trim());
+      if (amount > 0) pushUser(u, 'bonus', { title: '+' + amount + ' бонусов на счёте', body: (String(body.note || '').trim() ? String(body.note).trim().slice(0, 100) + '. ' : '') + 'Теперь у вас ' + (u.bonus || 0) + ' — оплачивайте ими часть следующего заказа.', url: '/account?tab=bonus', tag: 'bonus' });
       save(); return { user: Object.assign(publicUser(u), { bonusLog: (u.bonusLog || []).slice(0, 100) }) };
     }
     if (p[1] === 'waitlist') {
@@ -2213,6 +2509,74 @@ async function api(req, res, url, body) {
         if (!changed && denied) fail(403, 'У вашей роли нет прав менять эту настройку (' + denied + ')');
       }
       db.settings = next; if (db.settings.payment) delete db.settings.payment.parts; save(); return {};
+    }
+    // Массовые изменения товаров (13.60): цена, ±%, скидка, видимость
+    if (p[1] === 'products' && p[2] === 'bulk' && M === 'POST') {
+      const ids = Array.isArray(body.ids) ? body.ids.filter((x) => typeof x === 'string').slice(0, 5000) : [];
+      const list = db.products.filter((x) => ids.includes(x.id)); if (!list.length) fail(400, 'Выберите товары');
+      const v = Number(body.value) || 0, A = body.action, r10 = (n) => Math.max(1, Math.round(n));
+      if (A === 'price' && !(v > 0 && v <= 10000000)) fail(400, 'Укажите цену');
+      if (A === 'percent' && !(v !== 0 && v > -95 && v <= 500)) fail(400, 'Процент — от −95 до 500, например 10 или −10');
+      if (A === 'discount' && !(v > 0 && v < 95)) fail(400, 'Скидка — от 1 до 94%');
+      if (!['price', 'percent', 'discount', 'nodiscount', 'show', 'hide'].includes(A)) fail(400, 'Выберите, что изменить');
+      let changed = 0;
+      for (const x of list) {
+        const was = JSON.stringify([x.price, x.compareAt, x.active]);
+        if (A === 'price') x.price = r10(v);
+        if (A === 'percent') { x.price = r10(x.price * (1 + v / 100)); if (x.compareAt && x.compareAt <= x.price) x.compareAt = 0; }
+        if (A === 'discount') { const base = x.compareAt > x.price ? x.compareAt : x.price; x.compareAt = base; x.price = r10(base * (1 - v / 100)); }
+        if (A === 'nodiscount' && x.compareAt > x.price) { x.price = x.compareAt; x.compareAt = 0; }
+        if (A === 'show') x.active = true;
+        if (A === 'hide') x.active = false;
+        if (was !== JSON.stringify([x.price, x.compareAt, x.active])) { changed++; seoChanged('products', x); }
+      }
+      save();
+      return { changed, notify: A === 'show' ? await processWaitlist() : null };
+    }
+    // Остатки в Excel: выгрузка CSV (разделитель «;», как в русском Excel) и загрузка с предпросмотром
+    if (p[1] === 'products' && p[2] === 'stock.csv' && M === 'GET') {
+      const q = (v) => { const t = String(v == null ? '' : v); return /[;"\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+      const rows = [['Товар', 'Цвет', 'Размер', 'Артикул', 'Остаток', 'ID товара', 'ID цвета']];
+      for (const x of db.products) for (const c of Pricing.colorsOf(x)) for (const z of c.sizes || []) rows.push([x.name, c.name || '', z.size, x.sku || '', z.stock || 0, x.id, c.id]);
+      return { __file: { type: 'text/csv; charset=utf-8', name: 'ostatki.csv', buf: Buffer.from('﻿' + rows.map((r) => r.map(q).join(';')).join('\r\n') + '\r\n') } };
+    }
+    if (p[1] === 'products' && p[2] === 'stock' && M === 'POST') {
+      const text = String(body.csv || '').replace(/^﻿/, ''); if (!text.trim()) fail(400, 'Файл пустой');
+      const first = text.split(/\r?\n/)[0], sep = first.includes(';') ? ';' : first.includes('\t') ? '\t' : ',';
+      // разбор CSV с кавычками
+      const rows = []; let row = [], cur = '', inq = false;
+      for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        if (inq) { if (ch === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else inq = false; } else cur += ch; continue; }
+        if (ch === '"') inq = true; else if (ch === sep) { row.push(cur); cur = ''; } else if (ch === '\n' || ch === '\r') { if (ch === '\r' && text[i + 1] === '\n') i++; row.push(cur); rows.push(row); row = []; cur = ''; } else cur += ch;
+      }
+      if (cur || row.length) { row.push(cur); rows.push(row); }
+      if (rows.length > 20001) fail(400, 'Слишком много строк');
+      const H = rows.shift().map((h) => h.trim().toLowerCase());
+      const col = (names) => H.findIndex((h) => names.includes(h));
+      const iP = col(['id товара', 'product id']), iC = col(['id цвета', 'color id']), iS = col(['размер', 'size']), iQ = col(['остаток', 'stock', 'количество']), iN = col(['товар', 'название']), iCol = col(['цвет']), iSku = col(['артикул', 'sku']);
+      if (iS < 0 || iQ < 0) fail(400, 'Не нашли колонки «Размер» и «Остаток». Выгрузите файл заново и меняйте только числа');
+      const changes = [], errors = [], seen = new Set();
+      rows.forEach((r, n) => {
+        if (!r.some((x) => String(x).trim())) return;
+        const line = 'строка ' + (n + 2), size = String(r[iS] || '').trim(), raw = String(r[iQ] || '').trim().replace(/\s/g, '');
+        if (!/^\d{1,6}$/.test(raw)) { errors.push(line + ': остаток «' + raw + '» — нужно целое число'); return; }
+        let x = iP >= 0 && db.products.find((y) => y.id === String(r[iP]).trim());
+        if (!x && iSku >= 0 && String(r[iSku] || '').trim()) x = db.products.find((y) => y.sku && y.sku === String(r[iSku]).trim());
+        if (!x && iN >= 0) x = db.products.find((y) => y.name === String(r[iN]).trim());
+        if (!x) { errors.push(line + ': товар не найден'); return; }
+        const cs = Pricing.colorsOf(x);
+        const c = (iC >= 0 && cs.find((y) => y.id === String(r[iC]).trim())) || (iCol >= 0 && cs.find((y) => (y.name || '') === String(r[iCol]).trim())) || (cs.length === 1 ? cs[0] : null);
+        if (!c) { errors.push(line + ': цвет не найден'); return; }
+        const z = (c.sizes || []).find((y) => y.size === size); if (!z) { errors.push(line + ': размера ' + size + ' нет'); return; }
+        const key = x.id + '|' + c.id + '|' + size; if (seen.has(key)) { errors.push(line + ': повтор'); return; } seen.add(key);
+        const to = Number(raw); if (to !== Number(z.stock || 0)) changes.push({ name: x.name, color: c.name || '', size, from: Number(z.stock || 0), to, _z: z, _x: x });
+      });
+      const view = changes.map((c) => ({ name: c.name, color: c.color, size: c.size, from: c.from, to: c.to }));
+      if (body.dry) return { changes: view, errors };
+      const touched = new Set(); changes.forEach((c) => { c._z.stock = c.to; touched.add(c._x); });
+      touched.forEach((x) => seoChanged('products', x)); save();
+      return { changed: changes.length, errors, notify: await processWaitlist() };
     }
     if (COLLECTIONS.includes(p[1])) {
       const arr = db[p[1]];
@@ -2338,7 +2702,11 @@ const server = http.createServer(async (req, res) => {
         if (origin && origin !== PUBLIC_URL && !origin.endsWith('//' + req.headers.host)) fail(403, 'Запрос с чужого сайта отклонён');
       }
       const body = ['POST', 'PUT', 'PATCH'].includes(req.method) ? await readBody(req, url.pathname === '/api/admin/upload' ? 12 * 1024 * 1024 : 2 * 1024 * 1024) : {};
+      // Журнал действий: что было до запроса в панели — чтобы записать, что именно поменялось
+      let auditP = null, auditPre = null;
+      if (url.pathname.startsWith('/api/admin/') && req.method !== 'GET') { try { auditP = url.pathname.replace(/^\/api\//, '').split('/').map(safeDecode); auditPre = Audit.before(auditP, req.method, body || {}, db); } catch (e) { auditPre = null; } }
       const out = await api(req, res, url, body || {});
+      if (auditPre) auditAdd(req, Audit.describe(auditP, req.method, body || {}, auditPre, out, db));
       if (out && out.__file) {
         res.writeHead(200, { 'Content-Type': out.__file.type, 'Content-Disposition': 'inline; filename="' + out.__file.name + '"', 'Cache-Control': 'no-store' });
         return res.end(out.__file.buf);

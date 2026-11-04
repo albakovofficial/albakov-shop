@@ -59,16 +59,22 @@
   function howTo() {
     var A = app(); if (!A.openModal) return;
     var step = function (ic, html) { return '<li><span class="inst-ic" aria-hidden="true">' + IC[ic] + '</span><span>' + html + '</span></li>'; };
-    var share = iosChrome ? step('share', 'Нажмите <b>«Поделиться»</b> — значок в адресной строке справа вверху')
-      : safariVer >= 27 ? step('page', 'Нажмите <b>≡</b> слева от адреса сайта (или подержите палец на адресной строке) и выберите <b>«Поделиться»</b>')
-      : safariVer === 26 ? step('hdots', 'Нажмите <b>•••</b> справа от адреса сайта и выберите <b>«Поделиться»</b>')
-      : step('share', 'Нажмите <b>«Поделиться»</b> внизу экрана');
+    // Шаги для iPhone по версии iOS: свою версию покупатель может переключить, если угадали не ту
+    var iosSteps = function (v) {
+      var share = v === 'chrome' ? step('share', 'Нажмите <b>«Поделиться»</b> — значок в адресной строке справа вверху')
+        : v === '27' ? step('page', 'Нажмите <b>≡</b> слева от адреса сайта (или подержите палец на адресной строке) и выберите <b>«Поделиться»</b>')
+        : v === '26' ? step('hdots', 'Нажмите <b>•••</b> справа от адреса сайта и выберите <b>«Поделиться»</b>')
+        : step('share', 'Нажмите <b>«Поделиться»</b> — квадрат со стрелкой вверх внизу экрана');
+      return [share,
+        step('add', 'Выберите <b>«На экран „Домой“»</b>' + (v === '26' || v === '27' ? ' — если не видно, нажмите <b>«Ещё»</b>' : ', пролистав список вниз')),
+        v === '26' || v === '27'
+          ? step('toggle', 'Оставьте включённым <b>«Открыть как веб-приложение»</b> и нажмите <b>«Добавить»</b>')
+          : step('ok', 'Нажмите <b>«Добавить»</b> справа вверху — значок ALBAKOV появится рядом с другими приложениями')].join('');
+    };
+    var IOS_VERS = [['27', 'iOS 27'], ['26', 'iOS 26'], ['old', 'iOS 18 и ниже'], ['chrome', 'Chrome']];
+    var iosCur = iosChrome ? 'chrome' : safariVer >= 27 ? '27' : safariVer === 26 ? '26' : 'old';
     var steps = isIOS
-      ? [share,
-         step('add', 'Выберите <b>«На экран „Домой“»</b>' + (safariVer >= 26 ? ' — если не видно, нажмите <b>«Ещё»</b>' : ', пролистав список вниз')),
-         safariVer >= 26 && !iosChrome
-           ? step('toggle', 'Оставьте включённым <b>«Открыть как веб-приложение»</b> и нажмите <b>«Добавить»</b>')
-           : step('ok', 'Нажмите <b>«Добавить»</b> — значок ALBAKOV появится рядом с другими приложениями')]
+      ? [iosSteps(iosCur)]
       : isAndroid
       ? [step('dots', 'Откройте меню браузера <b>⋮</b> справа вверху (в Яндекс Браузере — <b>≡</b> внизу)'),
          step('phone', 'Выберите <b>«Установить приложение»</b> или <b>«Добавить на главный экран»</b>'),
@@ -81,9 +87,18 @@
       '<span class="inst-eyebrow">Приложение</span>' +
       '<h3>ALBAKOV на экране «Домой»<i aria-hidden="true">.</i></h3>' +
       '<p class="muted">Магазин открывается одним нажатием и на весь экран — как обычное приложение. Скачивать из магазина приложений ничего не нужно.</p>' +
-      '<ol class="inst-steps">' + steps.join('') + '</ol>' +
+      (isIOS ? '<div class="inst-vers" role="tablist" aria-label="Версия iPhone">' + IOS_VERS.map(function (x) { return '<button type="button" role="tab" data-iv="' + x[0] + '" aria-selected="' + (x[0] === iosCur) + '"' + (x[0] === iosCur ? ' class="on"' : '') + '>' + x[1] + '</button>'; }).join('') + '</div>' : '') +
+      '<ol class="inst-steps" id="instSteps">' + steps.join('') + '</ol>' +
+      (isIOS ? '<p class="inst-note">Версия iOS — в «Настройки» → «Основные» → «Об этом устройстве»</p>' : '') +
       '<div class="inst-btns"><button class="btn" data-act="close">Понятно</button></div>' +
       '</div>');
+    // переключение версии iOS: шаги меняются на месте
+    var box = document.querySelector('.inst');
+    if (isIOS && box) box.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-iv]'); if (!b) return;
+      Array.prototype.forEach.call(box.querySelectorAll('[data-iv]'), function (x) { var on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-selected', on); });
+      box.querySelector('#instSteps').innerHTML = iosSteps(b.getAttribute('data-iv'));
+    });
   }
 
   root.Install = { isIOS: isIOS, isMobile: isMobile, isInstalled: isInstalled, canOffer: canOffer, showBanner: showBanner, hideBanner: hideBanner, open: open, IC: IC };

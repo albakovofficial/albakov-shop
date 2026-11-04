@@ -3976,3 +3976,8 @@ body::after { content: none; display: none; }
 .inst-btns .btn { border-radius: 999px; }
 .mnav-app-btn img, .inst-banner img { border: 0; border-radius: 10px; }
 .inst-banner img { border-radius: 12px; }
+/* Переключатель версии iOS в окне установки */
+.inst-vers { display: flex; width: 100%; margin-top: 2px; padding: 4px; border-radius: 999px; background: var(--surface); }
+.inst-vers button { flex: 1 1 auto; padding: 8px 6px; border-radius: 999px; font-size: 12.5px; color: var(--muted); white-space: nowrap; transition: background .2s, color .2s; }
+.inst-vers button.on { background: var(--ink); color: #fff; }
+.inst-note { font-size: 12px !important; color: var(--dim) !important; margin-top: -4px; }

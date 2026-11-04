@@ -48,22 +48,18 @@ say "3/7 Копирую сайт в $APP_DIR"
 id -u "$APP_USER" >/dev/null 2>&1 || useradd --system --home-dir "$APP_DIR" --no-create-home --shell /usr/sbin/nologin "$APP_USER"
 if [ -f "$APP_DIR/data/albakov.sqlite" ] || [ -f "$APP_DIR/data/db.json" ]; then backup_now; fi
 sync_code "$SRC"
-FIRST_PASSWORD=""
 if [ ! -f "$APP_DIR/.env" ]; then
-  FIRST_PASSWORD="${ALBAKOV_ADMIN_PASSWORD:-$(gen_password)}"
   cat > "$APP_DIR/.env" <<EOF
 # Настройки сайта. После правки: sudo systemctl restart $SERVICE
 PORT=$PORT
 HOST=127.0.0.1
 PUBLIC_URL=http://$DOMAIN
-# Пароль для ПЕРВОГО входа в панель управления. Потом меняется в «Настройках» панели.
-ADMIN_PASSWORD=$FIRST_PASSWORD
+# Владелец магазина: аккаунт на сайте с этим номером получает доступ к панели (вход через личный кабинет)
+OWNER_PHONE=${ALBAKOV_OWNER_PHONE:-79111930794}
 # Ключи ЮKassa и почту удобнее указать в панели управления
 YOOKASSA_SHOP_ID=
 YOOKASSA_SECRET_KEY=
 EOF
-  printf 'Сайт: https://%s\nПанель управления: https://%s/#/admin\nПароль первого входа: %s\n' "$DOMAIN" "$DOMAIN" "$FIRST_PASSWORD" > /root/albakov-admin.txt
-  chmod 600 /root/albakov-admin.txt
 else
   env_set HOST 127.0.0.1
   env_set PORT "$PORT"
@@ -131,13 +127,8 @@ PROTO=http; [ "$HTTPS_OK" = 1 ] && PROTO=https
 printf '\n\033[1m════════════════════════════════════════════════════════════\033[0m\n'
 printf '\033[1m  Магазин установлен\033[0m\n\n'
 printf '  Сайт:               %s://%s\n' "$PROTO" "$DOMAIN"
-printf '  Панель управления:  %s://%s/#/admin\n' "$PROTO" "$DOMAIN"
-if [ -n "$FIRST_PASSWORD" ]; then
-  printf '  Пароль первого входа: \033[1m%s\033[0m\n' "$FIRST_PASSWORD"
-  printf '  (сохранён в /root/albakov-admin.txt — смените его в «Настройках» панели)\n'
-else
-  printf '  Пароль администратора прежний.\n'
-fi
+printf '  Панель управления:  %s://%s/admin — вход через личный кабинет аккаунтом владельца\n' "$PROTO" "$DOMAIN"
+printf '  Назначить владельца: sudo bash %s/deploy/set-owner.sh +7XXXXXXXXXX\n' "$APP_DIR"
 printf '\n  Уведомления ЮKassa (HTTP-уведомления): https://%s/api/payments/yookassa\n' "$DOMAIN"
 printf '  База данных: %s/data/albakov.sqlite\n' "$APP_DIR"
 if grep -qE '^S3_BUCKET=.+' "$BACKUP_CONF"; then printf '  Резервные копии: каждую ночь, на сервере и в Selectel S3\n'

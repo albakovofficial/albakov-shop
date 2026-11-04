@@ -53,8 +53,8 @@
     async resendCode(id) { return await call('POST', 'api/auth/resend', { id: id }); },
     async forgot(l) { return await call('POST', 'api/auth/forgot', { login: l }); },
     async resetPassword(id, code, password) { this.user = (await call('POST', 'api/auth/reset', { id: id, code: code, password: password })).user; Fav.merge(this.user); Cart.merge(this.user); return this.user; },
-    async login(l, p) { this.user = (await call('POST', 'api/auth/login', { login: l, password: p })).user; Fav.merge(this.user); Cart.merge(this.user); return this.user; },
-    async logout() { await call('POST', 'api/auth/logout'); this.user = null; Fav.set([], true); Cart.set([], true); },
+    async login(l, p) { var r = await call('POST', 'api/auth/login', { login: l, password: p }); this.user = r.user; this.isAdmin = !!r.isAdmin; Fav.merge(this.user); Cart.merge(this.user); return this.user; },
+    async logout() { await call('POST', 'api/auth/logout'); this.user = null; this.isAdmin = false; Fav.set([], true); Cart.set([], true); },
     async geoStreet(q, city, region) { return (await call('GET', 'api/geo/street?q=' + encodeURIComponent(q) + '&city=' + encodeURIComponent(city || '') + '&region=' + encodeURIComponent(region || ''))).items; },
     async cdekCities(q) { return (await call('GET', 'api/cdek/cities?q=' + encodeURIComponent(q))).cities; },
     async shipEstimate(city, pid) { return await call('GET', 'api/cdek/estimate?city=' + encodeURIComponent(city) + '&pid=' + encodeURIComponent(pid)); },
@@ -90,8 +90,6 @@
       if (r.user) this.user = r.user;
       return { order: r.order, payUrl: r.payUrl || null, repeated: !!r.repeated };
     },
-    async adminLogin(pw) { await call('POST', 'api/admin/login', { password: pw }); this.isAdmin = true; try { localStorage.setItem('vanta:nostat', '1'); } catch (e) {} }, // свои заходы не попадают в статистику
-    async adminLogout() { await call('POST', 'api/admin/logout'); this.isAdmin = false; },
     async adminData() { return (await call('GET', 'api/admin/data')).data; },
     async adminHealth() { return (await call('GET', 'api/admin/health')).health; },
     async adminPost(path, body) { return await call('POST', 'api/admin/' + path, body || {}); },
@@ -112,11 +110,12 @@
     async adminRefund(id, body) { return await call('POST', 'api/admin/orders/' + encodeURIComponent(id) + '/refund', body); },
     async adminOrderDelete(id) { return await call('DELETE', 'api/admin/orders/' + encodeURIComponent(id)); },
     // Финансы: ставки и категории, себестоимость, операции вручную
+    // Сотрудники: список, выдать роль по телефону, сменить роль, забрать доступ
+    async adminStaff(m, id, body) { return (await call(m, 'api/admin/staff' + (id ? '/' + encodeURIComponent(id) : ''), body)).staff; },
     async adminFinance(value) { return (await call('PUT', 'api/admin/finance/settings', { value: value })).finance; },
     async adminCosts(costs) { return (await call('PUT', 'api/admin/finance/costs', { costs: costs })).finance; },
     async adminExpense(e) { return (await call(e.id ? 'PUT' : 'POST', 'api/admin/finance/expenses' + (e.id ? '/' + encodeURIComponent(e.id) : ''), e)).expense; },
     async adminExpenseDelete(id) { await call('DELETE', 'api/admin/finance/expenses/' + encodeURIComponent(id)); },
-    async adminPassword(pw) { await call('POST', 'api/admin/password', { password: pw }); },
     async adminSecret(secret) { return (await call('POST', 'api/admin/payment-secret', secret === undefined ? {} : { secret: secret })); },
     async uploadImage(file) { var data = await readImage(file, 2000, 0.86); return (await call('POST', 'api/admin/upload', { dataUrl: data })).url; },
     async uploadDataUrl(dataUrl) { return (await call('POST', 'api/admin/upload', { dataUrl: dataUrl })).url; }

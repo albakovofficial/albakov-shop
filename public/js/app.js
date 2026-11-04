@@ -246,7 +246,7 @@
     return '<div class="mm-soc">' + list.map(function (x) { return '<a href="' + esc(safeUrl(x.url)) + '" target="_blank" rel="noopener" aria-label="' + esc(x.name) + '" title="' + esc(x.name) + '">' + SOC_ICON[socialKind(x)] + '</a>'; }).join('') + '<small>Мы в соцсетях</small></div>';
   }
   function navLinks() { return (D.settings.nav || []).filter(function (n) { return !navEmpty(n.link); }).map(function (n) { return '<a href="' + esc(safeUrl(n.link)) + '">' + esc(n.label) + '</a>'; }).join(''); }
-  /* Соцсети: подпись «Социальные сети», под ней ссылки с цветными значками */
+  /* Цветные значки соцсетей */
   var SOC_ICON = {
     telegram: '<svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="16" fill="#2AABEE"/><path fill="#fff" d="M7.4 15.6l15.5-6c.7-.3 1.4.2 1.1 1.3l-2.6 12.4c-.2.9-.7 1.1-1.4.7l-4-2.9-1.9 1.9c-.2.2-.4.4-.8.4l.3-4.1 7.4-6.7c.3-.3-.1-.4-.5-.2l-9.1 5.8-3.9-1.2c-.9-.3-.9-.9.2-1.4z"/></svg>',
     vk: '<svg viewBox="0 0 32 32"><rect width="32" height="32" rx="9" fill="#0077FF"/><path fill="#fff" d="M17 22.3c-6.6 0-10.4-4.5-10.5-12.1h3.3c.1 5.6 2.5 7.9 4.5 8.4v-8.4h3.1v4.8c1.9-.2 4-2.4 4.6-4.8h3.1c-.5 2.9-2.7 5.1-4.2 6 1.5.7 4 2.6 4.9 6.1h-3.4c-.7-2.3-2.6-4.1-5-4.3v4.3h-.4z"/></svg>',
@@ -256,18 +256,6 @@
   function socialKind(x) {
     var t = (String(x.url || '') + ' ' + String(x.name || '')).toLowerCase();
     return /t\.me|telegram|телеграм/.test(t) ? 'telegram' : /vk\.com|vk\.ru|вконтакте|\bvk\b/.test(t) ? 'vk' : /instagram|инстаграм/.test(t) ? 'instagram' : 'other';
-  }
-  function socialsHtml() {
-    var list = (D.settings.socials || []).filter(function (x) { return x.url; });
-    if (!list.length) return '';
-    return '<div class="socials"><h4 class="socials-title">Социальные сети</h4><ul>' + list.map(function (x) {
-      return '<li><a href="' + esc(safeUrl(x.url)) + '" target="_blank" rel="noopener"><span class="soc-ic" aria-hidden="true">' + SOC_ICON[socialKind(x)] + '</span><span>' + esc(x.name) + '</span></a></li>';
-    }).join('') + '</ul></div>';
-  }
-  // Реквизиты продавца — в колонке «Контакты», каждая часть с новой строки
-  function legalHtml(legal) {
-    var parts = String(legal || '').split(/\s*[,;]\s*/).filter(Boolean);
-    return parts.length ? '<div class="foot-legal"><span class="foot-legal-t">Продавец</span>' + parts.map(function (x) { return '<span>' + esc(x) + '</span>'; }).join('') + '</div>' : '';
   }
   function footerHtml() {
     var s = D.settings, c = s.contacts || {};
@@ -534,22 +522,9 @@
     }, { passive: true });
     document.documentElement.addEventListener('mouseleave', function () { if (cur) { reset(cur); cur = null; } });
   }
-  /* Вход в панель управления: секретный адрес (в данных хранится только его отпечаток).
-     Пока адрес не задан, работает #/admin. После входа #/admin открывается всегда. */
-  function hashPath(str) {
-    str = String(str || '').toLowerCase();
-    var h1 = 0xdeadbeef ^ 7, h2 = 0x41c6ce57 ^ 7;
-    for (var i = 0; i < str.length; i++) { var ch = str.charCodeAt(i); h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677); }
-    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
-    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
-    return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
-  }
-  function isAdminRoute(name) {
-    if (!name) return false;
-    if (name === 'admin' && API.isAdmin) return true;
-    var h = D.settings.adminPathHash;
-    return h ? hashPath(name) === h : name === 'admin';
-  }
+  /* Панель управления (13.57): адрес /admin; открывается только аккаунту владельца или сотрудника —
+     остальным это обычная «страница не найдена» */
+  function isAdminRoute(name) { return name === 'admin' && !!API.isAdmin; }
   function go(h, keep) { navTo(h, false, keep); }
 
 
@@ -1384,7 +1359,6 @@
     }).filter(Boolean);
     return rows.length >= 2 ? rows : [];
   }
-  function fitIsTypical(p) { var r = fitRangeRows(p); return !!(r[0] && r[0].typical); }
   function fitCanPick(p) { return fitRangeRows(p).length >= 2; }
   function fitCanCompare(p) { return fitRows(p).filter(function (r) { return r.w > 0 && r.l > 0; }).length >= 2; }
   function fitSaved() { try { return JSON.parse(localStorage.getItem(LS_FIT) || 'null') || {}; } catch (e) { return {}; } }
@@ -2166,7 +2140,7 @@
       '<div class="acc-body" id="accBody"><div class="loader" style="min-height:240px">…</div></div>' +
     '</div>';
     bindCardTilt($('.acc-card .loyal-card', v));
-    $('#accOut').addEventListener('click', async function () { await API.logout(); toast('Вы вышли из аккаунта'); go('#/'); });
+    $('#accOut').addEventListener('click', async function () { await API.logout(); renderShell(); toast('Вы вышли из аккаунта'); go('#/'); });
     var body = $('#accBody');
     // Факты под приветствием: заказы и баланс, обновляются после загрузки
     API.myOrders().then(function (list) {
@@ -2287,7 +2261,7 @@
     // Поле «Текущий пароль» появляется, когда меняют пароль или почту
     var curNeed = function () { var need = !!$('#pf-pass').value || $('#pf-email').value.trim().toLowerCase() !== String(u.email || '').toLowerCase(); $('#pfCurRow').hidden = !need; };
     ['#pf-pass', '#pf-email'].forEach(function (q) { $(q).addEventListener('input', curNeed); });
-    $('#pfOut').addEventListener('click', async function () { await API.logout(); toast('Вы вышли из аккаунта'); go('#/'); });
+    $('#pfOut').addEventListener('click', async function () { await API.logout(); renderShell(); toast('Вы вышли из аккаунта'); go('#/'); });
     $('#profForm').addEventListener('submit', async function (e) {
       e.preventDefault();
       var f = { firstName: $('#pf-first').value, lastName: $('#pf-last').value, phone: $('#pf-phone').value, email: $('#pf-email').value, newPassword: $('#pf-pass').value, currentPassword: $('#pf-cur').value };
@@ -2466,7 +2440,7 @@
     el.addEventListener('click', function (ev) { if (ev.target.closest('[data-bn-x],[data-bn-go]')) seenBonus(); });
     clearTimeout(noticeTimer); noticeTimer = setTimeout(function () { if (document.body.contains(el)) seenBonus(); }, 12000);
   }
-  function backTo(back) { return back === 'checkout' ? '#/checkout' : back === 'support' ? '#/account?tab=support&new=1' : '#/account'; }
+  function backTo(back) { return back === 'checkout' ? '#/checkout' : back === 'support' ? '#/account?tab=support&new=1' : back === 'admin' && API.isAdmin ? '#/admin' : '#/account'; }
   // Справа от входа и регистрации: что даёт аккаунт
   function authAside() {
     var c = bonusCfg(), perks = [];
@@ -2507,7 +2481,7 @@
   }
   function authPage(v, mode, back, pre) {
     pre = pre || {};
-    var backQ = back === 'checkout' || back === 'support' ? 'back=' + back : '';
+    var backQ = back === 'checkout' || back === 'support' || back === 'admin' ? 'back=' + back : '';
     v.innerHTML = '<div class="wrap auth-wrap"><div class="auth-main"><div class="page-head"><span class="eyebrow">Личный кабинет</span><h1>' + (mode === 'login' ? 'Вход' : 'Регистрация') + '</h1>' + (back === 'checkout' ? '<p class="muted" style="max-width:40ch">После входа вы вернётесь к оформлению заказа, а промокод подставится сам.</p>' : back === 'support' ? '<p class="muted" style="max-width:40ch">Войдите, чтобы написать в поддержку: ответ сохранится в кабинете и придёт на почту.</p>' : '') + '</div><div class="auth">' +
       '<div class="tabs"><button data-m="login"' + (mode === 'login' ? ' class="on"' : '') + '>Вход</button><button data-m="register"' + (mode === 'register' ? ' class="on"' : '') + '>Регистрация</button></div>' +
       (mode === 'login' ?
@@ -2549,6 +2523,7 @@
           afterRegister(back, r.welcome, false);
           return;
         }
+        if (API.isAdmin) { renderShell(); if (back !== 'admin') toast('У вас есть доступ к панели управления — она в меню'); } // кнопка «Панель управления» в меню и подвале
         go(backTo(back));
       } catch (ex) { err.textContent = errMsg(ex); }
     });
@@ -3139,7 +3114,7 @@
       return;
     }
     API = c.api; D = c.data;
-    window.App = { careIcon: careIcon, API: API, D: D, plural: plural, slideHtml: slideHtml, slidePromo: slidePromo, slideVisible: slideVisible, hashPath: hashPath, brandHtml: brandHtml, brandMode: brandMode, esc: esc, fmt: fmt, md: md, toast: toast, errMsg: errMsg, imgOf: imgOf, refresh: refresh, go: go, openModal: openModal, closePanels: closePanels, fmtPhone: fmtPhone, fmtDate: fmtDate, STATUS: STATUS, PAY: PAY, chartTable: chartTable };
+    window.App = { careIcon: careIcon, API: API, D: D, plural: plural, slideHtml: slideHtml, slidePromo: slidePromo, slideVisible: slideVisible, brandHtml: brandHtml, brandMode: brandMode, esc: esc, fmt: fmt, md: md, toast: toast, errMsg: errMsg, imgOf: imgOf, refresh: refresh, go: go, openModal: openModal, closePanels: closePanels, fmtPhone: fmtPhone, fmtDate: fmtDate, STATUS: STATUS, PAY: PAY, chartTable: chartTable };
     renderShell();
     initAnalytics();
     document.addEventListener('click', function (e) {

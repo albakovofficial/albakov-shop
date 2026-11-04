@@ -457,14 +457,14 @@
   }
   /* Заголовок вкладки и адрес страницы для поисковиков — те же, что отдаёт сервер (lib/seo.js) */
   function pageMeta(name, p, q) {
-    var s = D.settings, store = s.storeName || 'ALBAKOV', t = store + ' — интернет-магазин одежды из Санкт-Петербурга', canon = location.pathname;
+    var s = D.settings, store = s.storeName || 'ALBAKOV', t = store + ' — премиальный интернет-магазин одежды из Санкт-Петербурга', canon = location.pathname;
     if (name === 'catalog') {
       var c = q.cat && D.categories.find(function (x) { return x.slug === q.cat; });
-      t = c ? c.name + ' — купить в интернет-магазине ' + store : 'Каталог одежды — интернет-магазин ' + store;
+      t = c ? c.name + ' — купить в премиальном интернет-магазине ' + store : 'Каталог одежды — премиальный интернет-магазин ' + store;
       canon = c ? '/catalog?cat=' + encodeURIComponent(c.slug) : '/catalog';
     } else if (name === 'product') {
       var pr = productBySlug(p[1]);
-      if (pr) t = pr.name + ' — купить за ' + fmt(priceOf(pr).price) + ' в интернет-магазине ' + store;
+      if (pr) t = pr.name + ' — купить за ' + fmt(priceOf(pr).price) + ' в премиальном интернет-магазине ' + store;
     } else if (name === 'page') {
       var pg = D.pages.find(function (x) { return x.slug === p[1]; });
       if (pg) t = pg.slug === 'about' ? 'О бренде ' + store + ' — одежда из Санкт-Петербурга' : pg.title + ' — ' + store;

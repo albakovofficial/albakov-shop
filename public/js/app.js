@@ -36,9 +36,9 @@
     genderChoice = GENDERS[g] ? g : 'all';
     try { localStorage.setItem(LS_G, genderChoice); } catch (e) {}
     $$('[data-gender]').forEach(function (b) { var on = b.getAttribute('data-gender') === curGender(); b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); });
-    var ft = $('#app > .footer'), mn = $('.mnav-sub:not(.mnav-sub-sm)');
+    var ft = $('#app > .footer'), mn = $('#mmCats');
     if (ft) { var tmp = document.createElement('div'); tmp.innerHTML = footerHtml(); ft.replaceWith(tmp.firstElementChild); bindFooter(); }
-    if (mn) mn.innerHTML = sortedCats().map(function (c) { return '<a href="#/catalog?cat=' + esc(c.slug) + '">' + esc(c.name) + '</a>'; }).join('');
+    if (mn) mn.outerHTML = mmCatsHtml();
     routeKeepScroll = true; route();
   }
   function genderTabs(cls) {
@@ -133,10 +133,7 @@
       footerHtml() +
       '<div class="scrim" id="scrim"></div>' +
       '<aside class="drawer left" id="menuDrawer" aria-label="Меню"><div class="drawer-head"><a class="logo" href="#/" aria-label="' + esc(s.storeName) + '">' + brandHtml(s, 'mobile', 'brand-drawer') + '</a><button class="icon-btn" data-act="close">' + ICON.close + '</button></div>' +
-        '<div class="drawer-body">' + genderTabs('gtabs-drawer') + '<nav class="mnav">' + navLinks() + '<a href="#/favorites">Избранное</a><a href="#/account">Личный кабинет</a></nav>' +
-        '<div class="mnav-sub mnav-sub-sm"><a href="#/gift">Подарочные сертификаты</a><a href="#/track">Где мой заказ</a></div>' +
-        '<div class="mnav-sub">' + sortedCats().map(function (c) { return '<a href="#/catalog?cat=' + esc(c.slug) + '">' + esc(c.name) + '</a>'; }).join('') + '</div>' +
-        appMenuHtml() + socialsHtml() + '</div></aside>' +
+        '<div class="drawer-body mm">' + drawerMenuHtml() + '</div></aside>' +
       '<aside class="drawer right" id="cartDrawer" aria-label="Корзина"><div class="drawer-head"><h3>Корзина</h3><button class="icon-btn" data-act="close">' + ICON.close + '</button></div><div class="drawer-body" id="cartBody"></div><div class="drawer-foot" id="cartFoot"></div></aside>' +
       '<div class="modal" id="modal" role="dialog" aria-modal="true"><div class="modal-box"><button class="icon-btn modal-close" data-act="close">' + ICON.close + '</button><div id="modalBody"></div></div></div>' +
       '<div class="toast-wrap" aria-live="polite"></div>' +
@@ -149,7 +146,7 @@
     var narrow = window.matchMedia && matchMedia('(max-width: 760px)').matches;
     $$('.footer details.fcol').forEach(function (d) { if (narrow) d.removeAttribute('open'); $('summary', d).addEventListener('click', function (e) { if (!(window.matchMedia && matchMedia('(max-width: 760px)').matches)) e.preventDefault(); }); });
   }
-  function updateFavCount() { var n = Fav.count(), b = $('#favCount'); if (!b) return; b.textContent = n; b.hidden = !n; }
+  function updateFavCount() { var n = Fav.count(); $$('#favCount, #mmFavCount').forEach(function (b) { b.textContent = n; b.hidden = !n; }); }
   /* Логотип: знак, надпись или название текстом — отдельно для компьютера и телефона */
   function brandMode(s, where) {
     var b = s.brand || {}, mode = b[where] || 'both', hasM = !!(b.mark && b.mark.src), hasW = !!(b.word && b.word.src);
@@ -182,6 +179,53 @@
     if (m && m[1] === 'cat') { var c = D.categories.find(function (x) { return x.slug === decodeURIComponent(m[2]); }); return !!c && !ps.some(function (p) { return p.categoryId === c.id; }); }
     if (/^#?\/?sale$/.test(String(link || '').replace(/^#\//, '/'))) return !activePromos().length && !ps.some(function (p) { return priceOf(p).onSale; });
     return false;
+  }
+  /* ---------- Меню на телефоне (13.56): разделы переключателем, кабинет / избранное / заказ — кнопками сверху,
+     категории с фото — лентой, остальные пункты — списком с иконками, соцсети — значками ---------- */
+  var MM_IC = {
+    star: '<svg viewBox="0 0 24 24"><path d="M12 3.5l2.5 5.3 5.7.7-4.2 3.9 1.1 5.6L12 16.2 6.9 19l1.1-5.6-4.2-3.9 5.7-.7z"/></svg>',
+    grid: '<svg viewBox="0 0 24 24"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/></svg>',
+    tag: '<svg viewBox="0 0 24 24"><path d="M20 12.5l-7.5 7.5-8.5-8.5V4h7.5z"/><circle cx="8" cy="8" r="1.3"/></svg>',
+    ruler: '<svg viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="8" rx="1.5"/><path d="M7 8v3M11 8v4M15 8v3M19 8v4"/></svg>',
+    info: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.8v.4"/></svg>',
+    gift: '<svg viewBox="0 0 24 24"><rect x="3.5" y="9" width="17" height="11" rx="1.5"/><path d="M12 9v11M3.5 13h17M12 9c-1.8-3.6-5.5-3.6-5.5-1.3S10 9 12 9zm0 0c1.8-3.6 5.5-3.6 5.5-1.3S14 9 12 9z"/></svg>',
+    truck: '<svg viewBox="0 0 24 24"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7"/><circle cx="7" cy="17.5" r="1.6"/><circle cx="17" cy="17.5" r="1.6"/></svg>',
+    page: '<svg viewBox="0 0 24 24"><path d="M6 3.5h8l4 4V20.5H6z"/><path d="M14 3.5v4h4M9 12h6M9 15.5h6"/></svg>',
+    arrow: '<svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>'
+  };
+  // Значок пункта меню — по ссылке (пункты меняются в «Меню, контакты, соцсети»)
+  function mmIcon(link) {
+    var l = String(link || '');
+    return /tag=new/.test(l) ? MM_IC.star : /^#\/sale/.test(l) ? MM_IC.tag : /^#\/sizes/.test(l) ? MM_IC.ruler : /^#\/catalog/.test(l) ? MM_IC.grid : /about/.test(l) ? MM_IC.info : /^#\/gift/.test(l) ? MM_IC.gift : MM_IC.page;
+  }
+  // Самая большая скидка из идущих акций в процентах — плашка у «Акций»
+  function saleBadge() { var m = 0; activePromos().forEach(function (p) { if (p.type === 'percent' && p.value > m) m = p.value; }); return m ? '<span class="mm-tag">−' + m + '%</span>' : ''; }
+  function mmCatsHtml() {
+    var cats = sortedCats();
+    if (!cats.length) return '<div id="mmCats"></div>';
+    return '<div class="mm-cats" id="mmCats"><div class="mm-h"><span>Категории</span><a href="#/catalog">Весь каталог</a></div><div class="mm-strip">' + cats.map(function (c) {
+      return '<a class="mm-cat" href="#/catalog?cat=' + esc(c.slug) + '"><span class="mm-cat-ph"><img src="' + esc(c.image || Art.make(c.art)) + '" alt="" loading="lazy"></span><b>' + esc(c.name) + '</b></a>';
+    }).join('') + '</div></div>';
+  }
+  function drawerMenuHtml() {
+    var nav = (D.settings.nav || []).filter(function (n) { return !navEmpty(n.link); });
+    var gift = !D.giftCfg || D.giftCfg.enabled !== false;
+    var row = function (href, ic, label, extra) { return '<a class="mm-li" href="' + esc(href) + '"><span class="mm-ic">' + ic + '</span><span class="mm-lbl">' + esc(label) + '</span>' + (extra || '') + '<span class="mm-ar">' + MM_IC.arrow + '</span></a>'; };
+    return genderTabs('gtabs-drawer mm-seg') +
+      '<div class="mm-quick">' +
+        '<a href="#/account">' + ICON.user + '<span>Кабинет</span></a>' +
+        '<a href="#/favorites">' + ICON.heart + '<span>Избранное</span><em class="mm-count" id="mmFavCount"' + (Fav.count() ? '' : ' hidden') + '>' + Fav.count() + '</em></a>' +
+        '<a href="#/track">' + MM_IC.truck + '<span>Мой заказ</span></a>' +
+      '</div>' +
+      mmCatsHtml() +
+      '<nav class="mm-list" aria-label="Разделы сайта">' + nav.map(function (n) { return row(safeUrl(n.link), mmIcon(n.link), n.label, /^#\/sale/.test(n.link) ? saleBadge() : ''); }).join('') +
+        (gift ? row('#/gift', MM_IC.gift, 'Подарочные сертификаты') : '') + '</nav>' +
+      appMenuHtml() + mmSocialsHtml();
+  }
+  function mmSocialsHtml() {
+    var list = (D.settings.socials || []).filter(function (x) { return x.url; });
+    if (!list.length) return '';
+    return '<div class="mm-soc">' + list.map(function (x) { return '<a href="' + esc(safeUrl(x.url)) + '" target="_blank" rel="noopener" aria-label="' + esc(x.name) + '" title="' + esc(x.name) + '">' + SOC_ICON[socialKind(x)] + '</a>'; }).join('') + '<small>Мы в соцсетях</small></div>';
   }
   function navLinks() { return (D.settings.nav || []).filter(function (n) { return !navEmpty(n.link); }).map(function (n) { return '<a href="' + esc(safeUrl(n.link)) + '">' + esc(n.label) + '</a>'; }).join(''); }
   /* Соцсети: подпись «Социальные сети», под ней ссылки с цветными значками */

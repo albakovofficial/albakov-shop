@@ -57,7 +57,7 @@
     function hide() {
       ind.classList.add('back'); ind.classList.remove('ready', 'busy');
       ind.style.transform = ''; ind.style.opacity = ''; ic.style.transform = '';
-      setTimeout(function () { ind.classList.remove('back'); }, 250);
+      setTimeout(function () { ind.classList.remove('back'); }, 400);
     }
 
     document.addEventListener('touchstart', function (e) {

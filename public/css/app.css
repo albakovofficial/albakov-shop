@@ -3878,3 +3878,80 @@ body::after { content: none; display: none; }
 .shipc-list li:hover { background: var(--surface); }
 .shipc-list li.muted { cursor: default; background: none; font-size: 14px; }
 .shipc-quick { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* =====================================================================
+   МЕНЮ НА ТЕЛЕФОНЕ (13.56): карточки
+   ===================================================================== */
+/* колонкой, без сжатия блоков: меню прокручивается, а не обрезается */
+.drawer-body.mm { padding: 6px 20px calc(28px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 18px; }
+.drawer-body.mm > * { flex: none; min-width: 0; }
+/* Разделы — переключатель-таблетка */
+.gtabs-drawer.mm-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 0; margin: 0; padding: 4px; border: 0; border-radius: 999px; background: var(--surface); box-shadow: none; width: auto; max-width: none; }
+.mm-seg .gtab { padding: 11px 0; font-size: 14px; letter-spacing: .02em; border-radius: 999px; text-align: center; transition: background .25s, color .25s; }
+.mm-seg .gtab::after { display: none; }
+.mm-seg .gtab.on { background: var(--ink); color: #fff; }
+.mm-seg .soon-tag { margin-left: 6px; padding: 2px 7px; border-radius: 99px; background: #fff; color: var(--dim); font-size: 10px; letter-spacing: .03em; vertical-align: 2px; }
+/* Кабинет, избранное, заказ */
+.mm-quick { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.mm-quick a { position: relative; display: grid; justify-items: center; gap: 7px; padding: 14px 4px 12px; border-radius: var(--r-md); background: #fff; box-shadow: var(--ring); font-size: 12.5px; color: var(--muted); transition: box-shadow .2s, color .2s; }
+.mm-quick a:active { box-shadow: inset 0 0 0 1px var(--line-strong); color: var(--text); }
+.mm-quick svg { width: 23px; height: 23px; stroke: var(--text); fill: none; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
+.mm-count { position: absolute; top: 8px; right: calc(50% - 26px); min-width: 18px; padding: 1px 5px; border-radius: 99px; background: var(--acc-grad); color: #fff; font-style: normal; font-size: 10.5px; font-weight: 600; line-height: 16px; text-align: center; }
+.mm-count[hidden] { display: none; }
+/* Категории с фото */
+.mm-h { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+.mm-h span { font-size: 11px; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); }
+.mm-h a { font-size: 13px; border-bottom: 1px solid var(--line-strong); }
+.mm-strip { display: flex; gap: 10px; overflow-x: auto; margin: 0 -20px; padding: 0 20px 2px; scroll-snap-type: x mandatory; scroll-padding: 0 20px; scrollbar-width: none; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
+.mm-strip::-webkit-scrollbar { display: none; }
+.mm-cat { flex: none; width: 116px; scroll-snap-align: start; }
+.mm-cat-ph { display: block; position: relative; height: 144px; border-radius: var(--r-sm); overflow: hidden; background: var(--surface); }
+.mm-cat-ph img { width: 100%; height: 100%; object-fit: cover; }
+.mm-cat b { display: block; margin-top: 8px; font-weight: 500; font-size: 13px; line-height: 1.3; }
+/* Остальные пункты */
+.mm-list { display: grid; border-radius: var(--r-lg); background: #fff; box-shadow: var(--ring); overflow: hidden; }
+.mm-li { display: flex; align-items: center; gap: 14px; padding: 15px 16px; border-top: 1px solid var(--line); font-size: 16px; color: var(--text); }
+.mm-li:first-child { border-top: 0; }
+.mm-li:active { background: var(--surface); }
+.mm-ic, .mm-ar { display: grid; place-items: center; flex: none; }
+.mm-ic svg { width: 21px; height: 21px; stroke: var(--muted); fill: none; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.mm-lbl { flex: 1; min-width: 0; }
+.mm-ar svg { width: 16px; height: 16px; stroke: #b3b8bf; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.mm-tag { flex: none; padding: 3px 9px; border-radius: 99px; background: var(--acc-grad); color: #fff; font-size: 11px; font-weight: 600; }
+/* Соцсети значками */
+.mm-soc { display: flex; align-items: center; gap: 10px; }
+.mm-soc a { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 14px; background: #fff; box-shadow: var(--ring); }
+.mm-soc a svg { width: 26px; height: 26px; }
+.mm-soc small { margin-left: auto; font-size: 12.5px; color: var(--dim); }
+.drawer-body.mm .mnav-app { padding-top: 0; }
+.drawer-body.mm .mnav-app-btn { border-radius: var(--r-md); }
+/* Появление при открытии */
+.drawer.open .mm > * { animation: fadeUp .45s var(--ease) both; }
+.drawer.open .mm > :nth-child(2) { animation-delay: .04s; } .drawer.open .mm > :nth-child(3) { animation-delay: .08s; }
+.drawer.open .mm > :nth-child(4) { animation-delay: .12s; } .drawer.open .mm > :nth-child(n+5) { animation-delay: .16s; }
+@media (prefers-reduced-motion: reduce) { .drawer.open .mm > * { animation: none; } }
+/* Панель управления в меню телефона (только для вошедшего владельца) и подвал меню: продавец, документы (13.56) */
+.mm-admin { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: var(--r-md); background: var(--ink); color: #fff; }
+.mm-admin-ic { width: 36px; height: 36px; flex: none; display: grid; place-items: center; border-radius: 11px; background: var(--acc-grad); }
+.mm-admin-ic svg { width: 19px; height: 19px; stroke: #fff; fill: none; stroke-width: 1.6; }
+.mm-admin > span:nth-child(2) { flex: 1; display: grid; gap: 1px; }
+.mm-admin b { font-weight: 500; font-size: 15px; }
+.mm-admin small { font-size: 12px; color: rgba(255, 255, 255, .6); }
+.mm-admin .mm-ar svg { stroke: rgba(255, 255, 255, .5); }
+.mm-foot { display: grid; gap: 12px; margin-top: 4px; padding-top: 18px; border-top: 1px solid var(--line); }
+.mm-seller { display: grid; gap: 3px; padding: 12px 14px; border-radius: var(--r-sm); background: var(--surface); font-size: 12.5px; line-height: 1.5; color: var(--muted); }
+.mm-seller-t { justify-self: start; margin-bottom: 4px; padding: 2px 8px; border-radius: 99px; background: #fff; box-shadow: var(--ring); font-size: 10.5px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
+.mm-docs { display: flex; flex-wrap: wrap; gap: 6px; }
+.mm-docs a { padding: 6px 11px; border-radius: 999px; background: var(--surface); font-size: 12px; color: var(--muted); }
+.mm-copy { font-size: 11.5px; line-height: 1.5; color: var(--dim); }
+/* Пункты меню плитками (13.56, вариант 1) */
+.mm-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.mm-tile { position: relative; display: flex; flex-direction: column; justify-content: space-between; gap: 10px; min-height: 104px; padding: 14px; border-radius: var(--r-md); background: var(--surface); color: var(--text); transition: transform .2s var(--ease), background .2s; }
+.mm-tile:active { transform: scale(.98); }
+.mm-tile b { font-weight: 500; font-size: 15px; line-height: 1.25; }
+.mm-tile-ic { display: grid; width: 24px; height: 24px; }
+.mm-tile-ic svg { width: 24px; height: 24px; stroke: currentColor; fill: none; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.mm-tile .mm-tag { position: absolute; top: 14px; right: 14px; }
+.mm-tile.sale { background: var(--ink); color: #fff; }
+.mm-tile.wide { grid-column: 1 / -1; min-height: 0; flex-direction: row; align-items: center; justify-content: flex-start; gap: 12px; padding: 18px 16px; }
+.mm-tile.wide .mm-tag { position: static; margin-left: auto; order: 3; }

@@ -11,8 +11,18 @@
   var SECTIONS = [
     ['overview', 'Обзор'], ['orders', 'Заказы'], ['support', 'Поддержка'], ['products', 'Товары'], ['categories', 'Категории'], ['sizeCharts', 'Размерные сетки'],
     ['promotions', 'Акции'], ['promocodes', 'Промокоды'], ['bonus', 'Бонусы'], ['exchange', 'Обмен и возвраты'], ['customers', 'Покупатели'], ['mail', 'Почта'], ['analytics', 'Аналитика'], ['finance', 'Финансы'], ['gifts', 'Подарочные сертификаты'], ['sections', 'Разделы: женщинам / мужчинам'], ['brand', 'Логотип и название'], ['slider', 'Слайдер на главной'], ['home', 'Главная страница'], ['pages', 'Страницы'],
-    ['menu', 'Меню, контакты, соцсети'], ['payment', 'Оплата и доставка'], ['settings', 'Настройки']
+    ['menu', 'Меню, контакты, соцсети'], ['payment', 'Оплата и доставка'], ['staff', 'Сотрудники'], ['settings', 'Настройки']
   ];
+  /* Какие разделы видит роль (13.57): права приходят с сервера в DATA.perms, сервер проверяет их на каждом запросе */
+  var SECTION_PERMS = {
+    overview: [], orders: ['orders'], support: ['orders'], exchange: ['orders'], customers: ['orders', 'marketing'], gifts: ['orders', 'marketing'],
+    products: ['content'], categories: ['content'], sizeCharts: ['content'], promotions: ['content', 'marketing'], promocodes: ['content', 'marketing'],
+    sections: ['content'], brand: ['content'], slider: ['content'], home: ['content'], pages: ['content'], menu: ['content'],
+    bonus: ['marketing'], mail: ['mail'], analytics: ['finance', 'marketing'], finance: ['finance'],
+    payment: ['payment'], staff: ['staff'], settings: ['settings']
+  };
+  function can(perm) { return (DATA.perms || []).indexOf(perm) !== -1; }
+  function canSection(key) { var need = SECTION_PERMS[key]; return !!need && (!need.length || need.some(can)); }
   var TAX = [[1, 'ОСН — общая система'], [2, 'УСН «Доходы»'], [3, 'УСН «Доходы минус расходы»'], [5, 'ЕСХН'], [6, 'Патентная система']];
   var VAT = [[1, 'Без НДС'], [2, 'НДС 0%'], [7, 'НДС 5%'], [8, 'НДС 7%'], [3, 'НДС 10%'], [4, 'НДС 20% (до 2026)'], [11, 'НДС 22%']];
 
@@ -194,22 +204,64 @@
     // «Письма», «Уведомления на почту» и «Сообщить о поступлении» теперь вкладки раздела «Почта» (13.48): старые ссылки ведут туда же
     if (q.s === 'notify') { q.s = 'mail'; q.sub = q.tab === 'letter' ? 'letter' : q.sub; q.tab = q.tab === 'mail' ? 'smtp' : 'notify'; }
     else if (q.s === 'alerts') { q.s = 'mail'; q.tab = 'alerts'; }
-    var s = q.s || 'overview';
+    var allowed = SECTIONS.filter(function (x) { return canSection(x[0]); });
+    var s = q.s && canSection(q.s) ? q.s : (canSection('overview') && (can('orders') || can('finance') || can('marketing')) ? 'overview' : (allowed[1] || allowed[0])[0]);
+    if (!q.s || q.s !== s) q.s = s;
+    var me = DATA.me || {};
     v.innerHTML = '<div class="adm"><aside class="adm-side"><div class="adm-brand"><span class="eyebrow">Управление</span><b class="serif">' + esc(A().D.settings.storeName) + '</b></div><nav>' +
-      SECTIONS.map(function (x) { return '<a href="#/admin?s=' + x[0] + '"' + (x[0] === s ? ' class="on"' : '') + '>' + x[1] + (x[0] === 'orders' ? newOrdersBadge() : '') + (x[0] === 'support' && DATA.supportNew ? ' <span class="adm-badge">' + DATA.supportNew + '</span>' : '') + (x[0] === 'mail' ? waitBadge() : '') + (x[0] === 'exchange' ? reqBadge() : '') + '</a>'; }).join('') +
-      '</nav><div class="adm-side-foot"><a href="#/" class="muted">← В магазин</a><button class="muted" id="admOut">Выйти</button></div></aside><section class="adm-main" id="admMain"></section></div>';
-    $('#admOut').addEventListener('click', async function () { await API.adminLogout(); DATA = null; window.ALB_NAV.go('#/'); await A().refresh(); });
+      allowed.map(function (x) { return '<a href="#/admin?s=' + x[0] + '"' + (x[0] === s ? ' class="on"' : '') + '>' + x[1] + (x[0] === 'orders' ? newOrdersBadge() : '') + (x[0] === 'support' && DATA.supportNew ? ' <span class="adm-badge">' + DATA.supportNew + '</span>' : '') + (x[0] === 'mail' ? waitBadge() : '') + (x[0] === 'exchange' ? reqBadge() : '') + '</a>'; }).join('') +
+      '</nav><div class="adm-me"><b>' + esc([me.firstName, me.lastName].filter(Boolean).join(' ')) + '</b><span>' + esc(DATA.roleName || '') + '</span></div>' +
+      '<div class="adm-side-foot"><a href="#/" class="muted">← В магазин</a><button class="muted" id="admOut">Выйти из аккаунта</button></div></aside><section class="adm-main" id="admMain"></section></div>';
+    $('#admOut').addEventListener('click', async function () { await API.logout(); DATA = null; window.ALB_NAV.go('#/'); await A().refresh(); });
     var main = $('#admMain');
-    var fn = { overview: overview, orders: orders, support: supportSection, products: products, categories: categories, sizeCharts: sizeCharts, promotions: promotions, promocodes: promocodes, bonus: bonusSection, exchange: exchangeSection, customers: customers,  mail: mailHub,  analytics: analyticsSection, finance: financeSection, gifts: giftsSection, sections: sectionsSettings, brand: brandSection, slider: sliderSection, home: homeSettings, pages: pages, menu: menuSettings, payment: paymentSettings, settings: generalSettings }[s] || overview;
+    var fn = { overview: overview, orders: orders, support: supportSection, products: products, categories: categories, sizeCharts: sizeCharts, promotions: promotions, promocodes: promocodes, bonus: bonusSection, exchange: exchangeSection, customers: customers,  mail: mailHub, staff: staffSection,  analytics: analyticsSection, finance: financeSection, gifts: giftsSection, sections: sectionsSettings, brand: brandSection, slider: sliderSection, home: homeSettings, pages: pages, menu: menuSettings, payment: paymentSettings, settings: generalSettings }[s] || overview;
     fn(main, q);
   }
   function waitBadge() { var n = (DATA.waitlist || []).filter(function (w) { return w.status === 'waiting' || w.status === 'failed'; }).length; return n ? ' <span class="adm-badge muted-badge">' + n + '</span>' : ''; }
   function newOrdersBadge() { var n = DATA.orders.filter(function (o) { return o.status === 'new'; }).length; return n ? ' <span class="adm-badge">' + n + '</span>' : ''; }
   /* ================= Письма: все письма сайта с примером ================= */
+  /* ================= Сотрудники (13.57): владелец выдаёт роли аккаунтам покупателей ================= */
+  var ROLE_INFO = {
+    manager: ['Управляющий', 'Всё, кроме сотрудников, оплаты, ключей и общих настроек'],
+    orders: ['Менеджер заказов', 'Заказы, отправки СДЭК, обмены и возвраты, поддержка, покупатели, сертификаты, почта'],
+    content: ['Контент-менеджер', 'Товары, категории, размеры, акции, промокоды, слайдер, главная, страницы, меню'],
+    finance: ['Финансы', 'Финансы и аналитика']
+  };
+  async function staffSection(m) {
+    m.innerHTML = head('Сотрудники', '', 'Сотрудник входит в панель своим аккаунтом на сайте — отдельных паролей нет. Выдайте роль по номеру телефона: человек должен быть уже зарегистрирован. Забрать доступ можно в любой момент.') + '<div class="loader">…</div>';
+    var list = [];
+    try { list = await A().API.adminStaff('GET'); } catch (e) { m.querySelector('.loader').outerHTML = '<p class="form-error">' + esc(A().errMsg(e)) + '</p>'; return; }
+    var roleSel = function (cur, id) { return '<select class="select st-role"' + (id ? ' data-role="' + esc(id) + '"' : ' id="stRole"') + ' aria-label="Роль">' + Object.keys(ROLE_INFO).map(function (r) { return '<option value="' + r + '"' + (r === cur ? ' selected' : '') + '>' + ROLE_INFO[r][0] + '</option>'; }).join('') + '</select>'; };
+    var initials = function (n) { return String(n || '?').split(' ').map(function (w) { return w.charAt(0); }).join('').slice(0, 2).toUpperCase(); };
+    m.lastElementChild.outerHTML =
+      '<div class="adm-card st-add"><h3 class="adm-h3">Выдать доступ</h3><div class="st-form"><label class="field"><span>Телефон аккаунта</span><input class="input" id="stPhone" type="tel" inputmode="tel" placeholder="+7 (900) 000-00-00"></label>' +
+        '<label class="field"><span>Роль</span>' + roleSel('orders') + '</label><button class="btn" id="stAdd" type="button">Выдать</button></div><p class="form-error" id="stErr"></p></div>' +
+      '<div class="st-list">' + list.map(function (x) {
+        return '<div class="st-row' + (x.owner ? ' owner' : '') + '"><span class="st-ava">' + esc(initials(x.name)) + '</span><div class="st-who"><b>' + esc(x.name || 'Без имени') + '</b><small>' + esc(A().fmtPhone(x.phone)) + (x.email ? ' · ' + esc(x.email) : '') + '</small></div>' +
+          (x.owner ? '<span class="st-badge">Владелец</span>' : roleSel(x.role, x.userId) + '<button class="btn ghost sm st-del" type="button" data-del="' + esc(x.userId) + '">Забрать доступ</button>') + '</div>';
+      }).join('') + '</div>' +
+      '<div class="adm-card st-roles"><h3 class="adm-h3">Что может каждая роль</h3><div class="st-rl"><div><b>Владелец</b><span>Всё, включая сотрудников, оплату, ключи и общие настройки</span></div>' +
+        Object.keys(ROLE_INFO).map(function (r) { return '<div><b>' + ROLE_INFO[r][0] + '</b><span>' + ROLE_INFO[r][1] + '</span></div>'; }).join('') + '</div></div>';
+    $('#stAdd', m).addEventListener('click', async function (e) {
+      var b = e.currentTarget, err = $('#stErr', m); err.textContent = '';
+      var ph = $('#stPhone', m).value.replace(/\D/g, ''); if (ph.length < 10) { err.textContent = 'Укажите номер телефона полностью'; return; }
+      b.disabled = true;
+      try { await A().API.adminStaff('POST', null, { phone: ph, role: $('#stRole', m).value }); toast('Доступ выдан — человек увидит «Панель управления» в меню, когда войдёт в аккаунт'); staffSection(m); }
+      catch (ex) { err.textContent = A().errMsg(ex); b.disabled = false; }
+    });
+    $$('[data-role]', m).forEach(function (sel) { sel.addEventListener('change', async function () {
+      try { await A().API.adminStaff('PUT', sel.getAttribute('data-role'), { role: sel.value }); toast('Роль изменена: ' + ROLE_INFO[sel.value][0]); } catch (ex) { toast(A().errMsg(ex), true); }
+    }); });
+    $$('[data-del]', m).forEach(function (b) { bindConfirm(b, async function () {
+      try { await A().API.adminStaff('DELETE', b.getAttribute('data-del')); toast('Доступ забран'); staffSection(m); } catch (ex) { toast(A().errMsg(ex), true); }
+    }); });
+  }
+
   /* ================= Почта (13.48): письма покупателям, уведомления владельцу, «Сообщить о поступлении», подключение ================= */
   var MAIL_TABS = [['letters', 'Письма покупателям'], ['alerts', 'Уведомления мне'], ['notify', 'Сообщить о поступлении'], ['smtp', 'Подключение']];
   async function mailHub(m, q) {
-    var tab = MAIL_TABS.some(function (t) { return t[0] === q.tab; }) ? q.tab : 'letters';
+    var tabs = MAIL_TABS.filter(function (t) { return t[0] !== 'smtp' || can('payment'); });
+    var tab = tabs.some(function (t) { return t[0] === q.tab; }) ? q.tab : 'letters';
     m.innerHTML = head('Почта', '', 'Всё, что сайт отправляет письмами: покупателям, вам и тем, кто ждёт размер.') + '<div class="loader">…</div>';
     var mail = { ready: false };
     try { mail = (await A().API.adminMail()).mail; } catch (e) {}
@@ -227,7 +279,7 @@
         card('alerts', 'Уведомления мне', evN ? 'Включены' : 'Выключены', evN ? 'done' : 'canceled', ownerTo ? evN + ' из 3 · на ' + esc(ownerTo) : 'укажите почту') +
         card('notify', 'Сообщить о поступлении', tpl.enabled ? 'Кнопка включена' : 'Кнопка выключена', tpl.enabled ? 'done' : 'canceled', waiting ? 'ждут ' + waiting + ' ' + plural(waiting, 'покупатель', 'покупателя', 'покупателей') : 'заявок нет') +
       '</div>' +
-      '<div class="tabs adm-tabs mh-tabs">' + MAIL_TABS.map(function (t) {
+      '<div class="tabs adm-tabs mh-tabs">' + tabs.map(function (t) {
         var badge = t[0] === 'notify' && waiting ? ' <span class="adm-badge">' + waiting + '</span>' : t[0] === 'smtp' && !mail.ready ? ' <span class="mh-dot" aria-label="не подключена"></span>' : '';
         return '<a href="#/admin?s=mail&tab=' + t[0] + '"' + (tab === t[0] ? ' class="on"' : '') + '>' + t[1] + badge + '</a>';
       }).join('') + '</div><div id="mhBody" class="mh-body"></div>';
@@ -269,14 +321,12 @@
   }
   function head(title, actions, sub) { return '<div class="adm-head"><div><h1 class="serif">' + esc(title) + '</h1>' + (sub ? '<p class="muted" style="margin-top:6px;font-size:14px;max-width:70ch">' + sub + '</p>' : '') + '</div><div class="adm-actions">' + (actions || '') + '</div></div>'; }
 
+  // Панель открывается из личного кабинета: отдельного пароля нет. Сюда попадают, если доступ забрали или вход закончился
   function loginView(v) {
-    v.innerHTML = '<div class="wrap"><div class="auth" style="padding-top:72px"><div class="adm-login-head" style="text-align:center;display:grid;gap:12px;justify-items:center"><span class="eyebrow">Панель управления</span><h1 class="serif" style="font-size:52px">Вход</h1></div>' +
-      '<form class="form" id="admLogin" novalidate><label class="field"><span>Пароль администратора</span><input class="input" type="password" id="adm-pass" autocomplete="current-password"></label><p class="form-error" id="admErr"></p><button class="btn block">Войти</button></form>' + '</div></div>';
-    $('#admLogin').addEventListener('submit', async function (e) {
-      e.preventDefault();
-      try { await A().API.adminLogin($('#adm-pass').value); DATA = null; window.ALB_NAV.go('#/admin?s=overview'); await A().refresh(); }
-      catch (ex) { $('#admErr').textContent = A().errMsg(ex); }
-    });
+    var u = A().API.user;
+    v.innerHTML = '<div class="wrap"><div class="empty" style="padding:96px 0"><span class="eyebrow">Панель управления</span><h3>' + (u ? 'Нет доступа' : 'Войдите в аккаунт') + '</h3>' +
+      '<p>' + (u ? 'У аккаунта ' + esc(u.firstName || '') + ' нет доступа к панели. Доступ выдаёт владелец магазина в разделе «Сотрудники».' : 'Панель управления открывается из личного кабинета — войдите аккаунтом владельца или сотрудника.') + '</p>' +
+      '<div class="empty-acts">' + (u ? '<a class="btn" href="#/">В магазин</a>' : '<a class="btn" href="#/account?back=admin">Войти</a>') + '</div></div></div>';
   }
 
   /* ================= Обзор ================= */
@@ -1743,11 +1793,12 @@
         }).join('') + '</div><p class="muted" style="font-size:12px;margin-top:10px">Столбик — посетители, число над ним — заказы за день</p></div>' +
         '<div class="adm-card"><h3 class="adm-h3">Откуда приходят</h3>' + (srcs.length ? '<div class="an-src">' + srcs.map(function (k) { return '<div class="an-src-row"><span>' + (SRC_NAMES[k] || k) + '</span><span class="an-src-bar"><i style="width:' + Math.round(t.src[k] / srcTotal * 100) + '%"></i></span><b class="num">' + pct(t.src[k], srcTotal) + '</b></div>'; }).join('') + '</div>' : '<p class="muted">Данные появятся после первых посещений.</p>') +
           '<p class="muted" style="font-size:12px;margin-top:12px">Ссылки в соцсетях лучше размечать: <span class="copyable">?utm_source=instagram</span> — тогда переходы считаются точно</p></div></div>' +
-      '<div class="adm-card" style="margin-top:16px"><h3 class="adm-h3">Яндекс Метрика</h3>' +
+      (!can('marketing') ? '' : '<div class="adm-card" style="margin-top:16px"><h3 class="adm-h3">Яндекс Метрика</h3>' +
         '<p class="muted" style="font-size:14px;max-width:70ch;margin-bottom:16px">Создайте счётчик на <a class="link" href="https://metrika.yandex.ru/add" target="_blank" rel="noopener">metrika.yandex.ru</a> (адрес сайта — albakovofficial.ru, галочка «Электронная коммерция»), скопируйте номер счётчика и вставьте сюда. Сайт сам отправит в Метрику просмотры товаров, корзину и заказы.</p>' +
         '<div class="adm-form"><label class="field"><span>Номер счётчика</span><input class="input num" id="mkId" inputmode="numeric" placeholder="Например, 98765432" value="' + esc(mk.id || '') + '"></label>' +
         '<label class="check" style="align-self:end;padding-bottom:12px"><input type="checkbox" id="mkWeb"' + (mk.webvisor ? ' checked' : '') + '> <span>Вебвизор — записи визитов<br><small class="muted">Помогает увидеть, где покупателям неудобно. Поля с телефоном, почтой и адресом Метрика скрывает сама</small></span></label></div>' +
-        '<div class="adm-actions" style="margin-top:12px"><button class="btn" id="mkSave" type="button">Сохранить</button>' + (mk.id ? '<a class="btn ghost" href="https://metrika.yandex.ru/dashboard?id=' + esc(mk.id) + '" target="_blank" rel="noopener">Открыть Метрику</a>' : '') + '</div><p class="form-error" id="mkErr"></p></div>';
+        '<div class="adm-actions" style="margin-top:12px"><button class="btn" id="mkSave" type="button">Сохранить</button>' + (mk.id ? '<a class="btn ghost" href="https://metrika.yandex.ru/dashboard?id=' + esc(mk.id) + '" target="_blank" rel="noopener">Открыть Метрику</a>' : '') + '</div><p class="form-error" id="mkErr"></p></div>');
+    if (!can('marketing')) return;
     $('#mkSave').addEventListener('click', async function () {
       var id = $('#mkId').value.replace(/\D/g, '');
       if ($('#mkId').value.trim() && !/^\d{5,12}$/.test(id)) { $('#mkErr').textContent = 'Номер счётчика — это 5–12 цифр'; return; }
@@ -2258,12 +2309,8 @@
       return '';
     });
     var card = document.createElement('div'); card.className = 'adm-card'; card.style.cssText = 'margin-top:20px;display:grid;gap:14px';
-    var hasPath = !!DATA.settings.adminPathHash;
-    card.innerHTML = '<h4 class="adm-sub" style="margin-top:0;padding-top:0;border-top:0">Адрес входа в панель</h4>' +
-      '<p class="muted" style="font-size:14px">Покупатели не видят ссылку «Управление»: она появляется в подвале только после вашего входа. ' + (hasPath ? 'Сейчас задан секретный адрес входа, адрес #/admin для посторонних не открывается.' : 'Сейчас вход работает по адресу <b>#/admin</b>. Задайте свой адрес, чтобы его нельзя было угадать.') + '</p>' +
-      '<div class="promo-form"><input class="input" id="admPath" placeholder="Например, vhod-k7m2q" autocomplete="off" aria-label="Секретный адрес входа"><button type="button" class="btn ghost" id="admPathGen">Придумать</button><button type="button" class="btn ghost" id="admPathSave">Сохранить</button></div><div id="admPathOut"></div>' +
+    card.innerHTML = '<h4 class="adm-sub" style="margin-top:0;padding-top:0;border-top:0">Вход в панель</h4><p class="muted" style="font-size:14px">Отдельного пароля нет: панель открывается из личного кабинета аккаунтом владельца или сотрудника. Сотрудников и их роли — в разделе <a class="link" href="#/admin?s=staff">«Сотрудники»</a>.</p>' +
       '<h4 class="adm-sub">Нумерация заказов</h4><p class="muted" style="font-size:14px">Номер, который получит следующий заказ. Дальше номера идут по порядку: 1, 2, 3… Уже занятые номера пропускаются.</p><div class="promo-form"><input class="input num" type="number" min="1" step="1" id="orderSeq" placeholder="…" aria-label="Номер следующего заказа"><button type="button" class="btn ghost" id="orderSeqSave">Сохранить</button></div>' +
-      '<h4 class="adm-sub">Пароль администратора</h4><div class="promo-form"><input class="input" type="password" id="newPass" placeholder="Новый пароль, от 8 символов" autocomplete="new-password" aria-label="Новый пароль"><button type="button" class="btn ghost" id="passSave">Сменить</button></div>' +
       backupStatusHtml(DATA.backup) +
       updateStatusHtml(DATA.update) +
       '<h4 class="adm-sub">Состояние магазина</h4><div id="healthBox"><p class="muted" style="font-size:14px">Проверяю…</p></div>' +
@@ -2288,20 +2335,6 @@
         li('Онлайн-оплата', h.pay ? 'подключена' : 'не подключена') +
         li('Работает без перезапуска', num(h.uptimeH) + ' ч') + '</div>';
     }).catch(function (e) { var box = $('#healthBox'); if (box) box.innerHTML = '<p class="form-error">' + esc(A().errMsg(e)) + '</p>'; });
-    $('#admPathGen').addEventListener('click', function () { var a = 'abcdefghijkmnpqrstuvwxyz23456789', r = 'vhod-'; for (var i = 0; i < 10; i++) r += a[Math.floor(Math.random() * a.length)]; $('#admPath').value = r; });
-    $('#admPathSave').addEventListener('click', async function () {
-      var slug = $('#admPath').value.trim().toLowerCase();
-      var reserved = ['', 'admin', 'catalog', 'product', 'sale', 'sizes', 'cart', 'checkout', 'account', 'order', 'page'];
-      if (!/^[a-z0-9-]{6,40}$/.test(slug) || reserved.indexOf(slug) !== -1) { toast('Адрес: от 6 до 40 символов, латинские буквы, цифры и дефис', true); return; }
-      var s = clone(DATA.settings); s.adminPathHash = A().hashPath(slug);
-      try {
-        await A().API.adminSave('settings', s);
-        var link = location.origin + '/' + slug;
-        await afterSave('Адрес входа сохранён', '#/admin?s=settings');
-        var out = $('#admPathOut'); if (out) out.innerHTML = '<p style="margin-top:12px;font-size:14px">Ваш адрес входа: <b class="copyable">' + esc(link) + '</b><br><span class="muted" style="font-size:14px">Сохраните его в закладки — он нигде больше не показывается. Восстановить его по данным сайта нельзя, только задать новый.</span></p>';
-      } catch (e) { toast(A().errMsg(e), true); }
-    });
-    $('#passSave').addEventListener('click', async function () { var p = $('#newPass').value; if (p.length < 8) { toast('Пароль должен быть не короче 8 символов', true); return; } try { await A().API.adminPassword(p); $('#newPass').value = ''; toast('Пароль изменён'); } catch (e) { toast(A().errMsg(e), true); } });
     $('#bkShow').addEventListener('click', async function () {
       var d = await A().API.adminData();
       $('#bkBox').innerHTML = '<textarea class="textarea" id="bkText" rows="8" readonly style="font-size:13px;font-family:monospace"></textarea><button type="button" class="btn ghost sm" id="bkCopy" style="margin-top:8px">Скопировать</button>';

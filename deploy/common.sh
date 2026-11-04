@@ -13,7 +13,6 @@ warn() { printf '  \033[33m!\033[0m %s\n' "$*"; }
 die()  { printf '\n\033[31m✗ %s\033[0m\n' "$*" >&2; exit 1; }
 
 # Случайный пароль из 16 букв и цифр
-gen_password() { node -e 'process.stdout.write(require("crypto").randomBytes(12).toString("base64url").replace(/[-_]/g, "x"))'; }
 
 need_root() { [ "$(id -u)" -eq 0 ] || die "Запустите от администратора: sudo bash $0"; }
 

@@ -211,7 +211,16 @@
     var nav = (D.settings.nav || []).filter(function (n) { return !navEmpty(n.link); });
     var gift = !D.giftCfg || D.giftCfg.enabled !== false;
     var row = function (href, ic, label, extra) { return '<a class="mm-li" href="' + esc(href) + '"><span class="mm-ic">' + ic + '</span><span class="mm-lbl">' + esc(label) + '</span>' + (extra || '') + '<span class="mm-ar">' + MM_IC.arrow + '</span></a>'; };
-    return genderTabs('gtabs-drawer mm-seg') +
+    var st = D.settings, legal = String(st.legal || '').split(/\s*[,;]\s*/).filter(Boolean);
+    var docs = D.pages.filter(function (pg) { return pg.inFooter && pg.group === 'legal'; });
+    // Владелец вошёл в панель — кнопка «Панель управления» первой строкой меню
+    var admin = API.isAdmin ? '<a class="mm-admin" href="#/admin"><span class="mm-admin-ic">' + MM_IC.grid + '</span><span><b>Панель управления</b><small>Заказы, товары, финансы</small></span><span class="mm-ar">' + MM_IC.arrow + '</span></a>' : '';
+    // Внизу — продавец, документы и знак, как в подвале на компьютере
+    var foot = '<div class="mm-foot">' +
+      (legal.length ? '<div class="mm-seller"><span class="mm-seller-t">Продавец</span>' + legal.map(function (x) { return '<span>' + esc(x) + '</span>'; }).join('') + '</div>' : '') +
+      (docs.length ? '<nav class="mm-docs" aria-label="Документы">' + docs.map(function (pg) { return '<a href="#/page/' + esc(pg.slug) + '">' + esc(pg.title) + '</a>'; }).join('') + '</nav>' : '') +
+      '<p class="mm-copy">© ' + new Date().getFullYear() + ' ' + esc(st.storeName) + ((st.brand || {}).trademark !== false ? '®. Все права защищены. ' + esc(st.storeName) + ' — зарегистрированный товарный знак' : '. Все права защищены') + '</p></div>';
+    return admin + genderTabs('gtabs-drawer mm-seg') +
       '<div class="mm-quick">' +
         '<a href="#/account">' + ICON.user + '<span>Кабинет</span></a>' +
         '<a href="#/favorites">' + ICON.heart + '<span>Избранное</span><em class="mm-count" id="mmFavCount"' + (Fav.count() ? '' : ' hidden') + '>' + Fav.count() + '</em></a>' +
@@ -220,7 +229,7 @@
       mmCatsHtml() +
       '<nav class="mm-list" aria-label="Разделы сайта">' + nav.map(function (n) { return row(safeUrl(n.link), mmIcon(n.link), n.label, /^#\/sale/.test(n.link) ? saleBadge() : ''); }).join('') +
         (gift ? row('#/gift', MM_IC.gift, 'Подарочные сертификаты') : '') + '</nav>' +
-      appMenuHtml() + mmSocialsHtml();
+      appMenuHtml() + mmSocialsHtml() + foot;
   }
   function mmSocialsHtml() {
     var list = (D.settings.socials || []).filter(function (x) { return x.url; });

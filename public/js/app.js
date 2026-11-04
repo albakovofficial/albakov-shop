@@ -210,7 +210,6 @@
   function drawerMenuHtml() {
     var nav = (D.settings.nav || []).filter(function (n) { return !navEmpty(n.link); });
     var gift = !D.giftCfg || D.giftCfg.enabled !== false;
-    var row = function (href, ic, label, extra) { return '<a class="mm-li" href="' + esc(href) + '"><span class="mm-ic">' + ic + '</span><span class="mm-lbl">' + esc(label) + '</span>' + (extra || '') + '<span class="mm-ar">' + MM_IC.arrow + '</span></a>'; };
     var st = D.settings, legal = String(st.legal || '').split(/\s*[,;]\s*/).filter(Boolean);
     var docs = D.pages.filter(function (pg) { return pg.inFooter && pg.group === 'legal'; });
     // Владелец вошёл в панель — кнопка «Панель управления» первой строкой меню
@@ -227,9 +226,19 @@
         '<a href="#/track">' + MM_IC.truck + '<span>Мой заказ</span></a>' +
       '</div>' +
       mmCatsHtml() +
-      '<nav class="mm-list" aria-label="Разделы сайта">' + nav.map(function (n) { return row(safeUrl(n.link), mmIcon(n.link), n.label, /^#\/sale/.test(n.link) ? saleBadge() : ''); }).join('') +
-        (gift ? row('#/gift', MM_IC.gift, 'Подарочные сертификаты') : '') + '</nav>' +
+      mmTilesHtml(nav, gift) +
       appMenuHtml() + mmSocialsHtml() + foot;
+  }
+  /* Пункты меню плитками (13.56): первые четыре — квадратами по два в ряд, остальные — на всю ширину.
+     «Акции» — тёмная плитка с самой большой скидкой */
+  function mmTilesHtml(nav, gift) {
+    var items = nav.map(function (n) { return { href: safeUrl(n.link), ic: mmIcon(n.link), label: n.label, sale: /^#\/sale/.test(n.link) }; });
+    if (gift) items.push({ href: '#/gift', ic: MM_IC.gift, label: 'Подарочные сертификаты' });
+    var sq = Math.min(4, items.length); if (sq % 2) sq--; // квадратов всегда чётное число — без дыр в сетке
+    return '<nav class="mm-tiles" aria-label="Разделы сайта">' + items.map(function (x, i) {
+      var cls = 'mm-tile' + (i < sq ? '' : ' wide') + (x.sale ? ' sale' : '');
+      return '<a class="' + cls + '" href="' + esc(x.href) + '"><span class="mm-tile-ic">' + x.ic + '</span>' + (x.sale ? saleBadge() : '') + '<b>' + esc(x.label) + '</b></a>';
+    }).join('') + '</nav>';
   }
   function mmSocialsHtml() {
     var list = (D.settings.socials || []).filter(function (x) { return x.url; });

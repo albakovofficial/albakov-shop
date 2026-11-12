@@ -1099,7 +1099,8 @@ input[type="range"] { accent-color: var(--accent); width: 100%; }
 .lc-word { font-size: 14px; letter-spacing: .32em; font-weight: 500; }
 .lc-label { font-size: 12px; letter-spacing: .04em; color: rgba(255, 255, 255, .62); }
 .lc-pct { align-self: center; font-family: var(--serif); font-weight: 300; font-size: clamp(64px, 8vw, 112px); line-height: .9; letter-spacing: -.04em; }
-.lc-pct span { font-size: .42em; letter-spacing: 0; margin-left: .06em; vertical-align: .95em; color: rgba(255, 255, 255, .7); }
+/* Процент — того же размера и цвета, что и число, вплотную к нему */
+.lc-pct span { letter-spacing: 0; margin-left: .02em; }
 .lc-bottom { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; font-size: 13px; }
 .lc-holder { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: .06em; color: rgba(255, 255, 255, .86); }
 .lc-bal { white-space: nowrap; color: rgba(255, 255, 255, .7); }
@@ -2299,7 +2300,6 @@ input:focus-visible + .pm-track { outline: 2px solid var(--accent); outline-offs
 .loyal-sec .loyal-card::after { content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; pointer-events: none;
   background: linear-gradient(135deg, rgba(255, 255, 255, .35), rgba(var(--acc2-rgb), .45) 40%, rgba(255, 255, 255, .05) 60%, rgba(150, 170, 255, .4));
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; }
-.loyal-sec .lc-pct span { background: linear-gradient(135deg, var(--acc2), var(--acc)); -webkit-background-clip: text; background-clip: text; color: transparent; }
 @media (prefers-reduced-motion: reduce) { .loyal-sec .loyal-visual::before { animation: none; } }
 @media (max-width: 860px) {
   .loyal-sec .loyal { padding: 26px 18px 20px; border-radius: 26px; background: radial-gradient(90% 40% at 50% 12%, rgba(var(--acc2-rgb), .18), transparent 70%), linear-gradient(180deg, #f7f7f6, #eff0f2); }

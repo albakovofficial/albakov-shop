@@ -4038,3 +4038,7 @@ body::after { content: none; display: none; }
 .del-acc li { display: flex; gap: 10px; font-size: 14px; line-height: 1.45; color: var(--text); }
 .del-acc li span { flex: none; width: 18px; text-align: center; color: var(--muted); }
 .del-acc form { display: grid; gap: 10px; margin-top: 6px; }
+
+/* Разделы (13.63.3): закрытые не показываются; открыт один — полосы разделов нет, открыто два — две колонки */
+.gbar:empty { display: none !important; }
+.gtabs.n2.gtabs-bar, .gtabs.n2.gtabs-drawer, .gtabs.n2.mm-seg { grid-template-columns: repeat(2, 1fr); }

@@ -44,8 +44,11 @@
     if (ft) { var tmp = document.createElement('div'); tmp.innerHTML = footerHtml(); ft.replaceWith(tmp.firstElementChild); bindFooter(); }
     routeKeepScroll = true; route();
   }
+  // Закрытые разделы не показываются, пока их не откроют в панели (13.63.3); открыт один раздел — переключателя нет
+  function openGenders() { return Object.keys(GENDERS).filter(function (g) { return !gClosed(g); }); }
   function genderTabs(cls) {
-    return '<div class="gtabs ' + cls + '" role="group" aria-label="Раздел">' + Object.keys(GENDERS).map(function (g) { var on = curGender() === g; return '<button class="gtab' + (on ? ' on' : '') + '" data-gender="' + g + '" aria-pressed="' + on + '">' + GENDERS[g] + (gClosed(g) ? '<small class="soon-tag">скоро</small>' : '') + '</button>'; }).join('') + '</div>';
+    var gs = openGenders(); if (gs.length < 2) return '';
+    return '<div class="gtabs ' + cls + ' n' + gs.length + '" role="group" aria-label="Раздел">' + gs.map(function (g) { var on = curGender() === g; return '<button class="gtab' + (on ? ' on' : '') + '" data-gender="' + g + '" aria-pressed="' + on + '">' + GENDERS[g] + '</button>'; }).join('') + '</div>';
   }
   function imgOf(p, i) { i = i || 0; var c = p && Pricing.colorsOf(p)[0]; return (c && c.images && c.images[i]) || Art.make(c && c.art); }
   function shownColor(p) { var cs = Pricing.colorsOf(p); return cs.find(function (c) { return Pricing.stockOf(c) > 0; }) || cs[0]; }
@@ -1013,9 +1016,9 @@
       var gCount = function (g) { return D.products.filter(function (p) { return onSale(p) && Pricing.forGender(p, g); }).length; };
       var inSection = gProducts();
       var cats = sortedCats().map(function (c) { return { c: c, n: inSection.filter(function (p) { return p.categoryId === c.id; }).length }; }).filter(function (x) { return x.n || st.cat === x.c.slug; });
-      return '<div><h4>Раздел</h4><div class="fl-list">' +
+      return (openGenders().length > 1 ? '<div><h4>Раздел</h4><div class="fl-list">' +
           flItem('data-gsel="all"', 'Вся коллекция', gCount(''), !curGender()) +
-          Object.keys(GENDERS).map(function (g) { return flItem('data-gsel="' + g + '"', GENDERS[g], gClosed(g) ? 'скоро' : gCount(g), curGender() === g); }).join('') + '</div></div>' +
+          openGenders().map(function (g) { return flItem('data-gsel="' + g + '"', GENDERS[g], gCount(g), curGender() === g); }).join('') + '</div></div>' : '') +
         '<div><h4>Категория</h4><div class="fl-list">' + flItem('data-cat=""', 'Все товары', inSection.length, !st.cat) +
           cats.map(function (x) { return flItem('data-cat="' + esc(x.c.slug) + '"', esc(x.c.name), x.n, st.cat === x.c.slug); }).join('') + '</div></div>' +
         sizeFilterHtml() +
@@ -3232,6 +3235,8 @@
       return;
     }
     API = c.api; D = c.data;
+    // Покупатель был в разделе, который закрыли, — показываем всю коллекцию
+    if (curGender() && gClosed(curGender())) { genderChoice = 'all'; try { localStorage.setItem(LS_G, 'all'); } catch (e) {} paintGender(); }
     window.App = { careIcon: careIcon, API: API, D: D, plural: plural, slideHtml: slideHtml, brandHtml: brandHtml, brandMode: brandMode, esc: esc, fmt: fmt, toast: toast, errMsg: errMsg, imgOf: imgOf, refresh: refresh, go: go, openModal: openModal, closePanels: closePanels, fmtPhone: fmtPhone, fmtDate: fmtDate, STATUS: STATUS, PAY: PAY };
     renderShell();
     initAnalytics();

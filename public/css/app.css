@@ -4021,8 +4021,9 @@ body::after { content: none; display: none; }
   .topbar .wrap { padding-block: 9px; }
   .ann { display: grid; justify-items: center; }
   .ann-dot { display: none; }
-  .ann-i { grid-area: 1 / 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; opacity: 0; transform: translateY(6px); transition: opacity .5s var(--ease), transform .5s var(--ease); }
-  .ann-i.on { opacity: 1; transform: none; }
+  .ann-i { grid-area: 1 / 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; opacity: 0; transform: translateY(-5px); transition: opacity .3s ease, transform .3s ease; }
+  /* сначала старая фраза уходит, потом появляется новая — буквы не накладываются */
+  .ann-i.on { opacity: 1; transform: none; transition: opacity .45s ease .32s, transform .45s var(--ease) .32s; }
 }
 @media (max-width: 760px) and (prefers-reduced-motion: reduce) { .ann-i { transition: none; transform: none; } }
 
@@ -4035,4 +4036,18 @@ body::after { content: none; display: none; }
   /* на странице товара внизу закреплена кнопка «В корзину» — кнопка связи остаётся над ней */
   .in-app:has(.sticky-buy) .fab { bottom: calc(86px + env(safe-area-inset-bottom, 0px)); }
   .in-app:has(.sticky-buy) .to-top { bottom: calc(146px + env(safe-area-inset-bottom, 0px)); }
+}
+
+/* Окно «Мы на связи» на телефоне — компактное, не закрывает полстраницы (13.62.3) */
+@media (max-width: 600px) {
+  .fab-panel { width: min(290px, calc(100vw - 28px)); padding: 6px; }
+  .fp-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 7px 10px 8px; margin-bottom: 2px; }
+  .fp-head b { font-size: 15px; line-height: 1.3; white-space: nowrap; }
+  .fp-head span { font-size: 11.5px; line-height: 1.3; white-space: nowrap; }
+  .fp-row { gap: 11px; padding: 6px 10px; line-height: 1.3; }
+  .fp-row > span:last-child { min-width: 0; }
+  .fp-row b { font-size: 14px; line-height: 1.3; }
+  .fp-row small { font-size: 12px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fp-ic { width: 34px; height: 34px; }
+  .fp-ic svg { width: 17px; height: 17px; }
 }

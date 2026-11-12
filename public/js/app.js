@@ -2496,7 +2496,7 @@
     var wa = String(c.whatsapp || '').replace(/\D/g, '');
     if (wa.length === 11 && wa[0] === '8') wa = '7' + wa.slice(1);
     var row = function (href, ic, title, sub, ext) { return '<a class="fp-row" href="' + esc(href) + '"' + (ext ? ' target="_blank" rel="noopener"' : '') + '><span class="fp-ic">' + FAB_IC[ic] + '</span><span><b>' + esc(title) + '</b><small>' + esc(sub) + '</small></span></a>'; };
-    var rows = row('#/account?tab=support&new=1', 'chat', 'Написать в чат', 'Ответ придёт в кабинет и на почту') +
+    var rows = row('#/account?tab=support&new=1', 'chat', 'Написать в чат', 'Ответ — в кабинет и на почту') +
       (tg ? row(safeUrl(tg.url), 'tg', 'Telegram', 'Написать в Telegram', true) : '') +
       (wa.length >= 10 ? row('https://wa.me/' + wa, 'wa', 'WhatsApp', fmtPhone(wa), true) : '') +
       (c.phone ? row('tel:' + c.phone.replace(/[^\d+]/g, ''), 'phone', 'Позвонить', c.phone) : '') +

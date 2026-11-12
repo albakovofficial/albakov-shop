@@ -3365,6 +3365,8 @@
      При первом заходе за сессию даём анимации знака доиграть (не меньше 1,4 с с начала загрузки),
      при переходах и обновлениях страницы — уходит почти сразу */
   function splashOut() {
+    // Приложение на iPhone держит свою заставку, пока магазин не отрисован, — сообщаем, что готово
+    if (window.AlbakovApp) { try { AlbakovApp.post({ type: 'ready' }); } catch (e) { /* старая версия приложения уберёт заставку сама */ } }
     var el = document.getElementById('splash'); if (!el || el.classList.contains('leave')) return;
     try { sessionStorage.setItem('albakov:intro', '1'); } catch (e) {}
     // при обновлении страницы заставка скрыта ещё до отрисовки (js/splash.js) — просто убираем её

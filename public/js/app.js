@@ -2495,14 +2495,15 @@
     var tg = (D.settings.socials || []).find(function (x) { return x.url && socialKind(x) === 'telegram' && !/t\.me\/?$/.test(x.url); });
     var wa = String(c.whatsapp || '').replace(/\D/g, '');
     if (wa.length === 11 && wa[0] === '8') wa = '7' + wa.slice(1);
-    var row = function (href, ic, title, sub, ext) { return '<a class="fp-row" href="' + esc(href) + '"' + (ext ? ' target="_blank" rel="noopener"' : '') + '><span class="fp-ic">' + FAB_IC[ic] + '</span><span><b>' + esc(title) + '</b><small>' + esc(sub) + '</small></span></a>'; };
-    var rows = row('#/account?tab=support&new=1', 'chat', 'Написать в чат', 'Ответ придёт в кабинет и на почту') +
-      (tg ? row(safeUrl(tg.url), 'tg', 'Telegram', 'Написать в Telegram', true) : '') +
-      (wa.length >= 10 ? row('https://wa.me/' + wa, 'wa', 'WhatsApp', fmtPhone(wa), true) : '') +
-      (c.phone ? row('tel:' + c.phone.replace(/[^\d+]/g, ''), 'phone', 'Позвонить', c.phone) : '') +
-      (c.email ? row('mailto:' + c.email, 'mail', 'Почта', c.email) : '');
+    // Капсулы над кнопкой (13.62.5): подпись и значок, первая — чат (чёрный значок)
+    var row = function (href, ic, title, ext) { return '<a class="fp-cap" href="' + esc(href) + '"' + (ext ? ' target="_blank" rel="noopener"' : '') + '><span>' + esc(title) + '</span><i class="fp-ic">' + FAB_IC[ic] + '</i></a>'; };
+    var rows = row('#/account?tab=support&new=1', 'chat', 'Написать в чат') +
+      (tg ? row(safeUrl(tg.url), 'tg', 'Telegram', true) : '') +
+      (wa.length >= 10 ? row('https://wa.me/' + wa, 'wa', 'WhatsApp', true) : '') +
+      (c.phone ? row('tel:' + c.phone.replace(/[^\d+]/g, ''), 'phone', c.phone) : '') +
+      (c.email ? row('mailto:' + c.email, 'mail', c.email) : '');
     return '<div class="fab" id="fab"><div class="fab-panel" id="fabPanel" role="dialog" aria-label="Связаться с нами" hidden>' +
-      '<div class="fp-head"><b>Мы на связи</b>' + (c.hours ? '<span>' + esc(c.hours) + '</span>' : '') + '</div>' + rows + '</div>' +
+      (c.hours ? '<span class="fp-hours">' + esc(c.hours) + '</span>' : '') + rows + '</div>' +
       '<button class="fab-btn" id="fabBtn" type="button" aria-expanded="false" aria-controls="fabPanel" aria-label="Связаться с нами">' + FAB_IC.chat + '<i class="fab-dot" hidden></i></button></div>';
   }
   function fabSet(open) {

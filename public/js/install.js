@@ -9,15 +9,16 @@
   var isIOS = /iP(hone|ad|od)/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   var isAndroid = /Android/i.test(ua);
   var isMobile = isIOS || isAndroid;
+  var inApp = !!root.AlbakovApp;            // приложение ALBAKOV из App Store: ставить на экран уже нечего
 
   function isInstalled() {
-    return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+    return inApp || (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
   }
   function app() { return root.App || {}; }
   function toast(msg) { if (app().toast) app().toast(msg); }
   function sync() { document.dispatchEvent(new CustomEvent('install:change')); }
 
-  if ('serviceWorker' in navigator) {
+  if ('serviceWorker' in navigator && !inApp) {
     window.addEventListener('load', function () { navigator.serviceWorker.register('/sw.js').catch(function () {}); });
   }
   window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); deferred = e; sync(); });
@@ -101,5 +102,5 @@
     });
   }
 
-  root.Install = { isMobile: isMobile, isInstalled: isInstalled, canOffer: canOffer, showBanner: showBanner, hideBanner: hideBanner, open: open };
+  root.Install = { inApp: inApp, isMobile: isMobile, isInstalled: isInstalled, canOffer: canOffer, showBanner: showBanner, hideBanner: hideBanner, open: open };
 })(this);

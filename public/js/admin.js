@@ -2008,6 +2008,32 @@
       (img && big ? '<img class="pn-big" src="' + esc(img) + '" alt="">' : '') + '</div>';
   }
   function pnStage(inner, cls) { return '<div class="pn-stage' + (cls ? ' ' + cls : '') + '" aria-hidden="true"><span class="pn-clock">' + new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) + '</span>' + inner + '</div>'; }
+  /* Приложение ALBAKOV на iPhone (13.61): ключ Apple для push. Ключ .p8 вводит владелец, наружу он не отдаётся.
+     С ключом сайт сам отдаёт файл Universal Links — ссылки albakovofficial.ru открываются сразу в приложении. */
+  async function mountApnsCard(m) {
+    var box = document.createElement('div'); box.className = 'adm-card ps-apns'; m.appendChild(box);
+    var r; try { r = await A().API.adminApns('GET'); } catch (e) { box.remove(); return; }
+    var draw = function () {
+      box.innerHTML = '<h3 class="adm-h3">Приложение iPhone</h3>' +
+        '<p class="al-hint">Уведомления в приложении ALBAKOV из App Store приходят через Apple. Нужен ключ: Apple Developer → Certificates, Identifiers &amp; Profiles → Keys → «+» → Apple Push Notifications service. Скачайте файл .p8 (даётся один раз) и вставьте его текст сюда.</p>' +
+        '<p class="pushs-st' + (r.set ? ' on' : '') + '">' + (r.set ? 'Ключ сохранён · Key ID ' + esc(r.keyId) + ' · Team ID ' + esc(r.teamId) + ' · устройств с приложением: ' + r.devices : 'Ключ ещё не добавлен — в приложении уведомления не придут') + '</p>' +
+        '<div class="adm-two"><label class="field"><span>Team ID</span><input class="input" id="apTeam" maxlength="10" autocomplete="off" spellcheck="false" value="' + esc(r.teamId) + '" placeholder="10 символов"></label>' +
+        '<label class="field"><span>Key ID</span><input class="input" id="apKey" maxlength="10" autocomplete="off" spellcheck="false" value="' + esc(r.keyId) + '" placeholder="10 символов"></label></div>' +
+        '<label class="field"><span>Ключ .p8' + (r.set ? ' <small class="muted">— оставьте пустым, чтобы не менять</small>' : '') + '</span><textarea class="textarea" id="apP8" rows="4" autocomplete="off" spellcheck="false" placeholder="-----BEGIN PRIVATE KEY-----"></textarea></label>' +
+        '<div class="ps-bc-act"><button class="btn" type="button" id="apSave">Сохранить ключ</button>' + (r.set ? '<button class="btn ghost" type="button" id="apDel">Удалить ключ</button>' : '') + '</div>' +
+        '<p class="al-hint">Bundle ID приложения: ' + esc(r.bundleId) + '. Проверка: откройте эту страницу в приложении на iPhone и нажмите «Проверить» в блоке «Это устройство».</p><p class="form-error" id="apErr"></p>';
+      $('#apSave', box).addEventListener('click', async function () {
+        var b = this; b.disabled = true; $('#apErr', box).textContent = '';
+        try { r = await A().API.adminApns('PUT', { teamId: $('#apTeam', box).value, keyId: $('#apKey', box).value, p8: $('#apP8', box).value }); toast('Ключ Apple сохранён'); draw(); }
+        catch (e) { $('#apErr', box).textContent = A().errMsg(e); b.disabled = false; }
+      });
+      var del = $('#apDel', box); if (del) del.addEventListener('click', async function () {
+        if (this.dataset.armed !== '1') { this.dataset.armed = '1'; this.textContent = 'Точно удалить? Нажмите ещё раз'; return; }
+        try { r = await A().API.adminApns('DELETE'); toast('Ключ удалён'); draw(); } catch (e) { $('#apErr', box).textContent = A().errMsg(e); }
+      });
+    };
+    draw();
+  }
   async function pushSection(m) {
     m.innerHTML = head('Push-уведомления', '', 'Мгновенные уведомления на телефон и компьютер — даже когда панель закрыта. Включите их на каждом своём устройстве. Покупателям уведомления о заказе приходят сами, если они их включили.') + '<div class="loader">…</div>';
     var r, st = window.Push ? await Push.state('staff') : 'unsupported';
@@ -2036,6 +2062,7 @@
         '<div class="ps-bc-pv"><span class="adm-h3">Так увидят покупатели</span><div class="ps-phones"><div><small>iPhone</small><div id="pvIos"></div></div><div><small>Android</small><div id="pvAnd"></div></div></div></div>' +
         (r.broadcasts && r.broadcasts.length ? '<div class="ps-hist"><h3 class="adm-h3">Отправленные</h3>' + r.broadcasts.map(function (b) { return '<div class="ps-hrow"><span class="num">' + esc(new Date(b.at).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })) + '</span><span><b>' + esc(b.title) + '</b><small>' + esc(b.body) + '</small></span><span class="ps-hn">' + b.sent + ' из ' + b.to + (b.by ? '<small>' + esc(b.by) + '</small>' : '') + '</span></div>'; }).join('') + '</div>' : '') +
       '</div>' : '');
+    if (can('staff')) mountApnsCard(m);
     var err = $('#spErr');
     m.onchange = async function (e) {
       var i = e.target.closest('[data-spk]'); if (!i) return;

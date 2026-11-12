@@ -4025,3 +4025,14 @@ body::after { content: none; display: none; }
   .ann-i.on { opacity: 1; transform: none; }
 }
 @media (max-width: 760px) and (prefers-reduced-motion: reduce) { .ann-i { transition: none; transform: none; } }
+
+/* Приложение ALBAKOV на iPhone (html.in-app): панели браузера внизу нет — кнопка связи и «Наверх» опускаются к краю экрана */
+@media (max-width: 860px) {
+  .in-app .fab { bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+  .in-app .to-top { bottom: calc(78px + env(safe-area-inset-bottom, 0px)); }
+}
+@media (max-width: 860px) {
+  /* на странице товара внизу закреплена кнопка «В корзину» — кнопка связи остаётся над ней */
+  .in-app:has(.sticky-buy) .fab { bottom: calc(86px + env(safe-area-inset-bottom, 0px)); }
+  .in-app:has(.sticky-buy) .to-top { bottom: calc(146px + env(safe-area-inset-bottom, 0px)); }
+}

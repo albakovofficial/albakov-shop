@@ -71,6 +71,8 @@
     if (st.gateway) { Object.keys(st.genders || {}).forEach(function (g) { var w = st.gateway[g]; if (w && w.image && !st.genders[g].image) st.genders[g].image = w.image; }); delete st.gateway; }
     // Строки над шапкой больше нет (13.63)
     delete st.announcement; delete st.annFree;
+    // «О бренде» (13.63.2): вместо фото основателя — знак бренда (страница сама показывает его, когда фото нет)
+    (d.pages || []).forEach(function (pg) { if (pg.slug === 'about' && pg.body) pg.body = pg.body.replace(/^[ \t]*!\[[^\]]*\]\(img\/founder\.webp\)[ \t]*\n?/m, '').replace(/\n{3,}/g, '\n\n'); });
     // Слайдер на главной: первый слайд берёт тексты и фото прежнего первого экрана, если их меняли
     if (!st.slider && seed && seed.settings.slider) {
       st.slider = JSON.parse(JSON.stringify(seed.settings.slider));

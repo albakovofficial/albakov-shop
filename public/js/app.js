@@ -22,11 +22,14 @@
   function favBtn(id, cls) { var on = Fav.has(id); return '<button type="button" class="fav-btn' + (cls ? ' ' + cls : '') + (on ? ' on' : '') + '" data-fav="' + esc(id) + '" aria-pressed="' + on + '" aria-label="' + (on ? 'Убрать из избранного' : 'В избранное') + '">' + ICON.heart + '</button>'; }
 
   /* ---------- Помощники ---------- */
-  /* Раздел магазина: женщинам / мужчинам / всё. Выбор хранится в браузере покупателя */
-  var GENDERS = { women: 'Женщинам', men: 'Мужчинам' }, LS_G = 'albakov:gender';
+  /* Раздел магазина: женщинам / мужчинам / детям / всё. Выбор хранится в браузере покупателя.
+     У каждого раздела свой цвет (13.63) — атрибут data-g у <html>, цвета в app.css */
+  var GENDERS = { women: 'Женщинам', men: 'Мужчинам', kids: 'Детям' }, LS_G = 'albakov:gender';
   function readGender() { try { return localStorage.getItem(LS_G); } catch (e) { return null; } }
-  var genderChoice = readGender(); // null — ещё не выбирал, 'all' — смотрит всё
+  var genderChoice = readGender(); // null или 'all' — смотрит всё
   function curGender() { return GENDERS[genderChoice] ? genderChoice : ''; }
+  function paintGender() { var g = curGender(); if (g) document.documentElement.setAttribute('data-g', g); else document.documentElement.removeAttribute('data-g'); }
+  paintGender();
   // Закрытый раздел: его товары не показываются, а вместо витрины — страница «скоро появится»
   function gClosed(g) { var x = g && (D.settings.genders || {})[g]; return !!(x && x.open === false); }
   function onSale(p) { return !(p.gender && p.gender !== 'unisex' && gClosed(p.gender)); }
@@ -35,10 +38,10 @@
   function setGender(g) {
     genderChoice = GENDERS[g] ? g : 'all';
     try { localStorage.setItem(LS_G, genderChoice); } catch (e) {}
+    paintGender();
     $$('[data-gender]').forEach(function (b) { var on = b.getAttribute('data-gender') === curGender(); b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); });
-    var ft = $('#app > .footer'), mn = $('#mmCats');
+    var ft = $('#app > .footer');
     if (ft) { var tmp = document.createElement('div'); tmp.innerHTML = footerHtml(); ft.replaceWith(tmp.firstElementChild); bindFooter(); }
-    if (mn) mn.outerHTML = mmCatsHtml();
     routeKeepScroll = true; route();
   }
   function genderTabs(cls) {
@@ -58,12 +61,13 @@
   // Категории текущего раздела: в «Мужчинам» нет платьев и юбок, в «Женщинам» — мужских категорий
   var WOMEN_CAT = /плать|юбк|блуз|сарафан|бюстгал|бель[её] жен|туник|топ[ыи]? жен|колгот|купальник/i, MEN_CAT = /мужск|галстук|запонк|плавки/i;
   function catGender(c) {
-    if (c.gender === 'women' || c.gender === 'men' || c.gender === 'unisex') return c.gender;
+    if (GENDERS[c.gender] || c.gender === 'unisex') return c.gender;
     var gs = D.products.filter(function (p) { return p.categoryId === c.id && p.active !== false; }).map(function (p) { return p.gender || 'unisex'; });
-    if (gs.length) return gs.every(function (g) { return g === 'women'; }) ? 'women' : gs.every(function (g) { return g === 'men'; }) ? 'men' : 'unisex';
+    if (gs.length) return Object.keys(GENDERS).find(function (k) { return gs.every(function (g) { return g === k; }); }) || 'unisex';
     return WOMEN_CAT.test(c.name) ? 'women' : MEN_CAT.test(c.name) ? 'men' : 'unisex';
   }
-  function catInG(c) { var g = curGender(), cg = catGender(c); return !g || cg === 'unisex' || cg === g; }
+  // «Унисекс» — взрослые разделы; в детском только детское
+  function catInG(c) { var g = curGender(), cg = catGender(c); return !g || cg === g || (cg === 'unisex' && g !== 'kids'); }
   // Категории для меню, подвала и фильтров — только те, где в текущем разделе есть товары (пустые не показываем)
   function sortedCats() { var ps = gProducts(); return D.categories.filter(function (c) { return catInG(c) && ps.some(function (p) { return p.categoryId === c.id; }); }).sort(function (a, b) { return (a.order || 0) - (b.order || 0); }); }
   var STATUS = { new: 'Новый', processing: 'Собирается', shipped: 'Передан в доставку', done: 'Выполнен', canceled: 'Отменён', returned: 'Возврат' };
@@ -118,7 +122,6 @@
   function renderShell() {
     var s = D.settings;
     root.innerHTML =
-      (s.announcement ? '<div class="topbar"><div class="wrap">' + annHtml(annText(s.announcement)) + '</div></div>' : '') +
       '<header class="header"><div class="wrap">' +
         '<nav class="nav" aria-label="Основное меню">' + navLinks() + '</nav>' +
         '<button class="icon-btn burger" data-act="menu" aria-label="Меню">' + ICON.menu + '</button>' +
@@ -200,18 +203,11 @@
   }
   // Самая большая скидка из идущих акций в процентах — плашка у «Акций»
   function saleBadge() { var m = 0; activePromos().forEach(function (p) { if (p.type === 'percent' && p.value > m) m = p.value; }); return m ? '<span class="mm-tag">−' + m + '%</span>' : ''; }
-  function mmCatsHtml() {
-    var cats = sortedCats();
-    if (!cats.length) return '<div id="mmCats"></div>';
-    return '<div class="mm-cats" id="mmCats"><div class="mm-h"><span>Категории</span><a href="#/catalog">Весь каталог</a></div><div class="mm-strip">' + cats.map(function (c) {
-      return '<a class="mm-cat" href="#/catalog?cat=' + esc(c.slug) + '"><span class="mm-cat-ph"><img src="' + esc(c.image || Art.make(c.art)) + '" alt="" loading="lazy"></span><b>' + esc(c.name) + '</b></a>';
-    }).join('') + '</div></div>';
-  }
   // Документы в меню телефона — плитками: короткое название и подпись (полное — в aria-label)
   var MM_DOCS = {
-    offer: ['Оферта', 'Условия покупки', '<svg viewBox="0 0 24 24"><path d="M6 3.5h8l4 4V20.5H6z"/><path d="M14 3.5v4h4"/><path d="M9 16.5c1.1-1.7 2.1-1.7 2.5 0 .4 1.5 1.5 1.4 2.6-.7"/></svg>'],
-    privacy: ['Политика', 'Ваши данные', '<svg viewBox="0 0 24 24"><path d="M12 3l7 3v5.5c0 4.4-3 8-7 9.5-4-1.5-7-5.1-7-9.5V6z"/><rect x="9.25" y="11" width="5.5" height="4.5" rx="1"/><path d="M10.25 11V9.6a1.75 1.75 0 0 1 3.5 0V11"/></svg>'],
-    consent: ['Согласие', 'На обработку данных', '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M8.5 12.2l2.4 2.4 4.6-4.8"/></svg>']
+    offer: ['Оферта', 'Условия покупки', '<svg viewBox="0 0 24 24"><path d="M7 3h7.5L19 7.5v12a1.5 1.5 0 0 1-1.5 1.5H7a1.5 1.5 0 0 1-1.5-1.5v-15A1.5 1.5 0 0 1 7 3z"/><path d="M14.5 3v3.5a1 1 0 0 0 1 1H19M8.6 11h6.8M8.6 14h4.4"/><path d="M8.6 18.2c.9-1.3 1.7-1.3 2 0 .3 1.1 1.2 1.1 2.1-.5"/></svg>'],
+    privacy: ['Политика', 'Ваши данные', '<svg viewBox="0 0 24 24"><path d="M12 2.8l7.2 2.7v5.6c0 4.6-3 8.4-7.2 10-4.2-1.6-7.2-5.4-7.2-10V5.5z"/><circle cx="12" cy="10.4" r="1.8"/><path d="M12 12.2v3.3"/></svg>'],
+    consent: ['Согласие', 'На обработку данных', '<svg viewBox="0 0 24 24"><path d="M12.0 2.8L14.0 4.4L16.6 4.0L17.6 6.4L20.0 7.4L19.6 10.0L21.2 12.0L19.6 14.0L20.0 16.6L17.6 17.6L16.6 20.0L14.0 19.6L12.0 21.2L10.0 19.6L7.4 20.0L6.4 17.6L4.0 16.6L4.4 14.0L2.8 12.0L4.4 10.0L4.0 7.4L6.4 6.4L7.4 4.0L10.0 4.4Z"/><path d="M8.8 12.3l2.2 2.2 4.3-4.6"/></svg>']
   };
   function mmDocs(docs) {
     var order = ['offer', 'privacy', 'consent'];
@@ -238,19 +234,18 @@
         '<a href="#/favorites">' + ICON.heart + '<span>Избранное</span><em class="mm-count" id="mmFavCount"' + (Fav.count() ? '' : ' hidden') + '>' + Fav.count() + '</em></a>' +
         '<a href="#/track">' + MM_IC.truck + '<span>Мой заказ</span></a>' +
       '</div>' +
-      mmCatsHtml() +
       mmTilesHtml(nav, gift) +
       appMenuHtml() + mmSocialsHtml() + foot;
   }
   /* Пункты меню плитками (13.56): первые четыре — квадратами по два в ряд, остальные — на всю ширину.
-     «Акции» — тёмная плитка с самой большой скидкой */
+     «Акции» — плитка цвета раздела с самой большой скидкой (13.63) */
   function mmTilesHtml(nav, gift) {
     var items = nav.map(function (n) { return { href: safeUrl(n.link), ic: mmIcon(n.link), label: n.label, sale: /^#\/sale/.test(n.link) }; });
     if (gift) items.push({ href: '#/gift', ic: MM_IC.gift, label: 'Подарочные сертификаты' });
     var sq = Math.min(4, items.length); if (sq % 2) sq--; // квадратов всегда чётное число — без дыр в сетке
     return '<nav class="mm-tiles" aria-label="Разделы сайта">' + items.map(function (x, i) {
       var cls = 'mm-tile' + (i < sq ? '' : ' wide') + (x.sale ? ' sale' : '');
-      return '<a class="' + cls + '" href="' + esc(x.href) + '"><span class="mm-tile-ic">' + x.ic + '</span>' + (x.sale ? saleBadge() : '') + '<b>' + esc(x.label) + '</b></a>';
+      return '<a class="' + cls + '" href="' + esc(x.href) + '"><span class="mm-tile-ic">' + x.ic + '</span>' + (x.sale ? saleBadge() : '') + '<b>' + esc(x.label) + (x.sale && i < sq ? '<small>Скидки на коллекцию</small>' : '') + '</b></a>';
     }).join('') + '</nav>';
   }
   function mmSocialsHtml() {
@@ -336,20 +331,6 @@
   }
 
   // {free} в объявлении — самый низкий порог «Бесплатно от» из способов доставки (меняется вместе с настройками)
-  function freeFromMin() { var ms = (((D.settings.delivery || {}).methods) || []).map(function (m) { return Number(m.freeFrom) || 0; }).filter(function (x) { return x > 0; }); return ms.length ? Math.min.apply(null, ms) : 0; }
-  /* Строка над шапкой (13.62.1): части через «·». На компьютере — в одну строку целиком,
-     на телефоне — по одной части, плавно сменяются каждые 3,5 с: плашка всегда в одну строку, не в три */
-  function annHtml(t) {
-    var parts = String(t).split(/\s+·\s+/).filter(Boolean);
-    return parts.length < 2 ? '<span class="ann-one">' + esc(t) + '</span>'
-      : '<span class="ann" data-ann>' + parts.map(function (x, i) { return '<span class="ann-i' + (i ? '' : ' on') + '">' + esc(x) + '</span>'; }).join('<i class="ann-dot" aria-hidden="true">·</i>') + '</span>';
-  }
-  setInterval(function () {
-    var a = document.querySelector('[data-ann]'); if (!a || !matchMedia('(max-width: 760px)').matches || document.hidden) return;
-    var it = a.querySelectorAll('.ann-i'), cur = a.querySelector('.ann-i.on'), n = (Array.prototype.indexOf.call(it, cur) + 1) % it.length;
-    if (cur) cur.classList.remove('on'); it[n].classList.add('on');
-  }, 3500);
-  function annText(t) { var f = freeFromMin(); return String(t).replace(/\s*от\s*\{free\}/g, f ? ' от ' + fmt(f) : '').replace(/\{free\}/g, f ? fmt(f) : ''); }
   /* ---------- Карточка товара ---------- */
   // Плашки товара: «Новинка», «Скидка 15%», «Хит продаж» — тексты и цвета из панели управления
   function badgeHtml(p, pr) {
@@ -442,7 +423,7 @@
     jump(); requestAnimationFrame(jump); setTimeout(jump, 120); setTimeout(jump, 400); // картинки и блоки могли догрузиться
   }
   // Ссылка-вкладка или фильтр на той же странице (кабинет, акции, админка) — оставляем прокрутку на месте
-  var KEEP_SCROLL = '.acc-tabs, .tabs, .adm-tabs, .adm-chips, .ost, .chips, .gtabs, [data-keep-scroll]';
+  var KEEP_SCROLL = '.tabs, .adm-tabs, .adm-chips, .ost, .chips, .gtabs, [data-keep-scroll]';
   function sameScreen(href) { var u = toPath(href) || '/'; return u.split('?')[0] === location.pathname; }
   function fromOldHash() {
     if (!/^#\//.test(location.hash)) return false;
@@ -993,13 +974,13 @@
 
   /* ---------- Раздел закрыт: «скоро появится» ---------- */
   function soonPage(v) {
-    var g = curGender(), cfg = (D.settings.genders || {})[g] || {}, other = g === 'women' ? 'men' : 'women';
-    var gw = (D.settings.gateway || {})[g] || {};
-    var img = gw.image || Art.make(g === 'women' ? { kind: 'dress', tone: '#4a4a4e' } : { kind: 'coat', tone: '#2e2e31' });
+    var g = curGender(), cfg = (D.settings.genders || {})[g] || {};
+    var other = Object.keys(GENDERS).find(function (k) { return k !== g && !gClosed(k); });
+    var img = cfg.image || Art.make(g === 'women' ? { kind: 'dress', tone: '#4a4a4e' } : g === 'kids' ? { kind: 'tee', tone: '#5aa6e6' } : { kind: 'coat', tone: '#2e2e31' });
     var title = esc(cfg.title || (GENDERS[g] + ' — скоро')).replace(/\*(.+?)\*/g, '<em>$1</em>');
     v.innerHTML = '<section class="soon"><div class="soon-media"><img src="' + esc(img) + '" alt=""></div><div class="soon-in">' +
       '<span class="eyebrow">' + esc(GENDERS[g]) + '</span><h1 class="soon-title">' + title + '</h1>' + (cfg.text ? '<p class="soon-text">' + esc(cfg.text) + '</p>' : '') +
-      '<div class="slide-actions">' + (!gClosed(other) ? '<button class="sbtn sbtn-primary" data-gender-go="' + other + '">Смотреть «' + GENDERS[other] + '»<span class="sbtn-arrow" aria-hidden="true"></span></button>' : '') +
+      '<div class="slide-actions">' + (other ? '<button class="sbtn sbtn-primary" data-gender-go="' + other + '">Смотреть «' + GENDERS[other] + '»<span class="sbtn-arrow" aria-hidden="true"></span></button>' : '') +
       '<button class="sbtn sbtn-line" data-gender-go="all">Вся коллекция<span class="sbtn-arrow" aria-hidden="true"></span></button></div></div></section>';
   }
 
@@ -2228,6 +2209,15 @@
   /* ---------- Личный кабинет ----------
      Сверху — приветствие и бонусная карта, ниже — вкладки: заказы, бонусы, поддержка, профиль.
      Заказы показываются со шкалой: принят → собирается → в пути → получен. */
+  var ACC_ICON = {
+    box: '<svg viewBox="0 0 24 24"><path d="M12 3l8 4.3v9.4L12 21l-8-4.3V7.3z"/><path d="M4 7.3l8 4.3 8-4.3M12 11.6V21"/></svg>',
+    swap: '<svg viewBox="0 0 24 24"><path d="M5 8h13l-3.5-3.5M19 16H6l3.5 3.5"/></svg>',
+    chat: '<svg viewBox="0 0 24 24"><path d="M4 5.5h12a1.5 1.5 0 0 1 1.5 1.5v6.5A1.5 1.5 0 0 1 16 15H9l-4 3.5V15H4a1.5 1.5 0 0 1-1.5-1.5V7A1.5 1.5 0 0 1 4 5.5z"/><path d="M7 9.5h7M7 12h4.5"/></svg>',
+    edit: '<svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>',
+    grid: '<svg viewBox="0 0 24 24"><rect x="4" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.6"/></svg>',
+    out: '<svg viewBox="0 0 24 24"><path d="M14 4.5H6.5A1.5 1.5 0 0 0 5 6v12a1.5 1.5 0 0 0 1.5 1.5H14M10 12h10M16.5 8.5L20 12l-3.5 3.5"/></svg>',
+    chev: '<svg class="acc-chev" viewBox="0 0 24 24"><path d="M9.5 6l6 6-6 6"/></svg>'
+  };
   var ORDER_STEPS = [['new', 'Принят'], ['processing', 'Собирается'], ['shipped', 'В пути'], ['done', 'Получен']];
   var supportPoll = null;
   function account(v, parts, q) {
@@ -2240,31 +2230,42 @@
     var since = '';
     // «с октября 2026»: месяц в родительном падеже — берём его из полной даты
     try { since = new Date(u.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }).replace(/^\d+\s/, '').replace(/ г\.$/, ''); } catch (e) {}
-    var tabs = [['orders', 'Заказы'], ['favorites', 'Избранное'], bOn ? ['bonus', 'Бонусы'] : null, ['support', 'Поддержка'], ['profile', 'Профиль']].filter(Boolean);
     var focus = tab === 'support' && (q.id || q.new === '1');
+    var name = [u.firstName, u.lastName].filter(Boolean).join(' ') || 'Покупатель';
+    var bal = u.bonus || 0;
+    // Кабинет (13.63): карточка покупателя цветом раздела, главное — плитками, остальное — коротким списком
+    var tile = function (t, ic, title, sub, id, dot) {
+      return '<a class="acc-tile' + (t === tab ? ' on' : '') + '" href="#/account?tab=' + t + '"' + (t === tab ? ' aria-current="page"' : '') + '><span class="acc-tile-ic">' + ic + '</span><b>' + title + '</b><small' + (id ? ' id="' + id + '"' : '') + '>' + sub + '</small>' + (dot ? '<i class="acc-dot" aria-label="Есть ответ"></i>' : '') + '</a>';
+    };
     v.innerHTML = '<div class="wrap acc' + (focus ? ' acc-focus' : '') + '">' +
-      '<section class="acc-hero">' +
-        '<div class="acc-hi"><span class="eyebrow">Личный кабинет</span><h1>' + glue('Здравствуйте, ' + (u.firstName || '')) + '</h1>' +
-          (since ? '<p class="acc-since">С нами с ' + esc(since) + '</p>' : '') +
-          '<div class="acc-facts" id="accFacts"></div></div>' +
-        (bOn ? '<div class="acc-card">' + loyalCardHtml(u, u.bonus || 0) + '</div>' : '') +
+      '<section class="acc-a">' +
+        '<div class="acc-card">' +
+          '<div class="acc-me"><span class="acc-ava" aria-hidden="true">' + esc((u.firstName || name).charAt(0).toUpperCase()) + '</span><div><h1>' + esc(name) + '</h1>' + (since ? '<small>С нами с ' + esc(since) + '</small>' : '') + '</div>' +
+            '<a class="acc-edit" href="#/account?tab=profile" aria-label="Профиль">' + ACC_ICON.edit + '</a></div>' +
+          (bOn ? '<a class="acc-bal" href="#/account?tab=bonus"><span><small>Бонусы на счёте</small><b class="num">' + bonusNum(bal) + '</b></span><span class="acc-bal-n">1 бонус = 1 ₽<br>можно оплатить весь заказ</span></a>' : '') +
+        '</div>' +
+        '<nav class="acc-tiles" aria-label="Разделы кабинета">' +
+          tile('orders', ACC_ICON.box, 'Заказы', 'загружаю…', 'accOrdersSub') +
+          tile('favorites', ICON.heart, 'Избранное', Fav.count() + ' ' + plural(Fav.count(), 'товар', 'товара', 'товаров')) +
+          (exchangeCfg().enabled ? '<a class="acc-tile" href="#/account?tab=orders&exchange=1"><span class="acc-tile-ic">' + ACC_ICON.swap + '</span><b>Обмен и возврат</b><small>из своего заказа</small></a>' : '') +
+          tile('support', ACC_ICON.chat, 'Поддержка', 'ответим в чате', '', u.supportUnread) +
+        '</nav>' +
       '</section>' +
-      '<nav class="acc-tabs" aria-label="Разделы кабинета">' + tabs.map(function (t) {
-        return '<a href="#/account?tab=' + t[0] + '"' + (t[0] === tab ? ' class="on" aria-current="page"' : '') + '>' + t[1] + (t[0] === 'support' && u.supportUnread ? '<i class="acc-dot" aria-label="Есть ответ"></i>' : '') + '</a>';
-      }).join('') + '<button class="acc-out" type="button" id="accOut">Выйти</button></nav>' +
+      (q.exchange === '1' ? '<p class="acc-hint">Откройте заказ и нажмите «Обменять размер или вернуть».</p>' : '') +
       '<div class="acc-body" id="accBody"><div class="loader" style="min-height:240px">…</div></div>' +
+      '<nav class="acc-more" aria-label="Ещё">' +
+        '<a href="#/account?tab=profile"' + (tab === 'profile' ? ' class="on"' : '') + '>' + ICON.user + '<span>Профиль и уведомления</span>' + ACC_ICON.chev + '</a>' +
+        (API.isAdmin ? '<a href="#/admin">' + ACC_ICON.grid + '<span>Панель управления</span>' + ACC_ICON.chev + '</a>' : '') +
+        '<button type="button" class="acc-out" id="accOut">' + ACC_ICON.out + '<span>Выйти</span></button>' +
+      '</nav>' +
     '</div>';
-    bindCardTilt($('.acc-card .loyal-card', v));
     $('#accOut').addEventListener('click', async function () { await API.logout(); renderShell(); toast('Вы вышли из аккаунта'); go('#/'); });
     var body = $('#accBody');
-    // Факты под приветствием: заказы и баланс, обновляются после загрузки
+    // Подпись у «Заказов»: сколько в работе — после загрузки
     API.myOrders().then(function (list) {
-      var f = $('#accFacts'); if (!f || !document.body.contains(f)) return;
+      var f = $('#accOrdersSub'); if (!f || !document.body.contains(f)) return;
       var active = list.filter(function (o) { return o.status !== 'done' && o.status !== 'canceled' && o.status !== 'returned'; }).length;
-      f.innerHTML = '<a href="#/account?tab=orders"><b class="num">' + list.length + '</b><span>' + plural(list.length, 'заказ', 'заказа', 'заказов') + '</span></a>' +
-        (active ? '<a href="#/account?tab=orders"><b class="num">' + active + '</b><span>в пути и в работе</span></a>' : '') +
-        (bOn ? '<a href="#/account?tab=bonus"><b class="num">' + bonusNum(API.user.bonus || 0) + '</b><span>' + bonusWord(API.user.bonus || 0) + ' на счёте</span></a>' : '') +
-        (Fav.count() ? '<a href="#/account?tab=favorites"><b class="num">' + Fav.count() + '</b><span>в избранном</span></a>' : '');
+      f.textContent = active ? active + ' в пути и в работе' : list.length ? list.length + ' ' + plural(list.length, 'заказ', 'заказа', 'заказов') : 'пока нет';
       if (tab === 'orders') body.innerHTML = ordersHtml(list);
     }).catch(function (e) { if (tab === 'orders') body.innerHTML = '<p class="form-error">' + esc(errMsg(e)) + '</p>'; });
     // свежие данные покупателя: баланс, новые начисления, ответы поддержки
@@ -2278,7 +2279,6 @@
     if (tab === 'profile') profileTab(body, u);
     if (tab === 'support') supportTab(body, q);
     if (tab === 'favorites') { body.innerHTML = '<div class="fav-box" data-compact></div>'; bindFavList($('.fav-box', body)); }
-    var onTab = $('.acc-tabs a.on', v); if (onTab && onTab.scrollIntoView) { var nav = onTab.parentNode; nav.scrollLeft = onTab.offsetLeft - (nav.clientWidth - onTab.offsetWidth) / 2; }
   }
 
   /* ---------- Адреса доставки ---------- */
@@ -2537,7 +2537,7 @@
     var u = API.user, sup = !!(u && u.supportUnread);
     var a = $('#accLink'); if (a) a.classList.toggle('has-dot', !!(u && ((u.bonusNews && u.bonusNews.length) || sup)));
     var f = $('.fab-dot'); if (f) f.hidden = !sup;
-    var t = $('.acc-tabs a[href="#/account?tab=support"]');
+    var t = $('.acc-tile[href="#/account?tab=support"]');
     if (t) { var d = $('.acc-dot', t); if (sup && !d) t.insertAdjacentHTML('beforeend', '<i class="acc-dot" aria-label="Есть ответ"></i>'); if (!sup && d) d.remove(); }
   }
   function hideBonusNotice() { var el = $('.bonus-notice'); if (el) { el.classList.add('out'); setTimeout(function () { el.remove(); }, 400); } }
@@ -3041,35 +3041,6 @@
     $('#sForm').addEventListener('submit', function (e) { e.preventDefault(); if (i.value.trim()) go('#/catalog?q=' + encodeURIComponent(i.value.trim())); });
   }
 
-  /* ---------- Экран выбора раздела при первом заходе ---------- */
-  function gatewayCfg() { return D.settings.gateway || {}; }
-  function showGateway() {
-    var g = gatewayCfg(), s = D.settings;
-    if ($('.gate')) return;
-    // Поисковым роботам экран выбора не показываем: они должны видеть саму витрину, а не окно поверх неё
-    if (/bot|crawl|spider|slurp|lighthouse|yandex|google|bing|mail\.ru|headless|preview/i.test(navigator.userAgent || '')) return;
-    var panel = function (key, art) {
-      var c = g[key] || {}, img = c.image || Art.make(art);
-      return '<button class="gate-panel' + (gClosed(key) ? ' is-soon' : '') + '" data-gate="' + key + '"><img src="' + esc(img) + '" alt=""><span class="gate-copy"><span class="gate-title">' + esc(c.title || GENDERS[key]) + '</span>' +
-        (c.text ? '<span class="gate-text">' + esc(c.text) + '</span>' : '') + '<span class="gate-go">' + (gClosed(key) ? 'Скоро' : 'Перейти') + '<i aria-hidden="true"></i></span></span></button>';
-    };
-    var el = document.createElement('div');
-    el.className = 'gate'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', g.eyebrow || 'Выберите раздел');
-    el.innerHTML = '<div class="gate-head">' + brandHtml(s, 'desktop', 'brand-gate', (s.brand && s.brand.word && s.brand.word.src) ? 'word' : 'text') + (g.eyebrow ? '<span class="eyebrow">' + esc(g.eyebrow) + '</span>' : '') + '</div>' +
-      '<div class="gate-panels">' + panel('women', { kind: 'dress', tone: '#4a4a4e' }) + panel('men', { kind: 'coat', tone: '#2e2e31' }) + '</div>' +
-      '<div class="gate-foot"><button class="link" data-gate="all">Смотреть всю коллекцию</button></div>';
-    document.body.appendChild(el);
-    document.body.style.overflow = 'hidden';
-    var close = function (choice) {
-      setGender(choice);
-      el.classList.add('leaving'); document.body.style.overflow = '';
-      setTimeout(function () { el.remove(); }, 650);
-    };
-    el.addEventListener('click', function (e) { var b = e.target.closest('[data-gate]'); if (b) close(b.getAttribute('data-gate')); });
-    el.addEventListener('keydown', function (e) { if (e.key === 'Escape') close('all'); });
-    setTimeout(function () { var f = $('.gate-panel', el); if (f) f.focus({ preventScroll: true }); }, 50);
-  }
-
   /* ---------- Админка (подключается из admin.js) ---------- */
   // Панель управления (250 КБ) загружаем только когда её открывают — покупателям она не нужна
   var adminLoading = null;
@@ -3331,7 +3302,7 @@
       var y = window.scrollY;
       // Шапка становится плотной чуть раньше, чем прилипает к верху (когда уезжает строка объявления), —
       // чтобы под прозрачной шапкой не просвечивал текст страницы
-      var hd = $('.header'); if (hd) { var tb = $('.topbar'), th = tb ? tb.offsetHeight : 0, was = hd.classList.contains('scrolled'); if (!was && y > Math.max(2, th - 16)) hd.classList.add('scrolled'); else if (was && y < Math.max(1, th - 28)) hd.classList.remove('scrolled'); }
+      var hd = $('.header'); if (hd) { var was = hd.classList.contains('scrolled'); if (!was && y > 2) hd.classList.add('scrolled'); else if (was && y < 1) hd.classList.remove('scrolled'); }
       var tt = $('#toTop'); if (tt) { if (tt.hidden) tt.hidden = false; tt.classList.toggle('show', y >= 900); }
     }
     window.addEventListener('scroll', function () { if (!ticking) { ticking = true; requestAnimationFrame(onScroll); } }, { passive: true });
@@ -3347,8 +3318,6 @@
     window.addEventListener('hashchange', function () { if (fromOldHash()) route(); });
     route();
     setTimeout(showBonusNews, 2300); // после заставки
-    // Первый заход на главную: предложить выбрать раздел
-    if (genderChoice === null && gatewayCfg().enabled !== false && !parseHash().parts[0]) showGateway();
     requestAnimationFrame(splashOut);
     setTimeout(cookieNote, 1800);
   }

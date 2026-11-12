@@ -65,7 +65,12 @@
     (d.promocodes || []).forEach(function (c) { if (c.firstOrderOnly === undefined) c.firstOrderOnly = c.code === 'WELCOME10'; if (c.code === 'WELCOME10') { c.onlyRegistered = true; c.onePerCustomer = true; } });
     var st = d.settings || {};
     if (!st.genders && seed && seed.settings.genders) st.genders = JSON.parse(JSON.stringify(seed.settings.genders));
-    if (!st.gateway && seed && seed.settings.gateway) st.gateway = JSON.parse(JSON.stringify(seed.settings.gateway));
+    // Раздел «Детям» (13.63): у старых данных его нет — добавляем закрытым, со страницей «скоро»
+    if (st.genders && !st.genders.kids && seed && seed.settings.genders.kids) st.genders.kids = JSON.parse(JSON.stringify(seed.settings.genders.kids));
+    // Экрана выбора раздела больше нет (13.63): его фото — фон страницы «скоро» — переезжают в настройки раздела
+    if (st.gateway) { Object.keys(st.genders || {}).forEach(function (g) { var w = st.gateway[g]; if (w && w.image && !st.genders[g].image) st.genders[g].image = w.image; }); delete st.gateway; }
+    // Строки над шапкой больше нет (13.63)
+    delete st.announcement; delete st.annFree;
     // Слайдер на главной: первый слайд берёт тексты и фото прежнего первого экрана, если их меняли
     if (!st.slider && seed && seed.settings.slider) {
       st.slider = JSON.parse(JSON.stringify(seed.settings.slider));
@@ -129,7 +134,8 @@
     return d;
   }
   /* Подходит ли товар выбранному разделу: женщинам, мужчинам или всё */
-  function forGender(p, g) { return !g || !p.gender || p.gender === 'unisex' || p.gender === g; }
+  // «Унисекс» — для взрослых разделов: в детском только детские товары
+  function forGender(p, g) { return !g || p.gender === g || (g !== 'kids' && (!p.gender || p.gender === 'unisex')); }
   function colorsOf(p) { migrateProduct(p); return p.colors; }
   function colorOf(p, colorId) { var cs = colorsOf(p); return cs.find(function (c) { return c.id === colorId; }) || cs[0]; }
   function stockOf(c) { return (c && c.sizes || []).reduce(function (s, x) { return s + (Number(x.stock) || 0); }, 0); }

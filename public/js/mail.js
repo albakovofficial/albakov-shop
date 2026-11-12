@@ -46,8 +46,8 @@
      так письмо одинаково выглядит в Яндексе, Mail.ru, Gmail и Apple Mail. На телефоне — свои отступы и шрифты. */
   var F = "Montserrat,'Helvetica Neue',Helvetica,Arial,sans-serif";
   var SANS = F;
-  var K = { ink: '#0D0E10', text: '#2A3036', muted: '#5B6169', dim: '#8A8F96', line: '#E8EAED', soft: '#F4F5F6', bg: '#EEEFF1', acc: '#FF5A3C', acc2: '#FF9A5C' };
-  var ACC_GRAD = 'linear-gradient(135deg,#FF9A5C,#FF5A3C)';
+  var K = { ink: '#0D0E10', text: '#2A3036', muted: '#5B6169', dim: '#8A8F96', line: '#E8EAED', soft: '#F4F5F6', bg: '#EEEFF1', acc: '#25272B', acc2: '#4A4D53' }; // письма — в цвете бренда (чёрный с графитовым переходом)
+  var ACC_GRAD = 'linear-gradient(135deg,#4A4D53,#25272B 50%,#0E0F11)';
   // Адрес для писем покупателей (info@) и адрес сайта — подставляет сервер. Письма уходят с no-reply@ — на них отвечать не нужно
   var DEFAULTS = { supportEmail: '', siteUrl: '' };
   function supportOf(ctx) { return (ctx && ctx.supportEmail) || DEFAULTS.supportEmail || ''; }

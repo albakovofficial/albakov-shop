@@ -7,8 +7,8 @@
   var START = 16;    // столько пикселей пальцем — и понятно, тянут вниз или листают вбок
   var TRIGGER = 96;  // насколько опустить значок, чтобы при отпускании обновилось (с запасом — чтобы не срабатывало от резкой прокрутки вверх)
   var MAX = 120;     // ниже значок не опускается
-  // Открыто меню, корзина, окно, выбор раздела или ещё идёт заставка — там жест не нужен
-  var OVERLAY = '.drawer.open, .modal.open, .gate, #splash, .scrim.open';
+  // Открыто меню, корзина, окно или ещё идёт заставка — там жест не нужен
+  var OVERLAY = '.drawer.open, .modal.open, #splash, .scrim.open';
   var FIELD = 'input, textarea, select, [contenteditable], label';
 
   function installed() { return window.Push ? Push.installed() : false; }   // значок на экране «Домой» или приложение из App Store

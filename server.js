@@ -53,11 +53,6 @@ db.sessions = db.sessions || {};
 if (!db.orderNumbering) { db.orderSeq = 0; db.orderNumbering = 1; }
 // Статистика посещений (13.50.2): один раз обнуляем — до 13.50.1 в неё могли попадать заходы владельца
 if (db.statsReset !== 2) { db.stats = {}; db.statsReset = 2; }
-/* Объявление над шапкой (13.55): сумму бесплатной доставки берём из настроек доставки — меняем число на {free} один раз */
-if (db.settings && typeof db.settings.announcement === 'string' && !db.settings.annFree && /бесплатн/i.test(db.settings.announcement) && /доставк/i.test(db.settings.announcement)) {
-  db.settings.announcement = db.settings.announcement.replace(/(от\s*)\d[\d\s\u00a0]*\s*(₽|руб\.?|р\.)/i, '$1{free}');
-  db.settings.annFree = 1;
-}
 /* Артикулы (13.51): у каждого товара свой — ALB-0001, ALB-0002…; можно задать свой в панели */
 function cleanSku(v) { return String(v || '').trim().toUpperCase().replace(/\s+/g, '-').replace(/[^A-ZА-ЯЁ0-9._\/-]/g, '').slice(0, 32); }
 function nextSku(list) {
@@ -424,8 +419,8 @@ function requireAdmin(req) { if (!isAdmin(req)) fail(401, 'Войдите в л�
 function requirePerm(req, ...need) { if (!need.some((p) => can(req, p))) fail(403, 'У вашей роли нет доступа к этому разделу'); }
 // Какие поля настроек может менять роль (по разделам панели). Поля, которых здесь нет, — только с правом settings
 const SETTINGS_PERMS = {
-  brand: ['content'], tagline: ['content'], announcement: ['content'], socials: ['content'], nav: ['content'], contacts: ['content'],
-  slider: ['content'], genders: ['content'], gateway: ['content'], home: ['content'], badges: ['content'], footerNote: ['content'], sizeHint: ['content'],
+  brand: ['content'], tagline: ['content'], socials: ['content'], nav: ['content'], contacts: ['content'],
+  slider: ['content'], genders: ['content'], home: ['content'], badges: ['content'], footerNote: ['content'], sizeHint: ['content'],
   exchange: ['orders'], notify: ['orders', 'mail'], ownerNotify: ['mail'],
   bonus: ['marketing'], gifts: ['marketing'], metrika: ['marketing'], seo: ['marketing'],
   payment: ['payment'], delivery: ['payment'], cdek: ['payment']
@@ -1684,7 +1679,7 @@ function subscribe(req, b) {
 }
 function htmlPage(title, text) {
   const s = db.settings.storeName;
-  return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@200;300;400;500&display=swap" rel="stylesheet"></head><body style="margin:0;background:radial-gradient(60% 50% at 50% 0%,rgba(255,154,92,.18),transparent 70%),#eeeff1;color:#0d0e10;font-family:Montserrat,Arial,sans-serif;display:grid;place-items:center;min-height:100vh;padding:16px;box-sizing:border-box"><div style="max-width:460px;width:100%;text-align:center;background:#fff;border-radius:28px;padding:44px 32px;box-sizing:border-box;box-shadow:0 0 0 1px rgba(18,20,23,.06),0 40px 80px -40px rgba(18,20,23,.35)"><div style="letter-spacing:8px;font-size:20px;margin-bottom:30px">${s.toUpperCase()}</div><h1 style="font-weight:200;font-size:36px;letter-spacing:-1px;line-height:1.1;margin:0 0 14px">${title}${/[.!?…]$/.test(String(title).trim()) ? '' : '<span style="color:#ff5a3c">.</span>'}</h1><p style="color:#5b6169;line-height:1.65;margin:0">${text}</p><a href="${PUBLIC_URL}/" style="display:inline-block;margin-top:26px;color:#fff;background:#0d0e10;padding:15px 30px;border-radius:999px;text-decoration:none;font-size:14px;font-weight:500">На сайт &rarr;</a></div></body></html>`;
+  return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@200;300;400;500&display=swap" rel="stylesheet"></head><body style="margin:0;background:#eeeff1;color:#0d0e10;font-family:Montserrat,Arial,sans-serif;display:grid;place-items:center;min-height:100vh;padding:16px;box-sizing:border-box"><div style="max-width:460px;width:100%;text-align:center;background:#fff;border-radius:28px;padding:44px 32px;box-sizing:border-box;box-shadow:0 0 0 1px rgba(18,20,23,.06),0 40px 80px -40px rgba(18,20,23,.35)"><div style="letter-spacing:8px;font-size:20px;margin-bottom:30px">${s.toUpperCase()}</div><h1 style="font-weight:200;font-size:36px;letter-spacing:-1px;line-height:1.1;margin:0 0 14px">${title}${/[.!?…]$/.test(String(title).trim()) ? '' : '.'}</h1><p style="color:#5b6169;line-height:1.65;margin:0">${text}</p><a href="${PUBLIC_URL}/" style="display:inline-block;margin-top:26px;color:#fff;background:#0d0e10;padding:15px 30px;border-radius:999px;text-decoration:none;font-size:14px;font-weight:500">На сайт &rarr;</a></div></body></html>`;
 }
 
 /* ---------------- Регистрация с подтверждением почты ---------------- */

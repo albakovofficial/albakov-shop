@@ -10,9 +10,51 @@
 
   var SECTIONS = [
     ['overview', 'Обзор'], ['orders', 'Заказы'], ['support', 'Поддержка'], ['products', 'Товары'], ['categories', 'Категории'], ['sizeCharts', 'Размерные сетки'],
-    ['promotions', 'Акции'], ['promocodes', 'Промокоды'], ['bonus', 'Бонусы'], ['exchange', 'Обмен и возвраты'], ['customers', 'Покупатели'], ['mail', 'Почта'], ['analytics', 'Аналитика'], ['finance', 'Финансы'], ['gifts', 'Подарочные сертификаты'], ['sections', 'Разделы: женщинам / мужчинам'], ['brand', 'Логотип и название'], ['slider', 'Слайдер на главной'], ['home', 'Главная страница'], ['pages', 'Страницы'],
+    ['promotions', 'Акции'], ['promocodes', 'Промокоды'], ['bonus', 'Бонусы'], ['exchange', 'Обмен и возвраты'], ['customers', 'Покупатели'], ['mail', 'Почта'], ['analytics', 'Аналитика'], ['finance', 'Финансы'], ['gifts', 'Подарочные сертификаты'], ['sections', 'Разделы'], ['brand', 'Логотип и название'], ['slider', 'Слайдер на главной'], ['home', 'Главная страница'], ['pages', 'Страницы'],
     ['menu', 'Меню, контакты, соцсети'], ['payment', 'Оплата и доставка'], ['push', 'Push-уведомления'], ['staff', 'Сотрудники'], ['audit', 'Журнал действий'], ['settings', 'Настройки']
   ];
+  /* Разделы по группам (13.63): рабочий стол и меню панели. Значок, короткое название, цвет группы */
+  var GROUPS = [
+    ['Продажи', 'g-sales', ['orders', 'support', 'exchange', 'customers']],
+    ['Каталог', 'g-cat', ['products', 'categories', 'sizeCharts', 'sections']],
+    ['Маркетинг', 'g-mkt', ['promotions', 'promocodes', 'bonus', 'gifts', 'mail', 'push']],
+    ['Цифры', 'g-cat', ['overview', 'analytics', 'finance']],
+    ['Витрина', 'g-mkt', ['home', 'slider', 'brand', 'menu', 'pages']],
+    ['Управление', 'g-cat', ['payment', 'staff', 'audit', 'settings']]
+  ];
+  var SHORT = { exchange: 'Обмен и возврат', gifts: 'Сертификаты', brand: 'Логотип', slider: 'Слайдер', home: 'Главная', menu: 'Меню и контакты', push: 'Push', audit: 'Журнал' };
+  var SEC_IC = {
+    overview: '<path d="M5 20V12M10 20V7M15 20v-5M20 20V9"/>',
+    orders: '<path d="M12 3l8 4.3v9.4L12 21l-8-4.3V7.3z"/><path d="M4 7.3l8 4.3 8-4.3M12 11.6V21"/>',
+    support: '<path d="M4 5.5h12a1.5 1.5 0 0 1 1.5 1.5v6.5A1.5 1.5 0 0 1 16 15H9l-4 3.5V15H4a1.5 1.5 0 0 1-1.5-1.5V7A1.5 1.5 0 0 1 4 5.5z"/><path d="M7 9.5h7M7 12h4.5"/>',
+    exchange: '<path d="M5 8h13l-3.5-3.5M19 16H6l3.5 3.5"/>',
+    customers: '<circle cx="9" cy="8.5" r="3.2"/><path d="M3 19c.9-3 3.2-4.6 6-4.6s5.1 1.6 6 4.6"/><circle cx="17" cy="9" r="2.6"/><path d="M16.5 14.4c2.2.2 3.8 1.7 4.5 4.1"/>',
+    products: '<path d="M8.5 4L4 6.5l1.7 4 2.3-1V20h8V9.5l2.3 1 1.7-4L15.5 4c-.6 1.6-1.9 2.5-3.5 2.5S9.1 5.6 8.5 4z"/>',
+    categories: '<rect x="4" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.6"/>',
+    sizeCharts: '<rect x="2.5" y="8" width="19" height="8" rx="1.8"/><path d="M6.5 8v3M9.5 8v4.5M12.5 8v3M15.5 8v4.5M18.5 8v3"/>',
+    sections: '<circle cx="6.5" cy="9" r="2.4"/><circle cx="12" cy="7.5" r="2.8"/><circle cx="17.5" cy="9.5" r="2"/><path d="M2.5 18c.6-2.4 2-3.6 4-3.6M7.2 19c.7-3.1 2.4-4.6 4.8-4.6s4.1 1.5 4.8 4.6M17.5 14.6c1.9 0 3.3 1.2 4 3.4"/>',
+    promotions: '<path d="M3.5 12.5V4.8A1.3 1.3 0 0 1 4.8 3.5h7.7L21 12l-9 9z"/><circle cx="8.3" cy="8.3" r="1.6"/>',
+    promocodes: '<path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h15A1.5 1.5 0 0 1 21 7.5v2a2.5 2.5 0 0 0 0 5v2a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 16.5v-2a2.5 2.5 0 0 0 0-5z"/><path d="M14 7v10" stroke-dasharray="1.6 2"/>',
+    bonus: '<path d="M11 3.5l1.6 4.4L17 9.5l-4.4 1.6L11 15.5l-1.6-4.4L5 9.5l4.4-1.6zM18 14l.8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17l2.2-.8z"/>',
+    gifts: '<rect x="3.5" y="9" width="17" height="11" rx="1.5"/><path d="M2.5 9h19V7.5A1.5 1.5 0 0 0 20 6H4a1.5 1.5 0 0 0-1.5 1.5zM12 6v14M12 6c-1.3-3.5-5.5-4-5.2-1.6.2 1.6 5.2 1.6 5.2 1.6zM12 6c1.3-3.5 5.5-4 5.2-1.6-.2 1.6-5.2 1.6-5.2 1.6z"/>',
+    mail: '<rect x="3" y="5.5" width="18" height="13" rx="2"/><path d="M3.5 7l8.5 6 8.5-6"/>',
+    push: '<path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/>',
+    analytics: '<path d="M4 4v16h16"/><path d="M7.5 15l3.5-4 3 2.5L19 8"/><path d="M15.5 8H19v3.5"/>',
+    finance: '<circle cx="12" cy="12" r="8.5"/><path d="M10 16.5v-9h3a2.3 2.3 0 0 1 0 4.6h-4.5M8.5 14.5h5"/>',
+    home: '<path d="M4 11l8-6.5 8 6.5v8.5a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1z"/>',
+    slider: '<rect x="3" y="7" width="14" height="11" rx="2"/><path d="M7 4h11.5A2.5 2.5 0 0 1 21 6.5V15"/>',
+    brand: '<rect x="3.5" y="3.5" width="17" height="17" rx="3"/><path d="M8.5 16.5L12 7.5l3.5 9M9.7 13.5h4.6"/>',
+    menu: '<path d="M4.5 7h15M4.5 12h15M4.5 17h9"/>',
+    pages: '<path d="M7 3h7.5L19 7.5v12a1.5 1.5 0 0 1-1.5 1.5H7a1.5 1.5 0 0 1-1.5-1.5v-15A1.5 1.5 0 0 1 7 3z"/><path d="M14.5 3v4.5H19M8.5 12h7M8.5 15.5h5"/>',
+    payment: '<rect x="2.5" y="5.5" width="19" height="13" rx="2"/><path d="M2.5 9.5h19M6 15h3.5"/>',
+    staff: '<circle cx="10" cy="8" r="3.5"/><path d="M3.5 19.5c.9-3.4 3.4-5.2 6.5-5.2 1 0 1.9.2 2.7.5"/><circle cx="17.5" cy="15" r="2"/><path d="M17.5 17v3.5M17.5 19h1.6"/>',
+    audit: '<rect x="3.5" y="4" width="17" height="16" rx="2"/><path d="M7.5 8.5h.01M10.5 8.5h6M7.5 12h.01M10.5 12h6M7.5 15.5h.01M10.5 15.5h4"/>',
+    settings: '<circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/>',
+    search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>'
+  };
+  function secIcon(k) { return '<svg viewBox="0 0 24 24" aria-hidden="true">' + (SEC_IC[k] || SEC_IC.pages) + '</svg>'; }
+  function secTitle(k) { var x = SECTIONS.find(function (y) { return y[0] === k; }); return x ? x[1] : k; }
+  function groupOf(k) { return GROUPS.find(function (g) { return g[2].indexOf(k) !== -1; }) || GROUPS[5]; }
   /* Какие разделы видит роль (13.57): права приходят с сервера в DATA.perms, сервер проверяет их на каждом запросе */
   var SECTION_PERMS = {
     overview: [], orders: ['orders'], support: ['orders'], exchange: ['orders'], customers: ['orders', 'marketing'], gifts: ['orders', 'marketing'],
@@ -204,18 +246,58 @@
     // «Письма», «Уведомления на почту» и «Сообщить о поступлении» теперь вкладки раздела «Почта» (13.48): старые ссылки ведут туда же
     if (q.s === 'notify') { q.s = 'mail'; q.sub = q.tab === 'letter' ? 'letter' : q.sub; q.tab = q.tab === 'mail' ? 'smtp' : 'notify'; }
     else if (q.s === 'alerts') { q.s = 'mail'; q.tab = 'alerts'; }
-    var allowed = SECTIONS.filter(function (x) { return canSection(x[0]); });
-    var s = q.s && canSection(q.s) ? q.s : (canSection('overview') && (can('orders') || can('finance') || can('marketing')) ? 'overview' : (allowed[1] || allowed[0])[0]);
-    if (!q.s || q.s !== s) q.s = s;
+    // Без раздела в адресе — рабочий стол (13.63)
+    var s = q.s && canSection(q.s) ? q.s : 'desk';
+    q.s = s;
     var me = DATA.me || {};
-    v.innerHTML = '<div class="adm"><aside class="adm-side"><div class="adm-brand"><span class="eyebrow">Управление</span><b class="serif">' + esc(A().D.settings.storeName) + '</b></div><nav>' +
-      allowed.map(function (x) { return '<a href="#/admin?s=' + x[0] + '"' + (x[0] === s ? ' class="on"' : '') + '>' + x[1] + (x[0] === 'orders' ? newOrdersBadge() : '') + (x[0] === 'support' && DATA.supportNew ? ' <span class="adm-badge">' + DATA.supportNew + '</span>' : '') + (x[0] === 'mail' ? waitBadge() : '') + (x[0] === 'exchange' ? reqBadge() : '') + '</a>'; }).join('') +
+    var link = function (k, label, extra) { return '<a href="#/admin?s=' + k + '"' + (k === s ? ' class="on"' : '') + '>' + secIcon(k) + '<span>' + label + '</span>' + (extra || '') + '</a>'; };
+    v.innerHTML = '<div class="adm' + (s === 'desk' ? ' adm-on-desk' : '') + '"><aside class="adm-side"><div class="adm-brand"><span class="eyebrow">Управление</span><b class="serif">' + esc(A().D.settings.storeName) + '</b></div><nav>' +
+      '<a href="#/admin"' + (s === 'desk' ? ' class="on"' : '') + '>' + secIcon('home') + '<span>Рабочий стол</span></a>' +
+      GROUPS.map(function (g) {
+        var list = g[2].filter(canSection); if (!list.length) return '';
+        return '<span class="adm-nav-h">' + g[0] + '</span>' + list.map(function (k) { return link(k, secTitle(k), k === 'orders' ? newOrdersBadge() : k === 'support' && DATA.supportNew ? ' <span class="adm-badge">' + DATA.supportNew + '</span>' : k === 'mail' ? waitBadge() : k === 'exchange' ? reqBadge() : ''); }).join('');
+      }).join('') +
       '</nav><div class="adm-me"><b>' + esc([me.firstName, me.lastName].filter(Boolean).join(' ')) + '</b><span>' + esc(DATA.roleName || '') + '</span></div>' +
-      '<div class="adm-side-foot"><a href="#/" class="muted">← В магазин</a><button class="muted" id="admOut">Выйти из аккаунта</button></div></aside><section class="adm-main" id="admMain"></section></div>';
+      '<div class="adm-side-foot"><a href="#/" class="muted">← В магазин</a><button class="muted" id="admOut">Выйти из аккаунта</button></div></aside><section class="adm-main">' +
+      (s !== 'desk' ? '<a class="adm-back" href="#/admin">' + secIcon('home') + 'Рабочий стол</a>' : '') + '<div id="admMain"></div></section></div>';
     $('#admOut').addEventListener('click', async function () { await API.logout(); DATA = null; window.ALB_NAV.go('#/'); await A().refresh(); });
     var main = $('#admMain');
-    var fn = { overview: overview, orders: orders, support: supportSection, products: products, categories: categories, sizeCharts: sizeCharts, promotions: promotions, promocodes: promocodes, bonus: bonusSection, exchange: exchangeSection, customers: customers,  mail: mailHub, push: pushSection, staff: staffSection, audit: auditSection,  analytics: analyticsSection, finance: financeSection, gifts: giftsSection, sections: sectionsSettings, brand: brandSection, slider: sliderSection, home: homeSettings, pages: pages, menu: menuSettings, payment: paymentSettings, settings: generalSettings }[s] || overview;
+    var fn = { desk: desk, overview: overview, orders: orders, support: supportSection, products: products, categories: categories, sizeCharts: sizeCharts, promotions: promotions, promocodes: promocodes, bonus: bonusSection, exchange: exchangeSection, customers: customers,  mail: mailHub, push: pushSection, staff: staffSection, audit: auditSection,  analytics: analyticsSection, finance: financeSection, gifts: giftsSection, sections: sectionsSettings, brand: brandSection, slider: sliderSection, home: homeSettings, pages: pages, menu: menuSettings, payment: paymentSettings, settings: generalSettings }[s] || overview;
     fn(main, q);
+  }
+  /* ================= Рабочий стол (13.63): сводка дня, ежедневное — карточками, остальное — значками ================= */
+  function desk(m) {
+    var o = DATA.orders, today = new Date().toDateString();
+    var todayList = o.filter(function (x) { return new Date(x.createdAt).toDateString() === today && x.status !== 'canceled'; });
+    var newN = o.filter(function (x) { return x.status === 'new'; }).length, shipN = o.filter(function (x) { return x.status === 'shipped'; }).length;
+    var reqN = allRequests().filter(function (x) { return x.r.status === 'new' || x.r.status === 'received'; }).length;
+    var waitN = (DATA.waitlist || []).filter(function (w) { return w.status === 'waiting'; }).length;
+    var supN = DATA.supportNew || 0;
+    var me = DATA.me || {};
+    var work = [
+      ['orders', 'Заказы', newN ? newN + ' ' + plural(newN, 'новый', 'новых', 'новых') : 'новых нет', newN],
+      ['support', 'Поддержка', supN ? supN + ' ' + plural(supN, 'вопрос', 'вопроса', 'вопросов') : 'вопросов нет', supN],
+      ['products', 'Товары', waitN ? waitN + ' ждут поступления' : DATA.products.filter(function (p) { return p.active !== false; }).length + ' в продаже', waitN],
+      ['exchange', 'Обмен и возврат', reqN ? reqN + ' ' + plural(reqN, 'заявка', 'заявки', 'заявок') : 'заявок нет', reqN]
+    ].filter(function (x) { return canSection(x[0]); });
+    var rest = [];
+    GROUPS.forEach(function (g) { g[2].forEach(function (k) { if (canSection(k) && !work.some(function (w) { return w[0] === k; })) rest.push([k, g[1]]); }); });
+    m.innerHTML = '<div class="desk">' +
+      '<div class="desk-top"><div><span class="eyebrow">' + esc(DATA.roleName || 'Управление') + '</span><h1>Панель управления</h1></div>' +
+        '<label class="desk-find">' + secIcon('search') + '<input type="search" id="deskFind" placeholder="Найти раздел" autocomplete="off"></label></div>' +
+      (can('orders') ? '<a class="desk-sum" href="#/admin?s=orders"><span class="desk-sum-h"><b>Сегодня</b><small>' + esc([me.firstName, me.lastName].filter(Boolean).join(' ')) + '</small></span>' +
+        '<span class="desk-kpi"><span><b class="num">' + todayList.length + '</b><small>' + plural(todayList.length, 'заказ', 'заказа', 'заказов') + ' · ' + fmt(todayList.reduce(function (sm, x) { return sm + x.total; }, 0)) + '</small></span>' +
+        '<span><b class="num">' + newN + '</b><small>новых, ждут сборки</small></span><span><b class="num">' + shipN + '</b><small>в пути у СДЭК</small></span></span></a>' : '') +
+      ((DATA.problems || []).length ? '<div class="adm-alert site-prob"><b>Состояние сайта: нужно внимание</b>' + DATA.problems.map(function (x) { return '<span>' + esc(x.title) + ' — ' + esc(x.text) + '</span>'; }).join('') + '</div>' : '') +
+      (work.length ? '<div class="desk-work">' + work.map(function (w) { return '<a class="desk-card" href="#/admin?s=' + w[0] + '" data-find="' + esc(w[1].toLowerCase()) + '"><span class="desk-ic g-sales">' + secIcon(w[0]) + '</span><b>' + w[1] + '</b><small>' + w[2] + '</small>' + (w[3] ? '<i class="desk-n">' + w[3] + '</i>' : '') + '</a>'; }).join('') + '</div>' : '') +
+      '<div class="desk-h">Все разделы</div><div class="desk-all">' + rest.map(function (x) { var t = SHORT[x[0]] || secTitle(x[0]); return '<a href="#/admin?s=' + x[0] + '" data-find="' + esc((t + ' ' + secTitle(x[0])).toLowerCase()) + '"><span class="desk-ic ' + x[1] + '">' + secIcon(x[0]) + '</span><span>' + esc(t) + '</span></a>'; }).join('') + '</div>' +
+      '<p class="desk-none" id="deskNone" hidden>Такого раздела нет</p>' +
+    '</div>';
+    $('#deskFind', m).addEventListener('input', function () {
+      var t = this.value.trim().toLowerCase(), any = false;
+      $$('[data-find]', m).forEach(function (a) { var on = !t || a.getAttribute('data-find').indexOf(t) !== -1; a.hidden = !on; any = any || on; });
+      $('#deskNone', m).hidden = any;
+    });
   }
   function waitBadge() { var n = (DATA.waitlist || []).filter(function (w) { return w.status === 'waiting' || w.status === 'failed'; }).length; return n ? ' <span class="adm-badge muted-badge">' + n + '</span>' : ''; }
   function newOrdersBadge() { var n = DATA.orders.filter(function (o) { return o.status === 'new'; }).length; return n ? ' <span class="adm-badge">' + n + '</span>' : ''; }
@@ -903,7 +985,7 @@
       row: function (p) {
         var c = DATA.categories.find(function (x) { return x.id === p.categoryId; }), st = productStock(p), pr = Pricing.productPrice(p, DATA.promotions);
         var cs = Pricing.colorsOf(p);
-        return ['<img class="adm-thumb" src="' + esc(A().imgOf(p)) + '" alt="">', esc(p.name) + (p.sku ? '<div class="muted num" style="font-size:12px">' + esc(p.sku) + '</div>' : ''), esc({ women: 'Женщинам', men: 'Мужчинам' }[p.gender] || 'Унисекс'), esc(c ? c.name : '—'),
+        return ['<img class="adm-thumb" src="' + esc(A().imgOf(p)) + '" alt="">', esc(p.name) + (p.sku ? '<div class="muted num" style="font-size:12px">' + esc(p.sku) + '</div>' : ''), esc({ women: 'Женщинам', men: 'Мужчинам', kids: 'Детям' }[p.gender] || 'Унисекс'), esc(c ? c.name : '—'),
           '<span class="card-swatches" title="' + esc(cs.map(function (x) { return x.name; }).join(', ')) + '">' + cs.map(function (x) { return '<i style="background:' + esc(x.hex || 'var(--surface-2)') + '"></i>'; }).join('') + '</span>',
           '<span class="num">' + fmt(pr.price) + (pr.oldPrice ? ' <s class="muted">' + fmt(pr.oldPrice) + '</s>' : '') + '</span>', '<span class="num' + (st === 0 ? ' bad' : st < 4 ? ' warn' : '') + '">' + st + '</span>', onOff(p.active !== false)];
       },
@@ -913,7 +995,7 @@
           { k: 'name', label: 'Название', wide: true },
           { k: 'sku', label: 'Артикул', hint: 'Заполнится сам: ALB-0001, ALB-0002… Можно указать свой — латиница, цифры, дефис' },
           { k: 'categoryId', label: 'Категория', type: 'select', options: catOpts() },
-          { k: 'gender', label: 'Для кого', type: 'select', options: [['women', 'Женщинам'], ['men', 'Мужчинам'], ['unisex', 'Унисекс — в обоих разделах']] },
+          { k: 'gender', label: 'Для кого', type: 'select', options: [['women', 'Женщинам'], ['men', 'Мужчинам'], ['kids', 'Детям'], ['unisex', 'Унисекс — женщинам и мужчинам']] },
           { k: 'sizeChartId', label: 'Размерная сетка', type: 'select', options: [['', 'Без таблицы размеров']].concat(DATA.sizeCharts.map(function (c) { return [c.id, c.name]; })) },
           { k: 'price', label: 'Цена, ₽', type: 'number', hint: 'Одна для всех цветов' },
           { k: 'compareAt', label: 'Старая цена, ₽', type: 'number', hint: 'Если больше цены — показывается зачёркнутой. Оставьте 0, если скидки нет.' },
@@ -1205,8 +1287,8 @@
       blank: function () { return { name: '', slug: '', image: '', art: { kind: 'tee', tone: '#3b3b3f' }, order: DATA.categories.length + 1 }; },
       sort: function (a, b) { return (a.order || 0) - (b.order || 0); },
       cols: ['', 'Название', 'Раздел', 'Порядок', 'Товаров'],
-      row: function (c) { return ['<img class="adm-thumb" src="' + esc(c.image || Art.make(c.art)) + '" alt="">', esc(c.name), ({ women: 'Женщинам', men: 'Мужчинам', unisex: 'Оба раздела' })[c.gender] || '<span class="muted">по товарам</span>', '<span class="num">' + (c.order || 0) + '</span>', '<span class="num">' + DATA.products.filter(function (p) { return p.categoryId === c.id; }).length + '</span>']; },
-      fields: function () { return [{ k: 'name', label: 'Название' }, { k: 'gender', label: 'Раздел', type: 'select', options: [['', 'Определять по товарам'], ['women', 'Женщинам'], ['men', 'Мужчинам'], ['unisex', 'В обоих разделах']], hint: 'В каком разделе показывать категорию в меню, подвале и каталоге. «По товарам» — по тому, для кого товары внутри; пустая категория — по названию (платья и юбки — женские)' }, { k: 'order', label: 'Порядок', type: 'number' }, { k: 'image', label: 'Обложка', type: 'image', hint: 'Вертикальное фото 3:4' }, { k: 'slug', label: 'Адрес', hint: 'Латиницей, заполнится сам' }]; },
+      row: function (c) { return ['<img class="adm-thumb" src="' + esc(c.image || Art.make(c.art)) + '" alt="">', esc(c.name), ({ women: 'Женщинам', men: 'Мужчинам', kids: 'Детям', unisex: 'Женщинам и мужчинам' })[c.gender] || '<span class="muted">по товарам</span>', '<span class="num">' + (c.order || 0) + '</span>', '<span class="num">' + DATA.products.filter(function (p) { return p.categoryId === c.id; }).length + '</span>']; },
+      fields: function () { return [{ k: 'name', label: 'Название' }, { k: 'gender', label: 'Раздел', type: 'select', options: [['', 'Определять по товарам'], ['women', 'Женщинам'], ['men', 'Мужчинам'], ['kids', 'Детям'], ['unisex', 'Женщинам и мужчинам']], hint: 'В каком разделе показывать категорию в меню, подвале и каталоге. «По товарам» — по тому, для кого товары внутри; пустая категория — по названию (платья и юбки — женские)' }, { k: 'order', label: 'Порядок', type: 'number' }, { k: 'image', label: 'Обложка', type: 'image', hint: 'Вертикальное фото 3:4' }, { k: 'slug', label: 'Адрес', hint: 'Латиницей, заполнится сам' }]; },
       read: function (box, c) { c.slug = translit(c.slug || c.name); },
       validate: function (c, all) { if (!c.name) return 'Укажите название'; if (all.some(function (x) { return x.id !== c.id && x.slug === c.slug; })) return 'Такой адрес уже занят'; return ''; }
     });
@@ -2145,8 +2227,6 @@
 
   function homeSettings(m) {
     settingsForm(m, 'Главная страница', 'Тексты, картинки и блоки главной страницы. Выделить слово в заголовке курсивом и цветом: *слово*. Перенос строки — Enter.', [
-      { section: 'Верхняя строка' },
-      { k: 'announcement', label: 'Объявление над шапкой', wide: true, hint: 'Пусто — строка скрыта. {free} — подставится сумма бесплатной доставки из настроек доставки, например «Бесплатная доставка от {free}»' },
       { section: 'Первый экран — когда слайдер выключен' },
       { k: 'heroEyebrow', label: 'Надзаголовок' },
       { k: 'heroCta', label: 'Текст кнопки' },
@@ -2178,40 +2258,32 @@
       { k: 'editorialImage', label: 'Фото', type: 'image' }
     ], {
       benefits: { title: 'Преимущества', cols: [{ k: 'title', label: 'Заголовок' }, { k: 'text', label: 'Описание', flex: 2 }, { k: 'icon', label: 'Иконка', type: 'select', options: [['auto', 'Иконка: по тексту'], ['delivery', 'Доставка — грузовик'], ['quality', 'Качество — медаль'], ['fabric', 'Ткани — стопка тканей'], ['fitting', 'Примерка — футболка'], ['return', 'Возврат — коробка'], ['payment', 'Оплата — карты'], ['gift', 'Подарок / бонусы'], ['cash', 'Наличные'], ['pin', 'Метка на карте'], ['style', 'Стиль — вешалка'], ['gem', 'Индивидуальность — камень'], ['spool', 'Производство — катушка'], ['mail', 'Почта — конверт'], ['chat', 'Чат — облачка'], ['phone', 'Телефон'], ['none', 'Без иконки']] }, { k: 'link', label: 'Ссылка (необязательно)', placeholder: '#/page/delivery' }, { k: 'linkText', label: 'Текст ссылки', placeholder: 'Подробнее' }], get: function (s) { return s.home.benefits; }, set: function (s, v) { s.home.benefits = v; } }
-    }, function (s) { var o = s.home; o.announcement = s.announcement; return o; }, function (s, o) { s.announcement = o.announcement; delete o.announcement; s.home = Object.assign(s.home, o); });
+    }, function (s) { return s.home; }, function (s, o) { s.home = Object.assign(s.home, o); });
   }
 
-  /* Разделы «Женщинам» и «Мужчинам»: открыт/закрыт, страница «скоро», экран выбора */
+  /* Разделы «Женщинам», «Мужчинам», «Детям» (13.63): открыт/закрыт и страница «скоро появится» с фото раздела */
+  var GENDER_LIST = [['women', 'Женщинам'], ['men', 'Мужчинам'], ['kids', 'Детям']];
   function sectionsSettings(m) {
     var cnt = function (g) { return DATA.products.filter(function (p) { return p.active !== false && p.gender === g; }).length; };
-    var G = [['women', 'Женщинам', 'Woman'], ['men', 'Мужчинам', 'Man']], defs = [];
-    G.forEach(function (x) {
-      var k = x[2];
-      defs.push({ section: 'Раздел «' + x[1] + '» · товаров: ' + cnt(x[0]) });
-      defs.push({ k: 'open' + k, label: 'Раздел открыт', type: 'checkbox', hint: 'Если выключить, его товары пропадут из каталога, а покупатель, выбравший этот раздел, увидит страницу «скоро появится». Товары унисекс останутся в другом разделе.' });
-      defs.push({ k: 'soonTitle' + k, label: 'Заголовок страницы «скоро»', type: 'textarea', rows: 2, hint: 'Enter — перенос строки, *слово* — курсивом' });
-      defs.push({ k: 'soonText' + k, label: 'Текст страницы «скоро»', type: 'textarea', rows: 2 });
+    var defs = [];
+    GENDER_LIST.forEach(function (x) {
+      var k = x[0];
+      defs.push({ section: 'Раздел «' + x[1] + '» · товаров: ' + cnt(k) });
+      defs.push({ k: 'open_' + k, label: 'Раздел открыт', type: 'checkbox', hint: 'Если выключить, его товары пропадут из каталога, а покупатель, выбравший этот раздел, увидит страницу «скоро появится».' + (k === 'kids' ? ' Товары унисекс в детский раздел не попадают.' : ' Товары унисекс останутся во взрослом разделе.') });
+      defs.push({ k: 'title_' + k, label: 'Заголовок страницы «скоро»', type: 'textarea', rows: 2, hint: 'Enter — перенос строки, *слово* — курсивом' });
+      defs.push({ k: 'text_' + k, label: 'Текст страницы «скоро»', type: 'textarea', rows: 2 });
+      defs.push({ k: 'image_' + k, label: 'Фото страницы «скоро»', type: 'image', hint: 'Вертикальное фото' });
     });
-    defs = defs.concat([
-      { section: 'Экран выбора при первом заходе' },
-      { k: 'gwEnabled', label: 'Показывать экран «Женщинам / Мужчинам» при первом заходе на сайт', type: 'checkbox', hint: 'Покупатель видит его один раз. Закрытый раздел отмечается на нём словом «Скоро».' },
-      { k: 'gwEyebrow', label: 'Надпись над выбором', wide: true },
-      { k: 'gwWomanTitle', label: 'Женщинам — заголовок' }, { k: 'gwManTitle', label: 'Мужчинам — заголовок' },
-      { k: 'gwWomanText', label: 'Женщинам — подпись' }, { k: 'gwManText', label: 'Мужчинам — подпись' },
-      { k: 'gwWomanImage', label: 'Женщинам — фото', type: 'image', hint: 'Вертикальное фото. Оно же — фон страницы «скоро»' },
-      { k: 'gwManImage', label: 'Мужчинам — фото', type: 'image', hint: 'Вертикальное фото. Оно же — фон страницы «скоро»' }
-    ]);
-    settingsForm(m, 'Разделы: женщинам / мужчинам', 'Здесь можно закрыть раздел, пока в нём нет одежды, и настроить экран выбора раздела. У каждого товара раздел задаётся полем «Для кого» в карточке товара.', defs, {},
+    settingsForm(m, 'Разделы', 'Здесь можно закрыть раздел, пока в нём нет одежды. У каждого товара раздел задаётся полем «Для кого» в карточке товара.', defs, {},
       function (s) {
-        var o = {}, gs = s.genders || {}, gw = s.gateway || {};
-        G.forEach(function (x) { var c = gs[x[0]] || {}, w = gw[x[0]] || {}, k = x[2]; o['open' + k] = c.open !== false; o['soonTitle' + k] = c.title || ''; o['soonText' + k] = c.text || ''; o['gw' + k + 'Title'] = w.title || ''; o['gw' + k + 'Text'] = w.text || ''; o['gw' + k + 'Image'] = w.image || ''; });
-        o.gwEnabled = gw.enabled !== false; o.gwEyebrow = gw.eyebrow || '';
+        var o = {}, gs = s.genders || {};
+        GENDER_LIST.forEach(function (x) { var c = gs[x[0]] || {}, k = x[0]; o['open_' + k] = c.open !== false; o['title_' + k] = c.title || ''; o['text_' + k] = c.text || ''; o['image_' + k] = c.image || ''; });
         return o;
       },
       function (s, o) {
-        if (!o.openWoman && !o.openMan) return 'Оставьте открытым хотя бы один раздел';
-        s.genders = {}; s.gateway = { enabled: o.gwEnabled, eyebrow: o.gwEyebrow };
-        G.forEach(function (x) { var k = x[2]; s.genders[x[0]] = { open: o['open' + k], title: o['soonTitle' + k], text: o['soonText' + k] }; s.gateway[x[0]] = { title: o['gw' + k + 'Title'] || x[1], text: o['gw' + k + 'Text'], image: o['gw' + k + 'Image'] }; });
+        if (!GENDER_LIST.some(function (x) { return o['open_' + x[0]]; })) return 'Оставьте открытым хотя бы один раздел';
+        s.genders = {};
+        GENDER_LIST.forEach(function (x) { var k = x[0]; s.genders[k] = { open: o['open_' + k], title: o['title_' + k], text: o['text_' + k], image: o['image_' + k] }; });
         return '';
       });
   }
@@ -2605,7 +2677,7 @@
       (sl.length ? '<div class="adm-sl-list">' + sl.map(function (x, i) {
         var st = slideStatus(x), pr = x.promotionId && DATA.promotions.find(function (p) { return p.id === x.promotionId; });
         var pills = [x.layout === 'full' ? 'Фото на весь экран' : 'Фото справа'];
-        if (x.gender) pills.push(x.gender === 'women' ? 'Только «Женщинам»' : 'Только «Мужчинам»');
+        if (x.gender) pills.push('Только «' + ({ women: 'Женщинам', men: 'Мужчинам', kids: 'Детям' }[x.gender] || x.gender) + '»');
         if (pr) pills.push('Акция: ' + pr.title);
         if (x.code) pills.push('Промокод ' + x.code);
         return '<div class="adm-sl-row' + (x.active ? '' : ' off') + '"><span class="adm-sl-num num">' + (i + 1) + '</span>' +
@@ -2643,7 +2715,7 @@
       { section: 'Основное' },
       { k: 'active', label: 'Показывать слайд на сайте', type: 'checkbox' },
       { k: 'layout', label: 'Макет', type: 'select', options: [['split', 'Фото справа, текст слева'], ['full', 'Фото на весь экран, текст поверх']] },
-      { k: 'gender', label: 'Для какого раздела', type: 'select', options: [['', 'Всем покупателям'], ['women', 'Только «Женщинам»'], ['men', 'Только «Мужчинам»']] },
+      { k: 'gender', label: 'Для какого раздела', type: 'select', options: [['', 'Всем покупателям'], ['women', 'Только «Женщинам»'], ['men', 'Только «Мужчинам»'], ['kids', 'Только «Детям»']] },
       { section: 'Текст' },
       { k: 'eyebrow', label: 'Надзаголовок', wide: true, hint: 'Маленькая строка над заголовком' },
       { k: 'title', label: 'Заголовок', type: 'textarea', rows: 2, hint: 'Enter — перенос строки. *Слово в звёздочках* — курсивом.' },

@@ -4013,3 +4013,15 @@ body::after { content: none; display: none; }
 .pask .form-error:empty { display: none; }
 .ps-apns { margin-top: 16px; display: grid; gap: 14px; }
 .ps-apns .textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+
+/* Строка над шапкой на телефоне — одна строка, части сменяются по очереди (13.62.1) */
+.ann-dot { font-style: normal; margin: 0 .5em; opacity: .5; }
+@media (max-width: 760px) {
+  .topbar { font-size: 12px; letter-spacing: .02em; }
+  .topbar .wrap { padding-block: 9px; }
+  .ann { display: grid; justify-items: center; }
+  .ann-dot { display: none; }
+  .ann-i { grid-area: 1 / 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; opacity: 0; transform: translateY(6px); transition: opacity .5s var(--ease), transform .5s var(--ease); }
+  .ann-i.on { opacity: 1; transform: none; }
+}
+@media (max-width: 760px) and (prefers-reduced-motion: reduce) { .ann-i { transition: none; transform: none; } }

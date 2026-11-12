@@ -118,7 +118,7 @@
   function renderShell() {
     var s = D.settings;
     root.innerHTML =
-      (s.announcement ? '<div class="topbar"><div class="wrap">' + esc(annText(s.announcement)) + '</div></div>' : '') +
+      (s.announcement ? '<div class="topbar"><div class="wrap">' + annHtml(annText(s.announcement)) + '</div></div>' : '') +
       '<header class="header"><div class="wrap">' +
         '<nav class="nav" aria-label="Основное меню">' + navLinks() + '</nav>' +
         '<button class="icon-btn burger" data-act="menu" aria-label="Меню">' + ICON.menu + '</button>' +
@@ -337,6 +337,18 @@
 
   // {free} в объявлении — самый низкий порог «Бесплатно от» из способов доставки (меняется вместе с настройками)
   function freeFromMin() { var ms = (((D.settings.delivery || {}).methods) || []).map(function (m) { return Number(m.freeFrom) || 0; }).filter(function (x) { return x > 0; }); return ms.length ? Math.min.apply(null, ms) : 0; }
+  /* Строка над шапкой (13.62.1): части через «·». На компьютере — в одну строку целиком,
+     на телефоне — по одной части, плавно сменяются каждые 3,5 с: плашка всегда в одну строку, не в три */
+  function annHtml(t) {
+    var parts = String(t).split(/\s+·\s+/).filter(Boolean);
+    return parts.length < 2 ? '<span class="ann-one">' + esc(t) + '</span>'
+      : '<span class="ann" data-ann>' + parts.map(function (x, i) { return '<span class="ann-i' + (i ? '' : ' on') + '">' + esc(x) + '</span>'; }).join('<i class="ann-dot" aria-hidden="true">·</i>') + '</span>';
+  }
+  setInterval(function () {
+    var a = document.querySelector('[data-ann]'); if (!a || !matchMedia('(max-width: 760px)').matches || document.hidden) return;
+    var it = a.querySelectorAll('.ann-i'), cur = a.querySelector('.ann-i.on'), n = (Array.prototype.indexOf.call(it, cur) + 1) % it.length;
+    if (cur) cur.classList.remove('on'); it[n].classList.add('on');
+  }, 3500);
   function annText(t) { var f = freeFromMin(); return String(t).replace(/\s*от\s*\{free\}/g, f ? ' от ' + fmt(f) : '').replace(/\{free\}/g, f ? fmt(f) : ''); }
   /* ---------- Карточка товара ---------- */
   // Плашки товара: «Новинка», «Скидка 15%», «Хит продаж» — тексты и цвета из панели управления

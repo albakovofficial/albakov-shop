@@ -1268,42 +1268,14 @@ input[type="range"] { accent-color: var(--accent); width: 100%; }
   .section-head { margin-bottom: 24px; }
 }
 
-/* ---------- Приложение: значок на экране «Домой» ---------- */
-/* Плашка на главной (только телефон) */
-.inst-banner { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto auto; gap: 12px; align-items: center; margin-top: 20px; padding: 12px 6px 12px 12px; background: var(--paper); border: 1px solid var(--line); animation: fadeUp .4s var(--ease); }
-.inst-banner[hidden] { display: none; }
-.inst-banner img { width: 44px; height: 44px; border: 1px solid var(--line); }
-.inst-banner-text { display: grid; gap: 2px; min-width: 0; line-height: 1.35; }
-.inst-banner-text b { font-size: 14px; font-weight: 600; }
-.inst-banner-text span { font-size: 12.5px; color: var(--muted); }
-.inst-banner-btn { min-height: 38px; padding: 0 14px; background: var(--text); color: var(--bg); font-size: 13px; font-weight: 500; letter-spacing: .04em; white-space: nowrap; }
-.inst-banner-x { width: 34px; height: 38px; display: grid; place-items: center; color: var(--muted); }
-.inst-banner-x svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.4; }
-/* Меню на телефоне */
+/* ---------- Приложение ALBAKOV в App Store: кнопка в меню телефона ---------- */
 .mnav-app { display: grid; gap: 8px; padding-top: 28px; }
 .mnav-app-btn { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 14px; align-items: center; text-align: left; padding: 12px 14px; border: 1px solid var(--line-strong); transition: border-color .2s; }
-.mnav-app-btn[hidden] { display: none; }
 .mnav-app-btn:hover { border-color: var(--text); }
 .mnav-app-btn img { width: 36px; height: 36px; border: 1px solid var(--line); }
 .mnav-app-btn span:last-child { display: grid; gap: 1px; line-height: 1.35; }
 .mnav-app-btn b { font-size: 14px; font-weight: 500; }
 .mnav-app-btn small { font-size: 13px; color: var(--muted); }
-.inst-btns svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.4; }
-/* Подвал */
-.foot-btn { color: #2a3036; font-size: 14px; letter-spacing: .02em; text-align: left; }
-.foot-btn:hover { color: var(--accent); }
-/* Окно с подсказкой */
-.inst { display: grid; gap: 16px; justify-items: center; text-align: center; max-width: 460px; margin: 0 auto; padding-top: 8px; }
-.inst-logo { width: 72px; height: 72px; border: 1px solid var(--line); }
-.inst h3 { font-family: var(--serif); font-weight: 300; font-size: 30px; line-height: 1.1; }
-.inst p { font-size: 15px; line-height: 1.6; max-width: 40ch; }
-.inst-steps { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 0; width: 100%; text-align: left; counter-reset: ist; border-top: 1px solid var(--line); }
-.inst-steps li { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 14px; align-items: center; padding: 14px 0; border-bottom: 1px solid var(--line); font-size: 15px; line-height: 1.5; }
-.inst-steps b { font-weight: 600; }
-.inst-ic { width: 40px; height: 40px; display: grid; place-items: center; background: var(--surface); }
-.inst-ic svg { width: 20px; height: 20px; stroke: var(--text); fill: none; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
-.inst-btns { display: grid; gap: 8px; width: 100%; margin-top: 8px; }
-.inst-btns .btn { padding: 0 14px; min-width: 0; }
 
 /* ---------- Админка: выбор нескольких товаров ---------- */
 .adm-bulk-table .adm-pick-cell { width: 44px; padding-right: 0; }
@@ -2301,7 +2273,7 @@ input:focus-visible + .pm-track { outline: 2px solid var(--accent); outline-offs
 
 /* ---------- Скруглённые кнопки по всему сайту ---------- */
 :root { --btn-radius: 999px; --ctl-radius: 14px; }
-.btn, .sbtn, .sbtn-primary, .inst-banner-btn, .qa-size, .af-chip, .chip, .slide-code, .promo-form .btn, .mnav-app-btn, .wl-copy, .cookie-note .btn, .adm-x, .adm-row-tools button, .icon-btn, .sl-arrow, .to-top { border-radius: var(--btn-radius); }
+.btn, .sbtn, .sbtn-primary, .qa-size, .af-chip, .chip, .slide-code, .promo-form .btn, .mnav-app-btn, .wl-copy, .cookie-note .btn, .adm-x, .adm-row-tools button, .icon-btn, .sl-arrow, .to-top { border-radius: var(--btn-radius); }
 .sz { border-radius: var(--btn-radius); }
 .qty { border-radius: var(--btn-radius); overflow: hidden; }
 .qty button:first-child { padding-left: 4px; } .qty button:last-child { padding-right: 4px; }
@@ -2648,8 +2620,7 @@ a:hover .cat-go { background: var(--ink); color: #fff; transform: rotate(-45deg)
   .tabs button, .tabs a { padding: 8px 14px; }
   .footer { margin-inline: 6px; }
 }
-.footer .muted, .footer .foot-btn { color: rgba(255, 255, 255, .62); }
-.footer .foot-btn:hover { color: #fff; }
+.footer .muted { color: rgba(255, 255, 255, .62); }
 
 /* --- Информационные страницы и «О бренде» в общем стиле --- */
 .ip-sec, .ab-story { border-top: 0; }
@@ -2924,8 +2895,8 @@ a:hover .cat-go { background: var(--ink); color: #fff; transform: rotate(-45deg)
 .fcol summary i { display: none; }
 .footer .fcol h4 { margin-bottom: 18px; }
 .footer .fcol ul { gap: 11px; font-size: 14px; }
-.footer .fcol a, .footer .foot-btn { color: rgba(255, 255, 255, .78); transition: color .2s, padding .3s var(--ease); }
-.footer .fcol ul a:hover, .footer .foot-btn:hover { color: #fff; padding-left: 4px; }
+.footer .fcol a { color: rgba(255, 255, 255, .78); transition: color .2s, padding .3s var(--ease); }
+.footer .fcol ul a:hover:hover { color: #fff; padding-left: 4px; }
 .f-contacts li { display: flex; align-items: flex-start; gap: 10px; color: rgba(255, 255, 255, .7); line-height: 1.45; }
 .f-ic { flex: none; display: grid; place-items: center; width: 30px; height: 30px; margin-top: -5px; border-radius: 10px; background: rgba(255, 255, 255, .07); color: rgba(255, 255, 255, .85); }
 .f-ic svg { width: 16px; height: 16px; }
@@ -3898,30 +3869,7 @@ body::after { content: none; display: none; }
 .mm-tile.wide .mm-tag { position: static; margin-left: auto; order: 3; }
 
 /* Окно «ALBAKOV на экране „Домой“» (13.57): в стиле сайта, с акцентом бренда */
-.inst { gap: 14px; padding-top: 4px; }
-.inst-logo-wrap { position: relative; isolation: isolate; display: grid; place-items: center; margin-bottom: 4px; }
-.inst-logo-wrap::before { content: ""; position: absolute; inset: -14px; border-radius: 50%; background: var(--acc-grad); filter: blur(26px); opacity: .35; z-index: -1; }
-.inst-logo { width: 76px; height: 76px; border: 0; border-radius: 22px; box-shadow: 0 14px 30px -14px rgba(13, 14, 16, .7); }
-.inst-eyebrow { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px; border-radius: 999px; background: #fff; box-shadow: var(--ring); font-size: 11px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
-.inst-eyebrow::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--acc-grad); }
-.inst h3 { font-weight: 200; letter-spacing: -.035em; font-size: clamp(28px, 7.4vw, 34px); }
-.inst h3 i { font-style: normal; background: var(--acc-grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
-.inst p { color: var(--muted); font-size: 14.5px; }
-.inst-steps { counter-reset: ist; border: 0; border-radius: var(--r-lg); background: #fff; box-shadow: var(--ring); overflow: hidden; margin-top: 4px; }
-.inst-steps li { counter-increment: ist; position: relative; grid-template-columns: 44px minmax(0, 1fr); padding: 14px 16px 14px 14px; border-bottom: 1px solid var(--line); font-size: 14.5px; line-height: 1.5; }
-.inst-steps li:last-child { border-bottom: 0; }
-.inst-steps b { font-weight: 500; color: var(--text); }
-.inst-ic { position: relative; width: 44px; height: 44px; border-radius: 14px; background: var(--surface); }
-/* номер шага — оранжевой меткой на значке: 1, 2, 3 */
-.inst-ic::after { content: counter(ist); position: absolute; top: -5px; right: -5px; min-width: 18px; height: 18px; border-radius: 99px; background: var(--acc-grad); color: #fff; font-size: 10.5px; font-weight: 600; line-height: 18px; text-align: center; box-shadow: 0 0 0 2px #fff; }
-.inst-btns .btn { border-radius: 999px; }
-.mnav-app-btn img, .inst-banner img { border: 0; border-radius: 10px; }
-.inst-banner img { border-radius: 12px; }
-/* Переключатель версии iOS в окне установки */
-.inst-vers { display: flex; width: 100%; margin-top: 2px; padding: 4px; border-radius: 999px; background: var(--surface); }
-.inst-vers button { flex: 1 1 auto; padding: 8px 6px; border-radius: 999px; font-size: 12.5px; color: var(--muted); white-space: nowrap; transition: background .2s, color .2s; }
-.inst-vers button.on { background: var(--ink); color: #fff; }
-.inst-note { font-size: 12px !important; color: var(--dim) !important; margin-top: -4px; }
+.mnav-app-btn img { border: 0; border-radius: 10px; }
 
 /* Сотрудники (13.57) */
 .adm-me { display: grid; gap: 2px; margin: 18px 12px 0; padding: 12px 14px; border-radius: var(--r-sm); background: rgba(255, 255, 255, .7); box-shadow: var(--ring); }

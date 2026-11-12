@@ -27,6 +27,9 @@
     var out = new Uint8Array(raw.length); for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i); return out;
   }
 
+  // Service worker: показывает уведомления браузера и страницу «Нет интернета». В приложении из App Store не нужен
+  if (webApi && !native) window.addEventListener('load', function () { navigator.serviceWorker.register('/sw.js').catch(function () { /* без него сайт работает */ }); });
+
   /* ---- Устройство: браузер ---- */
   async function registration() {
     var r = await navigator.serviceWorker.getRegistration('/');
@@ -79,11 +82,11 @@
   }
 
   /* Состояние для экрана:
-     unsupported — браузер не умеет; ios-install — iPhone, но сайт открыт в Safari, а не в приложении;
+     unsupported — браузер не умеет; ios-app — iPhone, сайт открыт в Safari: уведомления — в приложении ALBAKOV из App Store;
      denied — запрещено в настройках; on — эта область включена на устройстве; off — можно включить */
   async function state(scope) {
     scope = scope || 'customer';
-    if (!hasApi) return isIOS && !installed() ? 'ios-install' : 'unsupported';
+    if (!hasApi) return isIOS && !installed() ? 'ios-app' : 'unsupported';
     var perm = await dev.permission();
     if (perm === 'denied') return 'denied';
     return perm === 'granted' && lsGet()[scope] && await dev.current() ? 'on' : 'off';

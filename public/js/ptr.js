@@ -1,4 +1,4 @@
-/* «Потянуть вниз — обновить» в установленном приложении ALBAKOV (значок на экране «Домой»).
+/* «Потянуть вниз — обновить» в приложении ALBAKOV (из App Store или значок, добавленный раньше на экран «Домой»).
    В обычном браузере телефона у Safari и Chrome есть свой такой жест — там ничего не делаем.
    Жест только наблюдает за пальцем и ничего не отменяет (passive): не мешает нажатиям, прокрутке и клавиатуре.
    Обновление мягкое: магазин заново берёт цены, остатки и настройки с сервера и перерисовывает страницу
@@ -11,7 +11,7 @@
   var OVERLAY = '.drawer.open, .modal.open, .gate, #splash, .scrim.open';
   var FIELD = 'input, textarea, select, [contenteditable], label';
 
-  function installed() { return window.Install ? Install.isInstalled() : ((window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true); }
+  function installed() { return window.Push ? Push.installed() : false; }   // значок на экране «Домой» или приложение из App Store
 
   // Покупатель что-то напечатал и не отправил (адрес, комментарий, отзыв) — не стираем это обновлением.
   // Поля, которые заполнил сам магазин (данные из кабинета), черновиком не считаются.

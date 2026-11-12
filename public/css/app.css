@@ -2460,7 +2460,8 @@ input:focus-visible + .pm-track { outline: 2px solid var(--accent); outline-offs
 /* --- Чипы, размеры, количество --- */
 .chip, .sz { border-radius: 999px; border-color: transparent; background: var(--surface); box-shadow: var(--ring); }
 .chip:hover, .sz:not(.on):hover { border-color: transparent; box-shadow: inset 0 0 0 1px rgba(18, 20, 23, .25); }
-.chip.on, .sz.on { background: var(--ink); color: #fff; border-color: var(--ink); box-shadow: 0 8px 18px -10px rgba(13, 14, 16, .7); }
+/* Выбранный размер, фильтр, вариант — заливка цвета раздела, как в приложении */
+.chip.on, .sz.on, .chip.out.on, .chip.preo.on { background: var(--acc-grad); color: #fff; border-color: transparent; box-shadow: 0 8px 18px -10px rgba(var(--acc-rgb), .75); }
 .sz::after { display: none; }
 .qty { border-color: transparent; background: var(--surface); box-shadow: var(--ring); }
 
@@ -2946,7 +2947,6 @@ a:hover .cat-go { background: var(--ink); color: #fff; transform: rotate(-45deg)
 .badge-pre::before { background: #8a6f3a !important; box-shadow: 0 0 0 3px rgba(138, 111, 58, .18) !important; }
 .chip.preo { background: #fff; box-shadow: inset 0 0 0 1px rgba(138, 111, 58, .35); color: var(--text); position: relative; }
 .chip.preo::after { content: ""; position: absolute; top: 6px; right: 6px; width: 5px; height: 5px; border-radius: 50%; background: #b08a45; }
-.chip.preo.on { background: var(--ink); color: #fff; box-shadow: none; }
 .stock-note.pre { color: #7a5f2c; }
 .pre-box { display: grid; gap: 8px; padding: 16px 18px; border-radius: var(--r-md); background: linear-gradient(135deg, #fbf8f2, #f5f1e8); box-shadow: inset 0 0 0 1px rgba(138, 111, 58, .18); }
 .pre-top { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px; }

@@ -2360,6 +2360,26 @@
     '</div>';
   }
 
+  /* Удаление аккаунта (13.63.3): окно с последствиями и паролем; заказы в пути доставляем, чеки остаются у магазина */
+  var DEL_IC = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>';
+  async function deleteAccount(u) {
+    var orders = []; try { orders = await API.myOrders(); } catch (e) { /* без списка заказов окно всё равно покажем */ }
+    var going = orders.filter(function (o) { return o.status === 'new' || o.status === 'processing' || o.status === 'shipped'; });
+    var li = function (ok, t) { return '<li class="' + (ok ? 'ok' : 'no') + '"><span>' + (ok ? '✓' : '✕') + '</span>' + t + '</li>'; };
+    openModal('<div class="del-acc"><span class="del-acc-ic">' + DEL_IC + '</span><h3>Удалить аккаунт?</h3><ul>' +
+      li(false, 'Имя, телефон, почта, избранное и корзина удалятся навсегда') +
+      (u.bonus > 0 ? li(false, 'Сгорят ' + bonusNum(u.bonus) + ' ' + plural(u.bonus, 'бонус', 'бонуса', 'бонусов')) : '') +
+      going.map(function (o) { return li(true, 'Заказ № ' + esc(o.number) + ' — доставим его как обычно'); }).join('') +
+      li(true, 'Чеки и история заказов останутся у магазина — так требует закон') + '</ul>' +
+      '<form id="delForm" novalidate><label class="field"><span>Пароль — для подтверждения</span><input class="input" id="del-pass" type="password" autocomplete="current-password"></label>' +
+      '<p class="form-error" id="delErr"></p><button class="btn danger block">Удалить навсегда</button><button class="btn ghost block" type="button" id="delNo">Отмена</button></form></div>');
+    $('#delNo').addEventListener('click', closePanels);
+    $('#delForm').addEventListener('submit', async function (e) {
+      e.preventDefault();
+      var pw = $('#del-pass').value; if (!pw) { $('#delErr').textContent = 'Введите пароль'; return; }
+      try { await API.deleteAccount(pw); closePanels(); renderShell(); toast('Аккаунт удалён'); go('#/account'); } catch (ex) { $('#delErr').textContent = errMsg(ex); }
+    });
+  }
   function profileTab(body, u) {
     body.innerHTML = '<form class="acc-profile" id="profForm" novalidate>' +
       '<fieldset><legend>Личные данные</legend><p>Подставляем их при оформлении заказа.</p><div class="row2">' +
@@ -2372,12 +2392,14 @@
         '<label class="field" id="pfCurRow" hidden><span>Текущий пароль</span><input class="input" id="pf-cur" type="password" autocomplete="current-password" placeholder="Для смены пароля или почты"></label></fieldset>' +
       '<fieldset class="pushs" id="pushPrefs"><legend>Уведомления на телефон</legend><div class="loader">…</div></fieldset>' +
       '<fieldset><legend>Письма</legend><p>Только по делу — никаких рассылок.</p><label class="check"><input type="checkbox" data-remind' + (u.cartRemind ? ' checked' : '') + '> <span>Напоминать о товарах в корзине, если я не оформил заказ<br><small class="muted">Одно письмо на корзину, через несколько часов</small></span></label></fieldset>' +
-      '<p class="form-error" id="pfErr"></p><div class="acc-profile-act"><button class="btn">Сохранить изменения</button><button class="btn ghost" type="button" id="pfOut">Выйти из аккаунта</button></div></form>';
+      '<p class="form-error" id="pfErr"></p><div class="acc-profile-act"><button class="btn">Сохранить изменения</button><button class="btn ghost" type="button" id="pfOut">Выйти из аккаунта</button></div></form>' +
+      '<button class="acc-del" type="button" id="pfDel"><span class="acc-del-ic">' + DEL_IC + '</span><span><b>Удалить аккаунт</b><small>Личные данные удалятся, бонусы сгорят</small></span></button>';
     phoneMask($('#pf-phone')); pushSettings($('#pushPrefs'));
     // Поле «Текущий пароль» появляется, когда меняют пароль или почту
     var curNeed = function () { var need = !!$('#pf-pass').value || $('#pf-email').value.trim().toLowerCase() !== String(u.email || '').toLowerCase(); $('#pfCurRow').hidden = !need; };
     ['#pf-pass', '#pf-email'].forEach(function (q) { $(q).addEventListener('input', curNeed); });
     $('#pfOut').addEventListener('click', async function () { await API.logout(); renderShell(); toast('Вы вышли из аккаунта'); go('#/'); });
+    $('#pfDel').addEventListener('click', function () { deleteAccount(u); });
     $('#profForm').addEventListener('submit', async function (e) {
       e.preventDefault();
       var f = { firstName: $('#pf-first').value, lastName: $('#pf-last').value, phone: $('#pf-phone').value, email: $('#pf-email').value, newPassword: $('#pf-pass').value, currentPassword: $('#pf-cur').value };

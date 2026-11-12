@@ -2040,7 +2040,7 @@
     try { r = await A().API.adminPush(); } catch (e) { m.querySelector('.loader').outerHTML = '<p class="form-error">' + esc(A().errMsg(e)) + '</p>'; return; }
     var keys = Object.keys(r.prefs || {});
     var dev = st === 'on' ? '<span class="pushs-st on">Включены на этом устройстве</span><span class="pushs-btns"><button class="btn ghost sm" type="button" data-sp="test">Проверить</button><button class="btn ghost sm" type="button" data-sp="off">Выключить</button></span>'
-      : st === 'ios-install' ? '<span class="pushs-st">На iPhone уведомления приходят только из приложения: добавьте сайт на экран «Домой» и откройте панель оттуда</span><button class="btn sm" type="button" data-sp="install">Как добавить</button>'
+      : st === 'ios-app' ? '<span class="pushs-st">На iPhone уведомления панели приходят в приложении ALBAKOV — откройте панель в нём и включите их там</span>'
       : st === 'denied' ? '<span class="pushs-st">Запрещены в настройках браузера — разрешите уведомления для этого сайта и обновите страницу</span>'
       : st === 'unsupported' ? '<span class="pushs-st">Этот браузер не умеет показывать уведомления</span>'
       : '<span class="pushs-st">Выключены на этом устройстве</span><button class="btn sm" type="button" data-sp="on">Включить на этом устройстве</button>';
@@ -2071,7 +2071,6 @@
     };
     $$('[data-sp]', m).forEach(function (b) { b.addEventListener('click', async function () {
       var a = b.getAttribute('data-sp'); err.textContent = '';
-      if (a === 'install') { if (window.Install) Install.open(); return; }
       b.disabled = true;
       try {
         if (a === 'on') { await Push.enable('staff'); toast('Уведомления панели включены'); }
@@ -2222,6 +2221,7 @@
       { section: 'Контакты' },
       { k: 'phone', label: 'Телефон' }, { k: 'email', label: 'Электронная почта' },
       { k: 'address', label: 'Адрес' }, { k: 'hours', label: 'Часы работы' },
+      { k: 'appStore', label: 'Приложение в App Store', wide: true, hint: 'Ссылка вида https://apps.apple.com/ru/app/… — появится, когда Apple одобрит приложение. С ней в меню телефона и в подвале появится «Скачать в App Store», а на iPhone — подсказка про уведомления в приложении' },
       { section: 'Кнопка связи' },
       { k: 'fab', label: 'Показывать кнопку связи на всех страницах', type: 'checkbox', wide: true, hint: 'Круглая кнопка в правом нижнем углу: чат поддержки, Telegram из соцсетей, WhatsApp, телефон и почта' },
       { k: 'whatsapp', label: 'WhatsApp', hint: 'Номер для кнопки связи, например +7 999 000-00-00. Пусто — WhatsApp не показывается' }
@@ -2230,6 +2230,7 @@
       socials: { title: 'Социальные сети', hint: 'Например: Telegram — https://t.me/ваш_канал', cols: [{ k: 'name', label: 'Название' }, { k: 'url', label: 'Ссылка', flex: 2 }], get: function (s) { return s.socials; }, set: function (s, v) { s.socials = v; } }
     }, function (s) { return s.contacts; }, function (s, o) {
       s.contacts = o;
+      if (o.appStore && !/^https:\/\/apps\.apple\.com\//.test(o.appStore)) return 'Ссылка на приложение должна начинаться с https://apps.apple.com/';
       var bad = (s.socials || []).find(function (x) { return !/^https?:\/\//.test(x.url); });
       if (bad) return 'Ссылка на «' + bad.name + '» должна начинаться с https://';
       return '';

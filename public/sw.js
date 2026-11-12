@@ -1,4 +1,4 @@
-// Сервис-воркер ALBAKOV: нужен, чтобы магазин можно было установить как приложение (значок на экране «Домой»).
+// Сервис-воркер ALBAKOV: показывает push-уведомления браузера; у тех, кто раньше добавил значок на экран «Домой», — работа как приложение.
 // Ничего не кэширует — цены, остатки и корзина всегда свежие. Если нет интернета — показывает понятную страницу вместо ошибки браузера.
 const OFFLINE = `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#ffffff"><title>ALBAKOV</title><style>

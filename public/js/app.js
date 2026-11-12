@@ -295,7 +295,7 @@
       '<div class="f-grid">' +
         col('Магазин', sortedCats().map(function (x) { return '<li><a href="#/catalog?cat=' + esc(x.slug) + '">' + esc(x.name) + '</a></li>'; }).join('') + '<li><a href="#/catalog?tag=new">Новинки</a></li><li><a href="#/sale">Акции</a></li>' + (D.giftCfg && D.giftCfg.enabled !== false ? '<li><a href="#/gift">Подарочные сертификаты</a></li>' : '')) +
         col('Покупателям', '<li><a href="#/track">Где мой заказ</a></li>' + pages('help') + '<li><a href="#/sizes">Таблица размеров</a></li>' + pages('brand') +
-          '<li data-inst="installed-hide"' + (window.Install && Install.isInstalled() ? ' hidden' : '') + '><button class="foot-btn" data-act="install">Приложение на телефон</button></li>') +
+          (appStoreUrl() ? '<li><a href="' + esc(appStoreUrl()) + '" target="_blank" rel="noopener">Приложение для iPhone</a></li>' : '')) +
         col('Личный кабинет', '<li><a href="#/account?tab=orders">Мои заказы</a></li><li><a href="#/favorites">Избранное</a></li>' + (bonusCfg().enabled ? '<li><a href="#/account?tab=bonus">Бонусы</a></li>' : '') + '<li><a href="#/account?tab=support">Поддержка</a></li>') +
         '<div class="fcol fcol-contacts"><h4>Контакты</h4><ul class="f-contacts">' +
           (c.phone ? '<li><span class="f-ic">' + FI.phone + '</span><a href="tel:' + esc(c.phone.replace(/[^\d+]/g, '')) + '" class="copyable">' + esc(c.phone) + '</a></li>' : '') +
@@ -311,28 +311,17 @@
     '</div></footer>';
   }
 
-  /* ---------- Приложение: значок на экране «Домой» (логика — в install.js) ---------- */
+  /* ---------- Приложение ALBAKOV в App Store (13.62) ----------
+     Ссылку вписывает владелец (панель → «Меню, контакты, соцсети»), когда приложение пройдёт проверку Apple.
+     Внутри самого приложения кнопок «скачать» нет. */
+  function appStoreUrl() {
+    var u = (D.settings.contacts || {}).appStore || '';
+    return /^https:\/\/apps\.apple\.com\//.test(u) && !window.AlbakovApp ? u : '';
+  }
   function appMenuHtml() {
-    if (!window.Install) return '';
-    return '<div class="mnav-app">' +
-      '<button class="mnav-app-btn" data-act="install" data-inst="offer"' + (Install.canOffer() ? '' : ' hidden') + '><img src="img/icon-192.png" alt="" width="36" height="36"><span><b>Приложение ALBAKOV</b><small>Значок на экране «Домой»</small></span></button>' +
-    '</div>';
+    if (!appStoreUrl()) return '';
+    return '<div class="mnav-app"><a class="mnav-app-btn" href="' + esc(appStoreUrl()) + '" target="_blank" rel="noopener"><img src="img/icon-192.png" alt="" width="36" height="36"><span><b>Приложение ALBAKOV</b><small>Скачать в App Store</small></span></a></div>';
   }
-  function installBannerHtml() {
-    if (!window.Install || !Install.isMobile) return '';
-    return '<div class="wrap"><div class="inst-banner" data-inst="banner"' + (Install.showBanner() ? '' : ' hidden') + '>' +
-      '<img src="img/icon-192.png" alt="" width="44" height="44">' +
-      '<div class="inst-banner-text"><b>Приложение ALBAKOV</b><span>Открывается на весь экран</span></div>' +
-      '<button class="inst-banner-btn" data-act="install">Установить</button>' +
-      '<button class="inst-banner-x" data-act="install-hide" aria-label="Скрыть">' + ICON.close + '</button></div></div>';
-  }
-  function syncInstall() {
-    if (!window.Install) return;
-    $$('[data-inst="offer"]').forEach(function (el) { el.hidden = !Install.canOffer(); });
-    $$('[data-inst="banner"]').forEach(function (el) { el.hidden = !Install.showBanner(); });
-    $$('[data-inst="installed-hide"]').forEach(function (el) { el.hidden = Install.isInstalled(); });
-  }
-  document.addEventListener('install:change', syncInstall);
 
   function openPanel(id) { closePanels(); $('#' + id).classList.add('open'); $('#scrim').classList.add('open'); document.body.style.overflow = 'hidden'; }
   function closePanels() { $$('.drawer.open, .modal.open, .scrim.open').forEach(function (e) { e.classList.remove('open'); }); document.body.style.overflow = ''; }
@@ -644,7 +633,6 @@
       (h.heroText ? '<p>' + esc(h.heroText) + '</p>' : '') +
       (h.heroCta ? '<div><a class="btn" href="' + esc(safeUrl(h.heroLink || '#/catalog')) + '">' + esc(h.heroCta) + '</a></div>' : '') +
       '</div><div class="hero-media"><img src="' + esc(heroImg) + '" alt=""></div></section>';
-    html += installBannerHtml();
     if (h.showCategories !== false && D.categories.length) {
       html += '<section class="section"><div class="wrap"><div class="section-head"><h2>Категории</h2><a class="link sh-more" href="#/catalog"><span>Весь каталог</span><i aria-hidden="true">' + ARROW + '</i></a></div><div class="cats">' +
         sortedCats().filter(function (c) { return gProducts().some(function (p) { return p.categoryId === c.id; }); }).map(function (c) { return '<a class="cat" href="#/catalog?cat=' + esc(c.slug) + '"><span class="cat-ph"><img src="' + esc(c.image || Art.make(c.art)) + '" alt="" loading="lazy"></span><span class="cat-cap"><span class="cat-name">' + esc(c.name) + '</span><svg class="cat-go" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15M14 7l5 5-5 5"/></svg></span></a>'; }).join('') + '</div></div></section>';
@@ -2138,18 +2126,17 @@
     var st = await Push.state('customer'), extra = { orderId: o.id, t: orderToken(o.id) };
     if (!document.body.contains(slot)) return;
     if (st === 'on') { Push.link('customer', extra); slot.innerHTML = '<p class="push-on">' + BELL + '<span>Уведомления о заказе включены — сообщим, когда он будет в пути и когда приедет в пункт выдачи.</span></p>'; return; }
-    if (st === 'unsupported') { slot.remove(); return; }
+    if (st === 'unsupported' || (st === 'ios-app' && !appStoreUrl())) { slot.remove(); return; }
     var pv = o.delivery && o.delivery.pvz, img = (o.items.find(function (i) { return i.image; }) || {}).image || '';
     var mock = pv ? pushMock(pv.type === 'postamat' ? 'Заказ ждёт в постамате' : 'Заказ ждёт в пункте выдачи', (pv.type === 'postamat' ? 'Постамат' : 'Пункт СДЭК') + ' · ' + (pv.address || ''), img)
       : pushMock('Курьер везёт заказ № ' + o.number, 'Сегодня привезём по вашему адресу. Курьер позвонит перед приездом.', img);
-    var ios = st === 'ios-install', denied = st === 'denied';
+    var ios = st === 'ios-app', denied = st === 'denied';
     slot.innerHTML = '<div class="pushc"><div class="pushc-t"><span class="pushc-ic">' + BELL + '</span>' +
       '<h3>Узнайте первым, когда заказ приедет</h3>' +
-      '<p>' + (ios ? 'На iPhone уведомления приходят из приложения ALBAKOV. Добавьте магазин на экран «Домой», откройте заказ оттуда и включите их.' : denied ? 'Уведомления для этого сайта запрещены в настройках браузера. Разрешите их — и сообщим, когда заказ будет в пути и в пункте выдачи.' : 'Одно нажатие — и сообщим, когда заказ будет в пути, когда приедет в пункт выдачи, и напомним забрать. Без рекламы.') + '</p>' +
-      (denied ? '' : '<button class="btn" type="button" id="pushGo">' + (ios ? 'Добавить на экран «Домой»' : 'Включить уведомления') + '</button>') + '<p class="form-error" id="pushErr"></p></div>' + mock + '</div>';
+      '<p>' + (ios ? 'На iPhone уведомления приходят в приложении ALBAKOV. Скачайте его, войдите в кабинет — и заказ будет там вместе с уведомлениями.' : denied ? 'Уведомления для этого сайта запрещены в настройках браузера. Разрешите их — и сообщим, когда заказ будет в пути и в пункте выдачи.' : 'Одно нажатие — и сообщим, когда заказ будет в пути, когда приедет в пункт выдачи, и напомним забрать. Без рекламы.') + '</p>' +
+      (denied ? '' : ios ? '<a class="btn" href="' + esc(appStoreUrl()) + '" target="_blank" rel="noopener">Скачать в App Store</a>' : '<button class="btn" type="button" id="pushGo">Включить уведомления</button>') + '<p class="form-error" id="pushErr"></p></div>' + mock + '</div>';
     var b = $('#pushGo', slot); if (!b) return;
     b.addEventListener('click', async function () {
-      if (ios) { if (window.Install) Install.open(); return; }
       b.disabled = true; b.textContent = 'Включаем…';
       try { await Push.enable('customer', extra); toast('Готово — сообщим, как только заказ сдвинется'); mountOrderPush(o); }
       catch (e) { $('#pushErr', slot).textContent = errMsg(e); b.disabled = false; b.textContent = 'Включить уведомления'; }
@@ -2198,7 +2185,7 @@
     if (!document.body.contains(box)) return;
     var kinds = PUSH_KINDS.filter(function (k) { return k[0] !== 'bonus' || bonusCfg().enabled; });
     var dev = st === 'on' ? '<span class="pushs-st on">Включены на этом устройстве</span><span class="pushs-btns"><button class="btn ghost sm" type="button" data-ps="test">Проверить</button><button class="btn ghost sm" type="button" data-ps="off">Выключить</button></span>'
-      : st === 'ios-install' ? '<span class="pushs-st">На iPhone — из приложения на экране «Домой»</span><button class="btn sm" type="button" data-ps="install">Как добавить</button>'
+      : st === 'ios-app' ? '<span class="pushs-st">На iPhone уведомления приходят в приложении ALBAKOV</span>' + (appStoreUrl() ? '<a class="btn sm" href="' + esc(appStoreUrl()) + '" target="_blank" rel="noopener">Скачать в App Store</a>' : '')
       : st === 'denied' ? '<span class="pushs-st">Запрещены в настройках браузера для этого сайта</span>'
       : st === 'unsupported' ? '<span class="pushs-st">Этот браузер не поддерживает уведомления</span>'
       : '<span class="pushs-st">Выключены на этом устройстве</span><button class="btn sm" type="button" data-ps="on">Включить</button>';
@@ -2215,7 +2202,6 @@
     });
     box.addEventListener('click', async function (e) {
       var b = e.target.closest('[data-ps]'); if (!b) return; var a = b.getAttribute('data-ps'); err().textContent = '';
-      if (a === 'install') { if (window.Install) Install.open(); return; }
       b.disabled = true;
       try {
         if (a === 'on') { await Push.enable('customer'); toast('Уведомления включены'); }
@@ -3251,8 +3237,6 @@
         if (act === 'cart') openCart();
         if (act === 'search') openSearch();
         if (act === 'close') closePanels();
-        if (act === 'install' && window.Install) { closePanels(); Install.open(); }
-        if (act === 'install-hide' && window.Install) { Install.hideBanner(); syncInstall(); }
       }
       if (e.target.id === 'scrim' || e.target.id === 'modal') closePanels();
       var fb = e.target.closest('[data-fav]');

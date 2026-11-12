@@ -1030,6 +1030,8 @@ function pushPayload(m) {
 }
 const pushStats = { sent: 0, failed: 0, gone: 0 };
 async function pushTo(subs, m) {
+  // Одно устройство бывает подписано дважды — как покупатель и как сотрудник: одно сообщение уходит на него один раз
+  const seen = new Set(); subs = subs.filter((x) => !seen.has(x.endpoint) && seen.add(x.endpoint));
   if (!subs.length) return 0;
   const data = pushPayload(m), keys = db.secrets.vapid, subject = 'mailto:' + ((db.settings.contacts || {}).email || 'info@albakovofficial.ru');
   let ok = 0, dirty = false;
@@ -1938,6 +1940,28 @@ async function api(req, res, url, body) {
     Object.assign(u, { firstName: body.firstName.trim().slice(0, 60), lastName: body.lastName.trim().slice(0, 60), email, phone });
     if (body.newPassword) { if (String(body.newPassword).length < 6) fail(400, 'Пароль должен быть не короче 6 символов'); if (!pwOk(body.newPassword)) fail(400, 'Слишком длинный пароль'); u.hash = hashPassword(body.newPassword); }
     save(); return { user: publicUser(u) };
+  }
+
+  // Удаление аккаунта (13.63.3, требование App Store 5.1.1(v)): по паролю. Личные данные, избранное, корзина, бонусы,
+  // подписки и вход удаляются; заказы и чеки остаются у магазина (учёт по закону), но больше не привязаны к аккаунту
+  if (p[0] === 'me' && p[1] === 'delete' && M === 'POST') {
+    const u = user(); if (!u) fail(401, 'Войдите в личный кабинет');
+    const tk = throttle(req, 'pwcheck', 15);
+    if (!pwOk(body.password) || !checkPassword(body.password, u.hash)) fail(400, 'Пароль указан неверно');
+    throttleOk(tk);
+    if (String(u.phone || '') === OWNER_PHONE) fail(400, 'Это аккаунт владельца магазина — его нельзя удалить из кабинета');
+    db.orders.forEach((o) => { if (o.userId === u.id) o.userId = null; });
+    // Обращения в поддержку: без заказа — удаляем, по заказу — оставляем без имени и контактов
+    db.tickets = db.tickets.filter((t) => t.userId !== u.id || t.orderId);
+    db.tickets.forEach((t) => { if (t.userId === u.id) Object.assign(t, { userId: null, name: 'Удалённый покупатель', email: '', phone: '' }); });
+    db.waitlist = db.waitlist.filter((w) => w.userId !== u.id && w.email !== u.email);
+    db.pushsubs = (db.pushsubs || []).filter((x) => x.userId !== u.id);
+    if (db.secrets.staff) db.secrets.staff = db.secrets.staff.filter((x) => x.userId !== u.id);
+    for (const k in db.sessions) if (db.sessions[k].userId === u.id) delete db.sessions[k];
+    for (const m of [pendingLogins, pendingResets]) for (const [k, r] of m) if (r.userId === u.id) m.delete(k);
+    db.users = db.users.filter((x) => x.id !== u.id);
+    save(); setCookie(res, 'sid', '', 0);
+    return {};
   }
 
   if (p[0] === 'orders') {

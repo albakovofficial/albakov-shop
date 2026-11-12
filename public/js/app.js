@@ -44,8 +44,11 @@
     if (ft) { var tmp = document.createElement('div'); tmp.innerHTML = footerHtml(); ft.replaceWith(tmp.firstElementChild); bindFooter(); }
     routeKeepScroll = true; route();
   }
+  // Закрытые разделы не показываются, пока их не откроют в панели (13.63.3); открыт один раздел — переключателя нет
+  function openGenders() { return Object.keys(GENDERS).filter(function (g) { return !gClosed(g); }); }
   function genderTabs(cls) {
-    return '<div class="gtabs ' + cls + '" role="group" aria-label="Раздел">' + Object.keys(GENDERS).map(function (g) { var on = curGender() === g; return '<button class="gtab' + (on ? ' on' : '') + '" data-gender="' + g + '" aria-pressed="' + on + '">' + GENDERS[g] + (gClosed(g) ? '<small class="soon-tag">скоро</small>' : '') + '</button>'; }).join('') + '</div>';
+    var gs = openGenders(); if (gs.length < 2) return '';
+    return '<div class="gtabs ' + cls + ' n' + gs.length + '" role="group" aria-label="Раздел">' + gs.map(function (g) { var on = curGender() === g; return '<button class="gtab' + (on ? ' on' : '') + '" data-gender="' + g + '" aria-pressed="' + on + '">' + GENDERS[g] + '</button>'; }).join('') + '</div>';
   }
   function imgOf(p, i) { i = i || 0; var c = p && Pricing.colorsOf(p)[0]; return (c && c.images && c.images[i]) || Art.make(c && c.art); }
   function shownColor(p) { var cs = Pricing.colorsOf(p); return cs.find(function (c) { return Pricing.stockOf(c) > 0; }) || cs[0]; }
@@ -1013,9 +1016,9 @@
       var gCount = function (g) { return D.products.filter(function (p) { return onSale(p) && Pricing.forGender(p, g); }).length; };
       var inSection = gProducts();
       var cats = sortedCats().map(function (c) { return { c: c, n: inSection.filter(function (p) { return p.categoryId === c.id; }).length }; }).filter(function (x) { return x.n || st.cat === x.c.slug; });
-      return '<div><h4>Раздел</h4><div class="fl-list">' +
+      return (openGenders().length > 1 ? '<div><h4>Раздел</h4><div class="fl-list">' +
           flItem('data-gsel="all"', 'Вся коллекция', gCount(''), !curGender()) +
-          Object.keys(GENDERS).map(function (g) { return flItem('data-gsel="' + g + '"', GENDERS[g], gClosed(g) ? 'скоро' : gCount(g), curGender() === g); }).join('') + '</div></div>' +
+          openGenders().map(function (g) { return flItem('data-gsel="' + g + '"', GENDERS[g], gCount(g), curGender() === g); }).join('') + '</div></div>' : '') +
         '<div><h4>Категория</h4><div class="fl-list">' + flItem('data-cat=""', 'Все товары', inSection.length, !st.cat) +
           cats.map(function (x) { return flItem('data-cat="' + esc(x.c.slug) + '"', esc(x.c.name), x.n, st.cat === x.c.slug); }).join('') + '</div></div>' +
         sizeFilterHtml() +
@@ -2360,6 +2363,26 @@
     '</div>';
   }
 
+  /* Удаление аккаунта (13.63.3): окно с последствиями и паролем; заказы в пути доставляем, чеки остаются у магазина */
+  var DEL_IC = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>';
+  async function deleteAccount(u) {
+    var orders = []; try { orders = await API.myOrders(); } catch (e) { /* без списка заказов окно всё равно покажем */ }
+    var going = orders.filter(function (o) { return o.status === 'new' || o.status === 'processing' || o.status === 'shipped'; });
+    var li = function (ok, t) { return '<li class="' + (ok ? 'ok' : 'no') + '"><span>' + (ok ? '✓' : '✕') + '</span>' + t + '</li>'; };
+    openModal('<div class="del-acc"><span class="del-acc-ic">' + DEL_IC + '</span><h3>Удалить аккаунт?</h3><ul>' +
+      li(false, 'Имя, телефон, почта, избранное и корзина удалятся навсегда') +
+      (u.bonus > 0 ? li(false, 'Сгорят ' + bonusNum(u.bonus) + ' ' + plural(u.bonus, 'бонус', 'бонуса', 'бонусов')) : '') +
+      going.map(function (o) { return li(true, 'Заказ № ' + esc(o.number) + ' — доставим его как обычно'); }).join('') +
+      li(true, 'Чеки и история заказов останутся у магазина — так требует закон') + '</ul>' +
+      '<form id="delForm" novalidate><label class="field"><span>Пароль — для подтверждения</span><input class="input" id="del-pass" type="password" autocomplete="current-password"></label>' +
+      '<p class="form-error" id="delErr"></p><button class="btn danger block">Удалить навсегда</button><button class="btn ghost block" type="button" id="delNo">Отмена</button></form></div>');
+    $('#delNo').addEventListener('click', closePanels);
+    $('#delForm').addEventListener('submit', async function (e) {
+      e.preventDefault();
+      var pw = $('#del-pass').value; if (!pw) { $('#delErr').textContent = 'Введите пароль'; return; }
+      try { await API.deleteAccount(pw); closePanels(); renderShell(); toast('Аккаунт удалён'); go('#/account'); } catch (ex) { $('#delErr').textContent = errMsg(ex); }
+    });
+  }
   function profileTab(body, u) {
     body.innerHTML = '<form class="acc-profile" id="profForm" novalidate>' +
       '<fieldset><legend>Личные данные</legend><p>Подставляем их при оформлении заказа.</p><div class="row2">' +
@@ -2372,12 +2395,14 @@
         '<label class="field" id="pfCurRow" hidden><span>Текущий пароль</span><input class="input" id="pf-cur" type="password" autocomplete="current-password" placeholder="Для смены пароля или почты"></label></fieldset>' +
       '<fieldset class="pushs" id="pushPrefs"><legend>Уведомления на телефон</legend><div class="loader">…</div></fieldset>' +
       '<fieldset><legend>Письма</legend><p>Только по делу — никаких рассылок.</p><label class="check"><input type="checkbox" data-remind' + (u.cartRemind ? ' checked' : '') + '> <span>Напоминать о товарах в корзине, если я не оформил заказ<br><small class="muted">Одно письмо на корзину, через несколько часов</small></span></label></fieldset>' +
-      '<p class="form-error" id="pfErr"></p><div class="acc-profile-act"><button class="btn">Сохранить изменения</button><button class="btn ghost" type="button" id="pfOut">Выйти из аккаунта</button></div></form>';
+      '<p class="form-error" id="pfErr"></p><div class="acc-profile-act"><button class="btn">Сохранить изменения</button><button class="btn ghost" type="button" id="pfOut">Выйти из аккаунта</button></div></form>' +
+      '<button class="acc-del" type="button" id="pfDel"><span class="acc-del-ic">' + DEL_IC + '</span><span><b>Удалить аккаунт</b><small>Личные данные удалятся, бонусы сгорят</small></span></button>';
     phoneMask($('#pf-phone')); pushSettings($('#pushPrefs'));
     // Поле «Текущий пароль» появляется, когда меняют пароль или почту
     var curNeed = function () { var need = !!$('#pf-pass').value || $('#pf-email').value.trim().toLowerCase() !== String(u.email || '').toLowerCase(); $('#pfCurRow').hidden = !need; };
     ['#pf-pass', '#pf-email'].forEach(function (q) { $(q).addEventListener('input', curNeed); });
     $('#pfOut').addEventListener('click', async function () { await API.logout(); renderShell(); toast('Вы вышли из аккаунта'); go('#/'); });
+    $('#pfDel').addEventListener('click', function () { deleteAccount(u); });
     $('#profForm').addEventListener('submit', async function (e) {
       e.preventDefault();
       var f = { firstName: $('#pf-first').value, lastName: $('#pf-last').value, phone: $('#pf-phone').value, email: $('#pf-email').value, newPassword: $('#pf-pass').value, currentPassword: $('#pf-cur').value };
@@ -3210,6 +3235,8 @@
       return;
     }
     API = c.api; D = c.data;
+    // Покупатель был в разделе, который закрыли, — показываем всю коллекцию
+    if (curGender() && gClosed(curGender())) { genderChoice = 'all'; try { localStorage.setItem(LS_G, 'all'); } catch (e) {} paintGender(); }
     window.App = { careIcon: careIcon, API: API, D: D, plural: plural, slideHtml: slideHtml, brandHtml: brandHtml, brandMode: brandMode, esc: esc, fmt: fmt, toast: toast, errMsg: errMsg, imgOf: imgOf, refresh: refresh, go: go, openModal: openModal, closePanels: closePanels, fmtPhone: fmtPhone, fmtDate: fmtDate, STATUS: STATUS, PAY: PAY };
     renderShell();
     initAnalytics();

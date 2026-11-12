@@ -119,6 +119,7 @@
     // Push-уведомления: настройки покупателя и сотрудника, рассылка акций
     async pushPrefs(prefs) { return await call(prefs ? 'PUT' : 'GET', 'api/me/push', prefs ? { prefs: prefs } : undefined); },
     async adminAudit(q) { return await call('GET', 'api/admin/audit?' + new URLSearchParams(q || {}).toString()); },
+    async adminApns(m, body) { return await call(m || 'GET', 'api/admin/apns', body); },
     async adminPush(prefs) { return await call(prefs ? 'PUT' : 'GET', 'api/admin/push', prefs ? { prefs: prefs } : undefined); },
     async adminPushBroadcast(b) { return await call('POST', 'api/admin/push/broadcast', b); },
     async adminStaff(m, id, body) { return (await call(m, 'api/admin/staff' + (id ? '/' + encodeURIComponent(id) : ''), body)).staff; },

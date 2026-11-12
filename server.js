@@ -14,7 +14,8 @@ const smtp = require('./lib/smtp.js');
 const Store = require('./lib/db.js');
 const CdekLib = require('./lib/cdek.js');
 const WebPush = require('./lib/webpush.js');
-const Audit = require('./lib/audit.js'); // уведомления в браузер и приложение на телефоне
+const Audit = require('./lib/audit.js');
+const Apns = require('./lib/apns.js'); // уведомления в браузер и приложение на телефоне
 
 loadEnv(path.join(__dirname, '.env'));
 const PORT = Number(process.env.PORT || 3000);
@@ -1009,6 +1010,9 @@ setInterval(() => { if (statDirty) { statDirty = false; save(); } }, 60e3).unref
    Владельцу и сотрудникам — по их роли: новые заказы, оплаты, вопросы, заявки, возвраты, остатки, входы в панель, итоги дня.
    Подписка — это устройство: телефон или браузер. Ключи VAPID создаются один раз и хранятся в базе. */
 if (!db.secrets.vapid || !db.secrets.vapid.publicKey) { db.secrets.vapid = WebPush.generateKeys(); save(); }
+// Приложение на iPhone: ключ Apple для push (панель → «Push-уведомления» → «Приложение iPhone»)
+const IOS_BUNDLE = process.env.IOS_BUNDLE_ID || 'ru.albakovofficial.app';
+function apnsCfg() { const a = db.secrets.apns; return a && a.p8 && a.keyId && a.teamId ? Object.assign({ bundleId: IOS_BUNDLE }, a) : null; }
 // Что можно включать покупателю (по умолчанию всё, кроме акций)
 const PUSH_CUSTOMER = { orders: true, support: true, returns: true, stock: true, bonus: true, promo: false };
 // Что приходит сотрудникам и кому по праву роли
@@ -1034,11 +1038,17 @@ async function pushTo(subs, m) {
   if (!subs.length) return 0;
   const data = pushPayload(m), keys = db.secrets.vapid, subject = 'mailto:' + ((db.settings.contacts || {}).email || 'info@albakovofficial.ru');
   let ok = 0, dirty = false;
+  const ac = apnsCfg();
   await Promise.all(subs.map(async (x) => {
-    const r = await WebPush.send(x, data, keys, { subject, urgency: m.urgent ? 'high' : 'normal', ttl: m.ttl || 86400 * 2 });
+    // Приложение ALBAKOV на iPhone — через Apple (адрес «apns:<токен>»), браузеры — через web-push
+    const ios = x.endpoint.startsWith('apns:');
+    if (ios && !ac) return;
+    const r = ios ? await Apns.send(x.endpoint.slice(5), data, ac, { env: x.env, ttl: m.ttl })
+      : await WebPush.send(x, data, keys, { subject, urgency: m.urgent ? 'high' : 'normal', ttl: m.ttl || 86400 * 2 });
+    if (ios && Apns.gone(r)) r.status = 410;
     if (r.status >= 200 && r.status < 300) { ok++; pushStats.sent++; x.lastOk = new Date().toISOString(); x.fails = 0; dirty = true; }
     else if (r.status === 404 || r.status === 410) { db.pushsubs = db.pushsubs.filter((y) => y !== x); pushStats.gone++; dirty = true; }
-    else { pushStats.failed++; x.fails = (x.fails || 0) + 1; dirty = true; if (x.fails >= 20) db.pushsubs = db.pushsubs.filter((y) => y !== x); console.error('Push не доставлен:', r.status, r.error || ''); }
+    else { pushStats.failed++; x.fails = (x.fails || 0) + 1; dirty = true; if (x.fails >= 20) db.pushsubs = db.pushsubs.filter((y) => y !== x); console.error('Push не доставлен:', r.status, r.reason || r.error || ''); }
   }));
   if (dirty) save();
   return ok;
@@ -1108,9 +1118,11 @@ setInterval(() => {
 }, 5 * 60e3).unref();
 function pushSubscribe(req, b) {
   throttle(req, 'push', 60);
-  const sub = b.sub || {}, keys = sub.keys || {};
+  // Приложение на iPhone присылает адрес устройства Apple (b.apns = { token, env }) вместо подписки браузера
+  const ap = b.apns && /^[a-f0-9]{64,200}$/i.test(String(b.apns.token || '')) ? b.apns : null;
+  const sub = ap ? { endpoint: 'apns:' + String(ap.token).toLowerCase(), keys: { p256dh: '', auth: '' } } : (b.sub || {}), keys = sub.keys || {};
   const endpoint = String(sub.endpoint || '');
-  if (!/^https:\/\/[^\s]{10,1000}$/.test(endpoint) || !keys.p256dh || !keys.auth || String(keys.p256dh).length > 200 || String(keys.auth).length > 100) fail(400, 'Неверная подписка');
+  if (!ap && (!/^https:\/\/[^\s]{10,1000}$/.test(endpoint) || !keys.p256dh || !keys.auth || String(keys.p256dh).length > 200 || String(keys.auth).length > 100)) fail(400, 'Неверная подписка');
   // Браузер сменил ключи (pushsubscriptionchange): переносим все прежние подписки устройства на новый адрес
   if (b.old) {
     const olds = db.pushsubs.filter((y) => y.endpoint === String(b.old));
@@ -1123,6 +1135,7 @@ function pushSubscribe(req, b) {
   let x = db.pushsubs.find((y) => y.endpoint === endpoint && (y.scope === 'staff') === staff);
   if (!x) { x = { id: uid('ps'), endpoint, at: new Date().toISOString(), orderIds: [] }; db.pushsubs.push(x); }
   Object.assign(x, { p256dh: String(keys.p256dh), auth: String(keys.auth), scope: staff ? 'staff' : 'customer', ua: String(req.headers['user-agent'] || '').slice(0, 160) });
+  if (ap) x.env = ap.env === 'development' ? 'development' : 'production';
   if (staff) x.userId = u.id; else x.userId = u ? u.id : null; // вышел из кабинета — уведомления аккаунта сюда больше не идут
   if (!staff && b.orderId) {
     const o = db.orders.find((y) => y.id === b.orderId);
@@ -2040,6 +2053,7 @@ async function api(req, res, url, body) {
     if (p[1] === 'test' && M === 'POST') {
       throttle(req, 'pushtest', 20);
       const e = String(body.endpoint || ''), x = db.pushsubs.find((y) => y.endpoint === e && (body.scope === 'staff') === (y.scope === 'staff')); if (!x) fail(404, 'Устройство не подписано');
+      if (x.endpoint.startsWith('apns:') && !apnsCfg()) fail(400, 'Уведомления в приложении заработают, когда владелец добавит ключ Apple в панели');
       const n = await pushTo([x], body.scope === 'staff'
         ? { title: 'Уведомления панели включены', body: 'Сюда будут приходить новые заказы, вопросы и заявки — по вашей роли.', url: '/admin', tag: 'test' }
         : { title: 'Уведомления включены', body: 'Сообщим, когда заказ будет в пути и когда приедет в пункт выдачи.', url: '/account', tag: 'test' });
@@ -2122,7 +2136,7 @@ async function api(req, res, url, body) {
       products: ['content'], categories: ['content'], sizeCharts: ['content'], pages: ['content'], promotions: ['content', 'marketing'], promocodes: ['content', 'marketing'],
       finance: ['finance'], 'seo-ping': ['marketing'], 'owner-notify': ['mail'], 'mail-catalog': ['mail'],
       mail: !p[2] && M === 'POST' ? ['payment'] : ['mail'], // пароль почты для отправки меняет только тот, кому доверены ключи
-      cdek: ['payment'], 'payment-secret': ['payment'], settings: [], push: []
+      cdek: ['payment'], 'payment-secret': ['payment'], settings: [], push: [], apns: ['staff']
     };
     const need = Object.prototype.hasOwnProperty.call(ROUTE_PERMS, p[1]) ? ROUTE_PERMS[p[1]] : ['staff'];
     if (need.length) requirePerm(req, ...need);
@@ -2135,6 +2149,18 @@ async function api(req, res, url, body) {
       if (till) list = list.filter((x) => x.at < till);
       const people = {}; db.audit.forEach((x) => { if (x.by) people[x.by] = x.name; });
       return { items: list.slice(0, 100), more: list.length > 100, people: Object.keys(people).map((id) => ({ id, name: people[id] })) };
+    }
+    // Ключ Apple для push в приложении на iPhone. Сам ключ наружу не отдаём — только Key ID и Team ID
+    if (p[1] === 'apns') {
+      if (M === 'PUT') {
+        const v = { keyId: String(body.keyId || '').trim().toUpperCase(), teamId: String(body.teamId || '').trim().toUpperCase(), p8: String(body.p8 || '').trim() };
+        if (!v.p8 && db.secrets.apns) v.p8 = db.secrets.apns.p8;   // ключ уже сохранён — меняют только ID
+        const er = Apns.checkKey(v); if (er) fail(400, er);
+        db.secrets.apns = Object.assign(v, { at: new Date().toISOString() }); save();
+      }
+      if (M === 'DELETE') { delete db.secrets.apns; save(); }
+      const a = db.secrets.apns;
+      return { set: !!apnsCfg(), keyId: a ? a.keyId : '', teamId: a ? a.teamId : '', bundleId: IOS_BUNDLE, devices: db.pushsubs.filter((x) => x.endpoint.startsWith('apns:')).length };
     }
     // Push сотрудника: свои настройки; рассылка акций — с правом marketing
     if (p[1] === 'push') {
@@ -2719,6 +2745,18 @@ const server = http.createServer(async (req, res) => {
     return;
   }
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); return res.end(); }
+  // Universal Links: ссылки albakovofficial.ru открываются сразу в приложении на iPhone (Team ID — из ключа Apple)
+  if (url.pathname === '/.well-known/apple-app-site-association' || url.pathname === '/apple-app-site-association') {
+    const team = (db.secrets.apns && db.secrets.apns.teamId) || process.env.APPLE_TEAM_ID || '';
+    if (!team) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('Not found'); return; }
+    const app = team + '.' + IOS_BUNDLE;
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600' });
+    res.end(JSON.stringify({
+      applinks: { details: [{ appIDs: [app], components: [{ '/': '/api/*', exclude: true }, { '/': '/uploads/*', exclude: true }, { '/': '/img/*', exclude: true }, { '/': '/*.*', exclude: true }, { '/': '/*' }] }] },
+      webcredentials: { apps: [app] }
+    }));
+    return;
+  }
   if (url.pathname === '/robots.txt') {
     // /api/state открыт: без него витрина у робота не загружается (Google видел одну заставку — «ложная 404»)
     res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=3600' });

@@ -4063,3 +4063,5 @@ body::after { content: none; display: none; }
 .pask-btns { display: grid; gap: 8px; margin-top: 4px; }
 .pask-btns .btn { width: 100%; }
 .pask .form-error:empty { display: none; }
+.ps-apns { margin-top: 16px; display: grid; gap: 14px; }
+.ps-apns .textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }

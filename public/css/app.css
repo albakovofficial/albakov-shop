@@ -1547,18 +1547,21 @@ html { touch-action: manipulation; }
 .fab-btn svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linejoin: round; stroke-linecap: round; }
 .fab.open .fab-btn { transform: rotate(-8deg); }
 .fab-dot { position: absolute; top: 4px; right: 4px; width: 12px; height: 12px; border-radius: 50%; background: var(--danger); border: 2px solid var(--paper); }
-.fab-panel { width: min(320px, calc(100vw - 40px)); padding: 8px; background: var(--paper); border: 1px solid var(--line); box-shadow: 0 30px 60px -28px rgba(18, 20, 23, .4); transform-origin: 100% 100%; animation: fabIn .3s var(--ease); }
-@keyframes fabIn { from { opacity: 0; transform: translateY(8px) scale(.97); } }
-.fp-head { display: grid; gap: 2px; padding: 12px 12px 14px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
-.fp-head b { font-family: var(--serif); font-weight: 400; font-size: 20px; }
-.fp-head span { font-size: 13px; color: var(--muted); }
-.fp-row { display: flex; align-items: center; gap: 14px; padding: 10px 12px; transition: background .2s; }
-.fp-row:hover, .fp-row:focus-visible { background: var(--surface); }
-.fp-row b { display: block; font-weight: 500; font-size: 15px; }
-.fp-row small { display: block; font-size: 13px; color: var(--muted); }
-.fp-ic { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--line-strong); }
-.fp-row:first-of-type .fp-ic { background: var(--text); border-color: var(--text); color: var(--paper); }
-.fp-ic svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linejoin: round; stroke-linecap: round; }
+/* Окно «Мы на связи» — капсулы над кнопкой (13.62.5): без общей рамки, каждая выезжает по очереди */
+.fab-panel { display: grid; justify-items: end; gap: 10px; }
+.fab-panel[hidden] { display: none; }
+.fp-hours { font-size: 12px; color: var(--muted); padding: 6px 12px; border-radius: 999px; background: color-mix(in srgb, var(--paper) 88%, transparent); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); box-shadow: var(--ring); animation: fpIn .35s var(--ease) both; }
+.fp-cap { display: flex; align-items: center; gap: 12px; max-width: calc(100vw - 28px); padding: 6px 6px 6px 18px; border-radius: 999px; background: var(--paper); color: var(--text); box-shadow: 0 10px 30px -12px rgba(13, 14, 16, .45), var(--ring); font-size: 14.5px; font-weight: 500; letter-spacing: .01em; transition: transform .25s var(--ease), box-shadow .25s; animation: fpIn .4s var(--ease) both; }
+.fp-cap span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fp-cap:hover, .fp-cap:focus-visible { transform: translateX(-3px); box-shadow: 0 14px 34px -12px rgba(13, 14, 16, .5), var(--ring); }
+.fp-ic { flex: none; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: var(--surface); }
+.fp-cap:first-of-type .fp-ic { background: var(--text); color: var(--paper); }
+.fp-ic svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linejoin: round; stroke-linecap: round; }
+/* выезжают снизу вверх: ближняя к кнопке — первой */
+.fab-panel > :nth-last-child(1) { animation-delay: 0s; } .fab-panel > :nth-last-child(2) { animation-delay: .04s; } .fab-panel > :nth-last-child(3) { animation-delay: .08s; }
+.fab-panel > :nth-last-child(4) { animation-delay: .12s; } .fab-panel > :nth-last-child(5) { animation-delay: .16s; } .fab-panel > :nth-last-child(6) { animation-delay: .2s; }
+@keyframes fpIn { from { opacity: 0; transform: translateY(12px) scale(.96); } }
+@media (prefers-reduced-motion: reduce) { .fp-cap, .fp-hours { animation: none; } }
 .to-top { bottom: calc(92px + env(safe-area-inset-bottom, 0px)); right: calc(24px + env(safe-area-inset-right, 0px)); }
 @media (max-width: 860px) {
   .fab { right: calc(14px + env(safe-area-inset-right, 0px)); bottom: calc(86px + env(safe-area-inset-bottom, 0px)); }
@@ -4038,16 +4041,3 @@ body::after { content: none; display: none; }
   .in-app:has(.sticky-buy) .to-top { bottom: calc(146px + env(safe-area-inset-bottom, 0px)); }
 }
 
-/* Окно «Мы на связи» на телефоне — компактное, не закрывает полстраницы (13.62.3) */
-@media (max-width: 600px) {
-  .fab-panel { width: min(290px, calc(100vw - 28px)); padding: 6px; }
-  .fp-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 7px 10px 8px; margin-bottom: 2px; }
-  .fp-head b { font-size: 15px; line-height: 1.3; white-space: nowrap; }
-  .fp-head span { font-size: 11.5px; line-height: 1.3; white-space: nowrap; }
-  .fp-row { gap: 11px; padding: 6px 10px; line-height: 1.3; }
-  .fp-row > span:last-child { min-width: 0; }
-  .fp-row b { font-size: 14px; line-height: 1.3; }
-  .fp-row small { font-size: 12px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .fp-ic { width: 34px; height: 34px; }
-  .fp-ic svg { width: 17px; height: 17px; }
-}

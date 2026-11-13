@@ -2993,73 +2993,164 @@
       '. Пополните остаток нужного цвета и размера и нажмите «Сохранить» — письма уйдут автоматически.</div>';
   }
 
-  /* ================= Поддержка: переписка с покупателями ================= */
-  var SUP_STATE = { open: 'Ждёт ответа', answered: 'Отвечено', closed: 'Закрыто' };
+  /* ================= Поддержка (13.64.3): все обращения с поиском, переписка, карточка покупателя ================= */
+  var SUP_STATE = { open: 'Ждёт ответа', answered: 'Отвечено', closed: 'Решено' };
+  var SUP_F = [['active', 'В работе'], ['open', 'Ждут ответа'], ['closed', 'Решённые'], ['all', 'Все']];
   function supTime(iso) {
     var d = new Date(iso), t = d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
     return d.toDateString() === new Date().toDateString() ? t : d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) + ', ' + t;
   }
-  var supPoll = null;
+  function supAgo(a, b) { var m = Math.max(1, Math.round((Date.parse(b) - Date.parse(a)) / 60000)); return m < 60 ? m + ' мин' : m < 1440 ? Math.round(m / 60) + ' ч' : Math.round(m / 1440) + ' дн'; }
+  var supPoll = null, supQ = '', supTopic = '';
+  // Поиск: номер обращения, имя, телефон, почта, номер заказа и текст переписки
+  function supMatch(t, q) {
+    if (!q) return true;
+    var d = q.replace(/\D/g, ''), hay = [t.number, t.name, t.email, t.orderNumber, t.topic].concat(t.messages.map(function (x) { return x.text; })).join(' ').toLowerCase();
+    return hay.indexOf(q.toLowerCase().replace(/^№\s*/, '')) >= 0 || (d.length >= 4 && String(t.phone || '').replace(/\D/g, '').indexOf(d) >= 0);
+  }
   async function supportSection(m, q) {
     clearInterval(supPoll);
-    m.innerHTML = head('Поддержка', '', 'Вопросы покупателей из личного кабинета. Ответ сразу появится у покупателя в кабинете, а если настроена почта — придёт ему и письмом.') + '<div class="loader" style="min-height:200px">…</div>';
-    var list;
-    try { list = await A().API.adminSupport(); } catch (e) { m.lastElementChild.outerHTML = '<p class="form-error">' + esc(A().errMsg(e)) + '</p>'; return; }
+    m.innerHTML = head('Поддержка', '', 'Все обращения покупателей хранятся здесь: решённые — в архиве, их находит поиск. Ответ сразу появится у покупателя в кабинете и приложении, придёт письмом и уведомлением.') + '<div class="loader" style="min-height:200px">…</div>';
+    var r;
+    try { r = await A().API.adminSupport(); } catch (e) { m.lastElementChild.outerHTML = '<p class="form-error">' + esc(A().errMsg(e)) + '</p>'; return; }
     if (!document.body.contains(m)) return;
-    var f = q.f || 'active';
-    var inF = function (t, k) { return k === 'all' ? true : k === 'closed' ? t.status === 'closed' : t.status !== 'closed'; };
-    var shown = list.filter(function (t) { return inF(t, f); });
+    var list = r.tickets, templates = r.templates || [], f = q.f || 'active';
+    var inF = function (t, k) { return k === 'all' ? true : k === 'closed' ? t.status === 'closed' : k === 'open' ? t.status === 'open' : t.status !== 'closed'; };
+    var topics = []; list.forEach(function (t) { if (topics.indexOf(t.topic) < 0) topics.push(t.topic); });
     var cur = q.id ? list.find(function (t) { return t.id === q.id; }) : null;
-    var filters = [['active', 'Открытые'], ['closed', 'Закрытые'], ['all', 'Все']].map(function (x) {
-      return '<a class="adm-chip' + (f === x[0] ? ' on' : '') + '" href="#/admin?s=support&f=' + x[0] + '">' + x[1] + ' <span>' + list.filter(function (t) { return inF(t, x[0]); }).length + '</span></a>';
+    var items = function () {
+      var shown = list.filter(function (t) { return (supQ ? true : inF(t, f)) && (!supTopic || t.topic === supTopic) && supMatch(t, supQ.trim()); });
+      if (!shown.length) return '<p class="as-empty">' + (supQ ? 'Ничего не нашлось. Ищем по номеру обращения, имени, телефону, почте, номеру заказа и тексту.' : f === 'closed' ? 'Решённых обращений пока нет.' : 'Новых вопросов нет. Когда покупатель напишет, обращение появится здесь.') + '</p>';
+      return shown.map(function (t) {
+        var last = t.messages.filter(function (x) { return x.from !== 'note'; }).slice(-1)[0] || t.messages[0];
+        var txt = last.text ? esc(last.text.slice(0, 90)) : (last.files || []).length ? 'Фото' : '';
+        return '<a class="as-item' + (cur && cur.id === t.id ? ' on' : '') + (t.unreadShop ? ' unread' : '') + '" href="#/admin?s=support&f=' + f + '&id=' + esc(t.id) + '">' +
+          '<span class="as-top"><span class="sup-num' + (t.status !== 'closed' ? ' on' : '') + '">№ ' + esc(t.number) + '</span><b>' + esc(t.name || 'Покупатель') + '</b>' + (t.unreadShop ? '<i class="sc-dot" aria-label="Не прочитано"></i>' : '') + '<time>' + esc(supTime(t.updatedAt)) + '</time></span>' +
+          '<span class="as-sub">' + esc(t.topic) + (t.orderNumber ? ' · заказ № ' + esc(t.orderNumber) : '') + (t.assignee ? ' · ' + esc(t.assignee.name) : '') + '</span>' +
+          '<span class="as-text">' + (last.from === 'shop' ? 'Вы: ' : '') + txt + '</span>' +
+          '<span class="sup-st s-' + t.status + '">' + SUP_STATE[t.status] + '</span></a>';
+      }).join('');
+    };
+    var chips = SUP_F.map(function (x) {
+      return '<a class="adm-chip' + (f === x[0] && !supQ ? ' on' : '') + '" href="#/admin?s=support&f=' + x[0] + '">' + x[1] + ' <span>' + list.filter(function (t) { return inF(t, x[0]); }).length + '</span></a>';
     }).join('');
-    var items = shown.length ? shown.map(function (t) {
-      var last = t.messages[t.messages.length - 1];
-      return '<a class="sup-item' + (cur && cur.id === t.id ? ' on' : '') + (t.unreadShop ? ' unread' : '') + '" href="#/admin?s=support&f=' + f + '&id=' + esc(t.id) + '">' +
-        '<span class="si-top"><b>' + esc(t.name || 'Покупатель') + '</b><time>' + esc(supTime(t.updatedAt)) + '</time></span>' +
-        '<span class="si-sub">№ ' + esc(t.number) + ' · ' + esc(t.topic) + (t.orderNumber ? ' · заказ ' + esc(t.orderNumber) : '') + '</span>' +
-        '<span class="si-text">' + (last.from === 'shop' ? 'Вы: ' : '') + esc(last.text.slice(0, 80)) + '</span>' +
-        '<span class="si-state s-' + t.status + '">' + SUP_STATE[t.status] + '</span></a>';
-    }).join('') : '<p class="muted" style="padding:18px 4px;font-size:14px">' + (f === 'closed' ? 'Закрытых обращений нет.' : 'Новых вопросов нет. Когда покупатель напишет из кабинета, обращение появится здесь.') + '</p>';
-    var pane = cur ? '<div class="sup-thread adm-thread">' +
-        '<header class="st-head"><div><b>' + esc(cur.name || 'Покупатель') + ' · ' + esc(cur.topic) + '</b><span>№ ' + esc(cur.number) + (cur.orderNumber ? ' · <a href="#/admin?s=orders&id=' + esc(cur.orderId) + '">заказ № ' + esc(cur.orderNumber) + '</a>' : '') +
-          (cur.email ? ' · ' + esc(cur.email) : '') + (cur.phone ? ' · ' + esc(A().fmtPhone(cur.phone)) : '') + '</span></div>' +
-          '<button class="btn ghost sm" id="supToggle" type="button">' + (cur.status === 'closed' ? 'Открыть снова' : 'Закрыть обращение') + '</button></header>' +
-        '<div class="st-msgs" id="stMsgs">' + supMsgs(cur) + '</div>' +
-        '<form class="st-send" id="stSend"><textarea class="textarea" id="stText" rows="3" placeholder="Ответ покупателю" maxlength="2000" aria-label="Ответ покупателю"></textarea><button class="btn" id="stBtn">Ответить</button></form>' +
-        '<p class="st-note">Ctrl + Enter — отправить</p></div>'
-      : '<div class="sup-pick"><h3>' + (list.length ? 'Выберите обращение' : 'Обращений пока нет') + '</h3><p>Покупатели пишут из личного кабинета, со страницы заказа или через кнопку связи на сайте.</p></div>';
-    m.lastElementChild.outerHTML = '<div class="adm-sup"><div class="adm-chips">' + filters + '</div><div class="sup adm-sup-grid' + (cur ? ' has-pane' : '') + '"><aside class="sup-list"><div class="sup-items">' + items + '</div></aside><section class="sup-pane">' + pane + '</section></div></div>';
-    if (!cur) return;
-    var box = $('#stMsgs', m), ta = $('#stText', m), count = cur.messages.length;
-    box.scrollTop = box.scrollHeight;
-    if (cur.unreadShop) A().API.adminSupportPatch(cur.id, { read: true }).then(function () {
+    var pane = cur ? '<section class="as-pane"><div class="loader" style="min-height:300px">…</div></section>'
+      : '<section class="as-pane as-pick"><span class="sp-ic"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M5 5h14v11H10l-5 4z"/></svg></span><h3>' + (list.length ? 'Выберите обращение' : 'Обращений пока нет') + '</h3><p>Покупатели пишут из личного кабинета на сайте, из приложения и со страницы заказа.</p></section>';
+    m.lastElementChild.outerHTML = '<div class="as' + (cur ? ' as-focus' : '') + '">' +
+      '<div class="as-tools"><label class="as-search"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>' +
+        '<input type="search" id="asQ" value="' + esc(supQ) + '" placeholder="№ обращения, имя, телефон, почта, заказ или текст" aria-label="Поиск обращений"></label>' +
+        '<select class="select as-topic" id="asTopic" aria-label="Тема"><option value="">Все темы</option>' + topics.map(function (x) { return '<option' + (x === supTopic ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + '</select></div>' +
+      '<div class="adm-chips">' + chips + '</div>' +
+      '<div class="as-grid' + (cur ? ' has-pane' : '') + '"><aside class="as-list" id="asList">' + items() + '</aside>' + pane + '</div></div>';
+    var qi = $('#asQ', m);
+    qi.addEventListener('input', function () { supQ = qi.value; $('#asList', m).innerHTML = items(); $$('.adm-chip', m).forEach(function (c) { c.classList.toggle('on', !supQ && c.getAttribute('href').indexOf('f=' + f) > 0); }); });
+    $('#asTopic', m).addEventListener('change', function (e) { supTopic = e.target.value; $('#asList', m).innerHTML = items(); });
+    if (cur) supThread(m, q, cur.id, templates);
+  }
+  function supNote(x) { return '<div class="msg from-note"><div class="msg-col"><div class="msg-b"><span class="msg-who">Заметка · ' + esc(x.by || 'сотрудник') + '</span><p>' + esc(x.text) + '</p></div><time>' + esc(supTime(x.at)) + '</time></div></div>'; }
+  function supMsgs(t) {
+    var base = 'api/admin/support/file/', day = '';
+    var imgs = function (fs) { return fs && fs.length ? '<span class="sup-ph n' + Math.min(fs.length, 3) + '">' + fs.map(function (f) { var u = base + encodeURIComponent(f); return '<a href="' + u + '" target="_blank" rel="noopener"><img src="' + u + '" alt="Фото" loading="lazy"></a>'; }).join('') + '</span>' : ''; };
+    return t.messages.map(function (x) {
+      var d = A().msgDay(x.at), sep = d !== day ? '<span class="msg-day">' + esc(d) + '</span>' : ''; day = d;
+      if (x.from === 'note') return sep + supNote(x);
+      var shop = x.from === 'shop', read = shop && t.userReadAt && t.userReadAt >= x.at;
+      return sep + '<div class="msg ' + (shop ? 'from-me' : 'from-shop') + '">' + (!shop ? '<span class="msg-ava" aria-hidden="true">' + esc((t.name || 'П').charAt(0).toUpperCase()) + '</span>' : '') + '<div class="msg-col">' +
+        (x.text ? '<div class="msg-b">' + (!shop ? '<span class="msg-who">' + esc(t.name || 'Покупатель') + '</span>' : '') + '<p>' + esc(x.text) + '</p></div>' : '') + imgs(x.files) +
+        '<time>' + (shop && x.by ? esc(x.by) + ' · ' : '') + esc(supTime(x.at)) + (shop ? (read ? ' · прочитано' : ' · отправлено') : '') + '</time></div></div>';
+    }).join('');
+  }
+  async function supThread(m, q, id, templates) {
+    var pane = $('.as-pane', m), r;
+    try { r = await A().API.adminSupportGet(id); } catch (e) { pane.innerHTML = '<p class="form-error">' + esc(A().errMsg(e)) + '</p>'; return; }
+    if (!document.body.contains(pane)) return;
+    var t = r.ticket, c = r.customer, me = (A().API.user || {}).id, closed = t.status === 'closed';
+    var STATUS = A().STATUS, fmt = A().fmt;
+    var tpl = function () { return templates.map(function (x, i) { return '<button type="button" class="as-tpl" data-tpl="' + i + '" title="' + esc(x.text) + '">' + esc(x.title) + '</button>'; }).join('') + '<button type="button" class="as-tpl as-tpl-edit" id="asTplEdit">Шаблоны…</button>'; };
+    pane.innerHTML = '<div class="as-thread">' +
+        '<header class="as-head"><a class="st-back as-back" href="#/admin?s=support&f=' + esc(q.f || 'active') + '" aria-label="Все обращения"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 6l-6 6 6 6"/></svg></a>' +
+          '<div><b>№ ' + esc(t.number) + ' · ' + esc(t.topic) + '</b><span>Создано ' + esc(supTime(t.createdAt)) + (t.firstReplyAt ? ' · ответили за ' + supAgo(t.createdAt, t.firstReplyAt) : ' · ждёт ответа ' + supAgo(t.createdAt, new Date().toISOString())) + (t.closedAt ? ' · решено ' + (t.closedBy === 'user' ? 'покупателем' : 'магазином') : '') + '</span></div>' +
+          '<button type="button" class="btn ghost sm" id="asAssign">' + (t.assignee ? (t.assignee.id === me ? 'Ведёте вы' : 'Ведёт ' + esc(t.assignee.name)) : 'Взять себе') + '</button>' +
+          '<button type="button" class="btn sm ' + (closed ? 'ghost' : 'as-solve') + '" id="asToggle">' + (closed ? 'Открыть снова' : 'Решено') + '</button></header>' +
+        (t.order ? '<a class="sup-order" href="#/admin?s=orders&id=' + esc(t.order.id) + '"><span class="so-ph">' + (t.order.image ? '<img src="' + esc(t.order.image) + '" alt="">' : '') + '</span><span class="so-t"><b>Заказ № ' + esc(t.order.number) + ' · ' + esc((STATUS[t.order.status] || '').toLowerCase()) + ' · ' + fmt(t.order.total) + '</b><small>' + esc([t.order.name, [t.order.color, t.order.size].filter(Boolean).join(', ')].filter(Boolean).join(' · ')) + '</small></span></a>' : '') +
+        '<div class="st-msgs" id="asMsgs">' + supMsgs(t) + '</div>' +
+        '<div class="as-send">' +
+          '<div class="as-tpls" id="asTpls">' + tpl() + '</div>' +
+          '<div class="sup-att" hidden></div>' +
+          '<div class="sup-row"><label class="st-attach" aria-label="Прикрепить фото"><input class="sup-file" type="file" accept="image/*" multiple hidden><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 12.5l6.5-6.5a3 3 0 0 1 4.2 4.2l-8 8a5 5 0 0 1-7-7l7.5-7.5"/></svg></label>' +
+          '<textarea class="st-text" id="asText" rows="2" maxlength="2000" placeholder="Ответ покупателю" aria-label="Ответ"></textarea>' +
+          '<button class="btn" id="asBtn" type="button">Ответить</button></div>' +
+          '<div class="as-foot"><label class="check"><input type="checkbox" id="asNote"> <span>Заметка для сотрудников — покупатель её не увидит</span></label><span>Ctrl + Enter — отправить</span></div>' +
+        '</div>' +
+      '</div>' +
+      (c ? '<aside class="as-cust">' +
+        '<div class="as-card"><span class="as-me"><span class="msg-ava">' + esc((c.name || 'П').charAt(0).toUpperCase()) + '</span><span><b>' + esc(c.name || 'Покупатель') + '</b><small>С нами с ' + esc(A().fmtDate(c.createdAt).replace(/^\d+\s/, '').replace(/ г\.$/, '')) + ' · ' + c.orders.length + ' ' + A().plural(c.orders.length, 'заказ', 'заказа', 'заказов') + '</small></span></span>' +
+          (c.phone ? '<a href="tel:+' + esc(String(c.phone).replace(/\D/g, '')) + '">' + esc(A().fmtPhone(c.phone)) + '</a>' : '') + (c.email ? '<a href="mailto:' + esc(c.email) + '">' + esc(c.email) + '</a>' : '') +
+          '<span>Бонусы: ' + (c.bonus || 0) + '</span></div>' +
+        (c.orders.length ? '<div class="as-card"><b class="as-cap">Заказы</b>' + c.orders.map(function (o) { return '<a class="as-row" href="#/admin?s=orders&id=' + esc(o.id) + '"><span>№ ' + esc(o.number) + ' · ' + esc((STATUS[o.status] || '').toLowerCase()) + '</span><span>' + fmt(o.total) + '</span></a>'; }).join('') + '</div>' : '') +
+        (c.tickets.length ? '<div class="as-card"><b class="as-cap">Другие обращения</b>' + c.tickets.map(function (x) { return '<a class="as-row" href="#/admin?s=support&f=all&id=' + esc(x.id) + '"><span>№ ' + esc(x.number) + ' · ' + esc(x.topic) + '</span><span>' + SUP_STATE[x.status].toLowerCase() + '</span></a>'; }).join('') + '</div>' : '') +
+      '</aside>' : '<aside class="as-cust"><div class="as-card"><b>' + esc(t.name || 'Покупатель') + '</b><span>Аккаунт удалён</span></div></aside>');
+    var box = $('#asMsgs', pane), ta = $('#asText', pane), count = t.messages.length;
+    var files = (function () { // те же фото, что у покупателя: уменьшаем в браузере и загружаем сразу
+      var st = [], busy = 0, att = $('.sup-att', pane), input = $('.sup-file', pane);
+      var draw = function () { att.hidden = !st.length && !busy; att.innerHTML = st.map(function (f, i) { return '<span class="sup-att-i"><img src="' + f.p + '" alt=""><button type="button" data-rm="' + i + '" aria-label="Убрать фото">×</button></span>'; }).join('') + (busy ? '<span class="sup-att-i is-busy"></span>' : ''); };
+      att.addEventListener('click', function (e) { var b = e.target.closest('[data-rm]'); if (b) { st.splice(+b.getAttribute('data-rm'), 1); draw(); } });
+      input.addEventListener('change', async function () {
+        var fl = Array.prototype.slice.call(input.files || []).slice(0, 5 - st.length); input.value = '';
+        for (var i = 0; i < fl.length; i++) { busy++; draw(); try { var d = await A().supPhoto(fl[i]), u = await A().API.adminSupportUpload(d); st.push({ n: u.file, p: d }); } catch (e) { toast(A().errMsg(e), true); } busy--; draw(); }
+      });
+      return { names: function () { return st.map(function (x) { return x.n; }); }, busy: function () { return busy > 0; } };
+    })();
+    var bottom = function () { box.scrollTop = box.scrollHeight; $$('img', box).forEach(function (im) { if (!im.complete) im.addEventListener('load', function () { box.scrollTop = box.scrollHeight; }, { once: true }); }); };
+    bottom();
+    if (t.unreadShop) A().API.adminSupportPatch(t.id, { read: true }).then(function () {
       DATA.supportNew = Math.max(0, (DATA.supportNew || 1) - 1);
-      var it = $('.sup-item.on', m); if (it) it.classList.remove('unread');
+      var it = $('.as-item.on', m); if (it) { it.classList.remove('unread'); var dot = $('.sc-dot', it); if (dot) dot.remove(); }
       var b = $('.adm-side a[href="#/admin?s=support"] .adm-badge'); if (b) { if (DATA.supportNew) b.textContent = DATA.supportNew; else b.remove(); }
     }).catch(function () {});
     var send = async function () {
-      var text = ta.value.trim(); if (!text) { ta.focus(); return; }
-      $('#stBtn', m).disabled = true;
-      try { var r = await A().API.adminSupportReply(cur.id, text); toast(r.mailed ? 'Ответ отправлен и продублирован на почту' : 'Ответ отправлен'); supportSection(m, q); return; }
+      var text = ta.value.trim(), note = $('#asNote', pane).checked, names = note ? [] : files.names();
+      if (files.busy()) { toast('Фото ещё загружается', true); return; }
+      if (!text && !names.length) { ta.focus(); return; }
+      $('#asBtn', pane).disabled = true;
+      try { var res = await A().API.adminSupportReply(t.id, text, names, note); toast(note ? 'Заметка сохранена' : res.mailed ? 'Ответ отправлен и продублирован на почту' : 'Ответ отправлен'); supportSection(m, q); return; }
       catch (e) { toast(A().errMsg(e), true); }
-      $('#stBtn', m).disabled = false;
+      $('#asBtn', pane).disabled = false;
     };
-    $('#stSend', m).addEventListener('submit', function (e) { e.preventDefault(); send(); });
+    $('#asBtn', pane).addEventListener('click', send);
+    $('#asNote', pane).addEventListener('change', function (e) { ta.placeholder = e.target.checked ? 'Заметка для сотрудников' : 'Ответ покупателю'; $('#asBtn', pane).textContent = e.target.checked ? 'Сохранить заметку' : 'Ответить'; pane.querySelector('.as-send').classList.toggle('is-note', e.target.checked); });
     ta.addEventListener('keydown', function (e) { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); } });
-    $('#supToggle', m).addEventListener('click', async function () {
-      try { await A().API.adminSupportPatch(cur.id, { status: cur.status === 'closed' ? 'open' : 'closed' }); supportSection(m, q); } catch (e) { toast(A().errMsg(e), true); }
+    $('#asTpls', pane).addEventListener('click', function (e) {
+      var b = e.target.closest('[data-tpl]');
+      if (b) { var x = templates[+b.getAttribute('data-tpl')]; ta.value = (ta.value.trim() ? ta.value.trim() + '\n\n' : '') + x.text; ta.focus(); return; }
+      if (e.target.closest('#asTplEdit')) supTplEditor(templates, function (list) { templates = list; $('#asTpls', pane).innerHTML = tpl(); });
+    });
+    $('#asAssign', pane).addEventListener('click', async function () {
+      try { await A().API.adminSupportPatch(t.id, { assign: !(t.assignee && t.assignee.id === me) }); supportSection(m, q); } catch (e) { toast(A().errMsg(e), true); }
+    });
+    $('#asToggle', pane).addEventListener('click', async function () {
+      try { await A().API.adminSupportPatch(t.id, { status: closed ? 'open' : 'closed' }); toast(closed ? 'Обращение открыто снова' : 'Обращение № ' + t.number + ' решено'); supportSection(m, q); } catch (e) { toast(A().errMsg(e), true); }
     });
     supPoll = setInterval(async function () {
       if (!document.body.contains(box)) { clearInterval(supPoll); return; }
       if (document.hidden) return;
-      try { var all = await A().API.adminSupport(), t = all.find(function (x) { return x.id === cur.id; }); if (t && t.messages.length !== count) { count = t.messages.length; box.innerHTML = supMsgs(t); box.scrollTop = box.scrollHeight; } } catch (e) {}
-    }, 20000);
+      try { var nr = await A().API.adminSupportGet(t.id); if (nr.ticket.messages.length !== count || nr.ticket.userReadAt !== t.userReadAt) { count = nr.ticket.messages.length; t = nr.ticket; box.innerHTML = supMsgs(t); bottom(); } } catch (e) {}
+    }, 15000);
   }
-  function supMsgs(t) {
-    return t.messages.map(function (x) {
-      return '<div class="msg ' + (x.from === 'shop' ? 'from-me' : 'from-shop') + '"><div class="msg-b">' + (x.from === 'shop' ? '' : '<span class="msg-who">' + esc(t.name || 'Покупатель') + '</span>') + '<p>' + esc(x.text) + '</p></div><time>' + esc(supTime(x.at)) + '</time></div>';
-    }).join('');
+  // Шаблоны ответов: название кнопки и текст; одни на всех сотрудников
+  function supTplEditor(templates, done) {
+    var rows = templates.map(function (x) { return { title: x.title, text: x.text }; });
+    A().openModal('<div class="as-tpl-ed"><h2>Шаблоны ответов</h2><p class="muted">Кнопки над полем ответа: нажатие вставляет текст, его можно поправить перед отправкой.</p><div id="tplRows"></div>' +
+      '<button type="button" class="btn ghost sm" id="tplAdd">+ Добавить шаблон</button><div class="as-tpl-act"><button type="button" class="btn" id="tplSave">Сохранить</button></div></div>');
+    var md = $('#modalBody'), box = $('#tplRows', md);
+    var draw = function () { box.innerHTML = rows.map(function (x, i) { return '<div class="as-tpl-row"><input class="input" data-i="' + i + '" data-k="title" maxlength="60" placeholder="Название" value="' + esc(x.title) + '"><textarea class="textarea" data-i="' + i + '" data-k="text" rows="3" maxlength="2000" placeholder="Текст ответа">' + esc(x.text) + '</textarea><button type="button" class="link" data-del="' + i + '">Удалить</button></div>'; }).join(''); };
+    draw();
+    box.addEventListener('input', function (e) { var el = e.target; if (el.hasAttribute('data-k')) rows[+el.getAttribute('data-i')][el.getAttribute('data-k')] = el.value; });
+    box.addEventListener('click', function (e) { var b = e.target.closest('[data-del]'); if (b) { rows.splice(+b.getAttribute('data-del'), 1); draw(); } });
+    $('#tplAdd', md).addEventListener('click', function () { rows.push({ title: '', text: '' }); draw(); });
+    $('#tplSave', md).addEventListener('click', async function () {
+      try { var list = await A().API.adminSupportTemplates(rows); toast('Шаблоны сохранены'); A().closePanels(); done(list); } catch (e) { toast(A().errMsg(e), true); }
+    });
   }
 
   function notifyPanel(m, q, mail) {

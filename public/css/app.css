@@ -4112,3 +4112,7 @@ body::after { content: none; display: none; }
   .as-focus .as-tools, .as-focus .adm-chips { display: none; }
   .as-thread { height: calc(100svh - 160px); min-height: 440px; }
 }
+
+/* таблица размеров товара в окне (13.64.3): плотнее, единицы — в заголовке */
+.p-sizes th, .p-sizes td { padding: 12px 14px; font-size: 14.5px; white-space: nowrap; }
+.p-sizes thead th { font-size: 12.5px; }

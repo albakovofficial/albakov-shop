@@ -9,14 +9,14 @@
   var DATA = null;
 
   var SECTIONS = [
-    ['overview', 'Обзор'], ['orders', 'Заказы'], ['support', 'Поддержка'], ['products', 'Товары'], ['categories', 'Категории'], ['sizeCharts', 'Размерные сетки'],
+    ['overview', 'Обзор'], ['orders', 'Заказы'], ['support', 'Поддержка'], ['products', 'Товары'], ['categories', 'Категории'],
     ['promotions', 'Акции'], ['promocodes', 'Промокоды'], ['bonus', 'Бонусы'], ['exchange', 'Обмен и возвраты'], ['customers', 'Покупатели'], ['mail', 'Почта'], ['analytics', 'Аналитика'], ['finance', 'Финансы'], ['gifts', 'Подарочные сертификаты'], ['sections', 'Разделы'], ['brand', 'Логотип и название'], ['slider', 'Слайдер на главной'], ['home', 'Главная страница'], ['pages', 'Страницы'],
     ['menu', 'Меню, контакты, соцсети'], ['payment', 'Оплата и доставка'], ['push', 'Push-уведомления'], ['staff', 'Сотрудники'], ['audit', 'Журнал действий'], ['settings', 'Настройки']
   ];
   /* Разделы по группам (13.63): рабочий стол и меню панели. Значок, короткое название, цвет группы */
   var GROUPS = [
     ['Продажи', 'g-sales', ['orders', 'support', 'exchange', 'customers']],
-    ['Каталог', 'g-cat', ['products', 'categories', 'sizeCharts', 'sections']],
+    ['Каталог', 'g-cat', ['products', 'categories', 'sections']],
     ['Маркетинг', 'g-mkt', ['promotions', 'promocodes', 'bonus', 'gifts', 'mail', 'push']],
     ['Цифры', 'g-cat', ['overview', 'analytics', 'finance']],
     ['Витрина', 'g-mkt', ['home', 'slider', 'brand', 'menu', 'pages']],
@@ -31,7 +31,6 @@
     customers: '<circle cx="9" cy="8.5" r="3.2"/><path d="M3 19c.9-3 3.2-4.6 6-4.6s5.1 1.6 6 4.6"/><circle cx="17" cy="9" r="2.6"/><path d="M16.5 14.4c2.2.2 3.8 1.7 4.5 4.1"/>',
     products: '<path d="M8.5 4L4 6.5l1.7 4 2.3-1V20h8V9.5l2.3 1 1.7-4L15.5 4c-.6 1.6-1.9 2.5-3.5 2.5S9.1 5.6 8.5 4z"/>',
     categories: '<rect x="4" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.6"/>',
-    sizeCharts: '<rect x="2.5" y="8" width="19" height="8" rx="1.8"/><path d="M6.5 8v3M9.5 8v4.5M12.5 8v3M15.5 8v4.5M18.5 8v3"/>',
     sections: '<circle cx="6.5" cy="9" r="2.4"/><circle cx="12" cy="7.5" r="2.8"/><circle cx="17.5" cy="9.5" r="2"/><path d="M2.5 18c.6-2.4 2-3.6 4-3.6M7.2 19c.7-3.1 2.4-4.6 4.8-4.6s4.1 1.5 4.8 4.6M17.5 14.6c1.9 0 3.3 1.2 4 3.4"/>',
     promotions: '<path d="M3.5 12.5V4.8A1.3 1.3 0 0 1 4.8 3.5h7.7L21 12l-9 9z"/><circle cx="8.3" cy="8.3" r="1.6"/>',
     promocodes: '<path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h15A1.5 1.5 0 0 1 21 7.5v2a2.5 2.5 0 0 0 0 5v2a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 16.5v-2a2.5 2.5 0 0 0 0-5z"/><path d="M14 7v10" stroke-dasharray="1.6 2"/>',
@@ -58,7 +57,7 @@
   /* Какие разделы видит роль (13.57): права приходят с сервера в DATA.perms, сервер проверяет их на каждом запросе */
   var SECTION_PERMS = {
     overview: [], orders: ['orders'], support: ['orders'], exchange: ['orders'], customers: ['orders', 'marketing'], gifts: ['orders', 'marketing'],
-    products: ['content'], categories: ['content'], sizeCharts: ['content'], promotions: ['content', 'marketing'], promocodes: ['content', 'marketing'],
+    products: ['content'], categories: ['content'], promotions: ['content', 'marketing'], promocodes: ['content', 'marketing'],
     sections: ['content'], brand: ['content'], slider: ['content'], home: ['content'], pages: ['content'], menu: ['content'],
     bonus: ['marketing'], mail: ['mail'], analytics: ['finance', 'marketing'], finance: ['finance'],
     payment: ['payment'], push: [], staff: ['staff'], audit: ['staff'], settings: ['settings']
@@ -332,7 +331,7 @@
       (s !== 'desk' ? '<a class="adm-back" href="#/admin">' + secIcon('home') + 'Рабочий стол</a>' : '') + '<div id="admMain"></div></section></div>';
     $('#admOut').addEventListener('click', async function () { await API.logout(); DATA = null; window.ALB_NAV.go('#/'); await A().refresh(); });
     var main = $('#admMain');
-    var fn = { desk: desk, overview: overview, orders: orders, support: supportSection, products: products, categories: categories, sizeCharts: sizeCharts, promotions: promotions, promocodes: promocodes, bonus: bonusSection, exchange: exchangeSection, customers: customers,  mail: mailHub, push: pushSection, staff: staffSection, audit: auditSection,  analytics: analyticsSection, finance: financeSection, gifts: giftsSection, sections: sectionsSettings, brand: brandSection, slider: sliderSection, home: homeSettings, pages: pages, menu: menuSettings, payment: paymentSettings, settings: generalSettings }[s] || overview;
+    var fn = { desk: desk, overview: overview, orders: orders, support: supportSection, products: products, categories: categories, promotions: promotions, promocodes: promocodes, bonus: bonusSection, exchange: exchangeSection, customers: customers,  mail: mailHub, push: pushSection, staff: staffSection, audit: auditSection,  analytics: analyticsSection, finance: financeSection, gifts: giftsSection, sections: sectionsSettings, brand: brandSection, slider: sliderSection, home: homeSettings, pages: pages, menu: menuSettings, payment: paymentSettings, settings: generalSettings }[s] || overview;
     fn(main, q);
   }
   /* ================= Рабочий стол (13.63): сводка дня, ежедневное — карточками, остальное — значками ================= */
@@ -1050,7 +1049,7 @@
       sub: 'Нажмите на строку, чтобы изменить товар: цены, цвета, фото, размеры и остатки. Галочками можно выбрать несколько товаров или все сразу и удалить их.',
       itemTitle: function (x) { return x.name; },
       view: function (x) { return '<a class="btn ghost sm" href="#/product/' + esc(x.slug) + '">Открыть на сайте</a>'; },
-      blank: function () { return { name: '', slug: '', gender: 'women', categoryId: (DATA.categories[0] || {}).id || '', price: 0, compareAt: 0, tags: ['new'], description: '', composition: '', care: '', colors: [newColor(1, '#3a3734')], sizeChartId: (DATA.sizeCharts[0] || {}).id || '', active: true, createdAt: new Date().toISOString().slice(0, 10) }; },
+      blank: function () { return { name: '', slug: '', gender: 'women', categoryId: (DATA.categories[0] || {}).id || '', price: 0, compareAt: 0, tags: ['new'], description: '', composition: '', care: '', colors: [newColor(1, '#3a3734')], active: true, createdAt: new Date().toISOString().slice(0, 10) }; },
       cols: ['', 'Название', 'Для кого', 'Категория', 'Цвета', 'Цена', 'Остаток', 'В продаже'],
       row: function (p) {
         var c = DATA.categories.find(function (x) { return x.id === p.categoryId; }), st = productStock(p), pr = Pricing.productPrice(p, DATA.promotions);
@@ -1066,7 +1065,6 @@
           { k: 'sku', label: 'Артикул', hint: 'Заполнится сам: ALB-0001, ALB-0002… Можно указать свой — латиница, цифры, дефис' },
           { k: 'categoryId', label: 'Категория', type: 'select', options: catOpts() },
           { k: 'gender', label: 'Для кого', type: 'select', options: [['women', 'Женщинам'], ['men', 'Мужчинам'], ['kids', 'Детям'], ['unisex', 'Унисекс — женщинам и мужчинам']] },
-          { k: 'sizeChartId', label: 'Размерная сетка', type: 'select', options: [['', 'Без таблицы размеров']].concat(DATA.sizeCharts.map(function (c) { return [c.id, c.name]; })) },
           { k: 'price', label: 'Цена, ₽', type: 'number', hint: 'Одна для всех цветов' },
           { k: 'compareAt', label: 'Старая цена, ₽', type: 'number', hint: 'Если больше цены — показывается зачёркнутой. Оставьте 0, если скидки нет.' },
           { k: 'badges', type: 'badges' },
@@ -1115,7 +1113,7 @@
               '<div class="adm-imgs">' + imgs.map(function (src, k) { return '<div class="adm-img"><img src="' + esc(src) + '" alt=""><div class="adm-img-tools">' + (k > 0 ? '<button type="button" data-ileft="' + k + '" title="Сделать раньше">←</button>' : '') + '<button type="button" data-idel="' + k + '" title="Удалить">✕</button></div>' + (k === 0 ? '<span class="adm-img-main">Главное</span>' : '') + '</div>'; }).join('') +
                 '<label class="adm-img add"><input type="file" accept="image/*" multiple hidden data-iup><span>+ Фото этого цвета</span></label></div>' +
               '<div class="adm-size-rows">' + (c.sizes || []).map(sizeRow).join('') + '</div>' +
-              '<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn ghost sm" data-szadd>+ Размер</button><button type="button" class="btn ghost sm" data-szchart>Размеры из сетки</button>' + (i > 0 ? '<button type="button" class="btn ghost sm" data-szcopy>Размеры как у «' + esc(colorsState[0].name || 'первого цвета') + '»</button>' : '') + '</div></div>';
+              '<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn ghost sm" data-szadd>+ Размер</button>' + (i > 0 ? '<button type="button" class="btn ghost sm" data-szcopy>Размеры как у «' + esc(colorsState[0].name || 'первого цвета') + '»</button>' : '') + '</div></div>';
           }).join('');
         }
         draw();
@@ -1126,11 +1124,6 @@
           var c = colorsState[i];
           if (b.hasAttribute('data-szrm')) { b.closest('.adm-size-row').remove(); sync(); return; }
           if (b.hasAttribute('data-szadd')) { $('.adm-size-rows', el).insertAdjacentHTML('beforeend', sizeRow({ size: '', stock: 0 })); $('.adm-size-rows .adm-size-row:last-child [data-sz]', el).focus(); return; }
-          if (b.hasAttribute('data-szchart')) {
-            var ch = DATA.sizeCharts.find(function (x) { return x.id === $('#f-sizeChartId', box).value; });
-            if (!ch) { toast('Сначала выберите размерную сетку', true); return; }
-            ch.rows.forEach(function (r) { if (r[0] && !c.sizes.some(function (x) { return x.size === r[0]; })) c.sizes.push({ size: r[0], stock: 0 }); });
-          }
           if (b.hasAttribute('data-szcopy')) colorsState[0].sizes.forEach(function (x) { if (!c.sizes.some(function (y) { return y.size === x.size; })) c.sizes.push({ size: x.size, stock: 0 }); });
           if (b.hasAttribute('data-cdel')) colorsState.splice(i, 1);
           if (b.hasAttribute('data-cup')) colorsState.splice(i - 1, 0, colorsState.splice(i, 1)[0]);
@@ -1303,23 +1296,50 @@
   /* Мерки изделия и подбор размера: ширина, длина, рукав и на какой рост/вес рассчитан каждый размер */
   var FIT_TYPICAL = { XS: [150, 165, 45, 58], S: [160, 172, 52, 66], M: [170, 180, 62, 76], L: [176, 186, 72, 86], XL: [182, 192, 82, 96], '2XL': [186, 198, 92, 110], XXL: [186, 198, 92, 110], '3XL': [190, 205, 105, 125] };
   var FIT_COLS = [['w', 'Ширина'], ['l', 'Длина'], ['sl', 'Рукав'], ['hMin', 'Рост от'], ['hMax', 'Рост до'], ['kMin', 'Вес от'], ['kMax', 'Вес до']];
+  /* Таблица размеров товара (13.64.3): своя у каждого товара, покупатель видит её в карточке товара.
+     Мерки на каждый размер: ширина, длина, рукав, свои столбцы (например «Обхват талии») и рост/вес — на кого рассчитан размер */
   function fitEditorHtml(p) {
     var f = p.fit || {};
-    return '<div class="adm-fit"><h4 class="adm-sub">Мерки и подбор размера</h4><p class="muted" style="font-size:14px;margin-bottom:14px;max-width:72ch">Мерки готовой вещи в сантиметрах: футболку кладут на стол, ширина — от шва до шва под рукавами, длина — от верхней точки плеча до низа. Рост и вес — на кого рассчитан размер. Когда заполнены рост и вес хотя бы двух размеров, в карточке появляется «Подобрать размер»; ширина и длина — «Сравнить со своей футболкой» и таблица мерок.</p>' +
-      '<div class="table-wrap"><table class="adm-fit-t"><thead><tr><th>Размер</th>' + FIT_COLS.map(function (c) { return '<th>' + c[1] + (c[0] === 'kMin' || c[0] === 'kMax' ? ', кг' : ', см') + '</th>'; }).join('') + '</tr></thead><tbody data-fit-body></tbody></table></div>' +
-      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button type="button" class="btn ghost sm" data-fit-sync>Обновить размеры из цветов</button><button type="button" class="btn ghost sm" data-fit-typical>Заполнить пустой рост и вес типовыми для оверсайза</button></div>' +
-      '<div class="adm-form" style="margin-top:16px"><label class="field"><span>На модели размер</span><input class="input" data-fit-msize value="' + esc(f.modelSize || '') + '" placeholder="например, L"></label><label class="field"><span>Рост модели, см</span><input class="input" type="number" data-fit-mh value="' + esc(f.modelHeight || '') + '" placeholder="например, 182"></label></div></div>';
+    return '<div class="adm-fit"><h4 class="adm-sub">Таблица размеров</h4><p class="muted" style="font-size:14px;margin-bottom:14px;max-width:72ch">Своя у каждого товара — покупатель видит её в карточке товара по кнопке «Таблица размеров». Мерки готовой вещи в сантиметрах на каждый размер: вещь кладут на стол, ширина — от шва до шва под рукавами, длина — от верхней точки плеча до низа. Нужен другой замер — добавьте свой столбец. Рост и вес — на кого рассчитан размер: по ним работает «Подобрать размер».</p>' +
+      '<div class="table-wrap"><table class="adm-fit-t"><thead data-fit-head></thead><tbody data-fit-body></tbody></table></div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button type="button" class="btn ghost sm" data-fit-col>+ Свой столбец</button><button type="button" class="btn ghost sm" data-fit-sync>Обновить размеры из цветов</button><button type="button" class="btn ghost sm" data-fit-typical>Заполнить пустой рост и вес типовыми для оверсайза</button></div>' +
+      '<div class="adm-form" style="margin-top:16px"><label class="field" style="grid-column:1/-1"><span>Подсказка над таблицей</span><input class="input" data-fit-note maxlength="300" value="' + esc(f.note || '') + '" placeholder="Например: брюки измерены в расслабленном виде, длина — по внутреннему шву"></label>' +
+      '<label class="field"><span>На модели размер</span><input class="input" data-fit-msize value="' + esc(f.modelSize || '') + '" placeholder="например, L"></label><label class="field"><span>Рост модели, см</span><input class="input" type="number" data-fit-mh value="' + esc(f.modelHeight || '') + '" placeholder="например, 182"></label></div></div>';
   }
   function bindFitEditor(el, fit, getColors) {
-    var body = $('[data-fit-body]', el), rows = ((fit && fit.rows) || []).slice();
+    var head = $('[data-fit-head]', el), body = $('[data-fit-body]', el), rows = ((fit && fit.rows) || []).slice(), cols = ((fit && fit.cols) || []).slice();
     function sizes() { var out = []; (getColors() || []).forEach(function (c) { (c.sizes || []).forEach(function (s) { if (s.size && out.indexOf(s.size) === -1) out.push(s.size); }); }); return out; }
-    function current() { return $$('tr', body).map(function (tr) { var r = { size: tr.getAttribute('data-size') }; FIT_COLS.forEach(function (c) { var v = parseFloat(String($('[data-f="' + c[0] + '"]', tr).value).replace(',', '.')); if (v > 0) r[c[0]] = v; }); return r; }); }
+    function current() {
+      cols = $$('[data-xc]', head).map(function (i) { return i.value.trim().slice(0, 40); });
+      return $$('tr', body).filter(function (tr) { return tr.hasAttribute('data-size'); }).map(function (tr) {
+        var r = { size: tr.getAttribute('data-size') };
+        FIT_COLS.forEach(function (c) { var v = parseFloat(String($('[data-f="' + c[0] + '"]', tr).value).replace(',', '.')); if (v > 0) r[c[0]] = v; });
+        var x = $$('[data-x]', tr).map(function (i) { return i.value.trim().slice(0, 30); }); if (x.some(Boolean)) r.x = x;
+        return r;
+      });
+    }
     function draw(list) {
-      body.innerHTML = list.map(function (r) { return '<tr data-size="' + esc(r.size) + '"><th>' + esc(r.size) + '</th>' + FIT_COLS.map(function (c) { return '<td><input class="input num" type="number" step="0.5" min="0" data-f="' + c[0] + '" value="' + esc(r[c[0]] || '') + '" aria-label="' + esc(r.size + ': ' + c[1]) + '"></td>'; }).join('') + '</tr>'; }).join('') ||
-        '<tr><td colspan="8" class="muted">Сначала добавьте размеры в цвета товара</td></tr>';
+      head.innerHTML = '<tr><th>Размер</th>' + FIT_COLS.slice(0, 3).map(function (c) { return '<th>' + c[1] + ', см</th>'; }).join('') +
+        cols.map(function (c, i) { return '<th><span class="adm-cell"><input class="input" data-xc value="' + esc(c) + '" placeholder="Название" aria-label="Название столбца"><button type="button" class="adm-x" data-xdel="' + i + '" title="Удалить столбец">✕</button></span></th>'; }).join('') +
+        FIT_COLS.slice(3).map(function (c) { return '<th>' + c[1] + (c[0] === 'kMin' || c[0] === 'kMax' ? ', кг' : ', см') + '</th>'; }).join('') + '</tr>';
+      var inp = function (r, c) { return '<td><input class="input num" type="number" step="0.5" min="0" data-f="' + c[0] + '" value="' + esc(r[c[0]] || '') + '" aria-label="' + esc(r.size + ': ' + c[1]) + '"></td>'; };
+      body.innerHTML = list.map(function (r) {
+        return '<tr data-size="' + esc(r.size) + '"><th>' + esc(r.size) + '</th>' + FIT_COLS.slice(0, 3).map(function (c) { return inp(r, c); }).join('') +
+          cols.map(function (c, i) { return '<td><input class="input" data-x value="' + esc((r.x || [])[i] || '') + '" aria-label="' + esc(r.size + ': ' + (c || 'свой столбец')) + '"></td>'; }).join('') +
+          FIT_COLS.slice(3).map(function (c) { return inp(r, c); }).join('') + '</tr>';
+      }).join('') || '<tr><td colspan="' + (8 + cols.length) + '" class="muted">Сначала добавьте размеры в цвета товара</td></tr>';
     }
     function merge(prev) { return sizes().map(function (sz) { return prev.find(function (r) { return r.size === sz; }) || { size: sz }; }); }
     draw(merge(rows));
+    head.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-xdel]'); if (!b) return;
+      var list = current(), i = +b.getAttribute('data-xdel');
+      cols.splice(i, 1); list.forEach(function (r) { if (r.x) r.x.splice(i, 1); }); draw(list);
+    });
+    $('[data-fit-col]', el).addEventListener('click', function () {
+      var list = current(); if (cols.length >= 6) { toast('Не больше 6 своих столбцов', true); return; }
+      cols.push(''); draw(list); var ins = $$('[data-xc]', head); ins[ins.length - 1].focus();
+    });
     $('[data-fit-sync]', el).addEventListener('click', function () { draw(merge(current())); });
     $('[data-fit-typical]', el).addEventListener('click', function () {
       var list = merge(current()), n = 0;
@@ -1327,12 +1347,18 @@
       draw(list); toast(n ? 'Заполнено — проверьте и поправьте под свои лекала' : 'Нечего заполнять: типовые значения есть для XS–3XL', !n);
     });
     el._fitRows = current;
+    el._fitCols = function () { current(); return cols; };
   }
   function readFitEditor(el) {
     var rows = (el._fitRows ? el._fitRows() : []).filter(function (r) { return Object.keys(r).length > 1; });
-    var ms = $('[data-fit-msize]', el).value.trim().slice(0, 10), mh = Math.round(Number($('[data-fit-mh]', el).value) || 0);
-    if (!rows.length && !ms && !mh) return null;
-    return { rows: rows, modelSize: ms, modelHeight: mh > 0 ? mh : '' };
+    var cols = el._fitCols ? el._fitCols() : [];
+    // пустые свои столбцы не сохраняем
+    var keep = cols.map(function (c, i) { return !!c || rows.some(function (r) { return r.x && r.x[i]; }); });
+    var outCols = cols.filter(function (c, i) { return keep[i]; }).map(function (c) { return c || 'Мерка'; });
+    rows.forEach(function (r) { if (r.x) { r.x = r.x.filter(function (v, i) { return keep[i]; }); if (!r.x.some(Boolean)) delete r.x; } });
+    var ms = $('[data-fit-msize]', el).value.trim().slice(0, 10), mh = Math.round(Number($('[data-fit-mh]', el).value) || 0), note = $('[data-fit-note]', el).value.trim().slice(0, 300);
+    if (!rows.length && !ms && !mh && !note) return null;
+    return { rows: rows, cols: outCols, note: note, modelSize: ms, modelHeight: mh > 0 ? mh : '' };
   }
   function newColor(n, hex, kind) { return { id: uid('col'), name: '', hex: hex, images: [], sizes: [], art: { kind: kind || 'tee', tone: hex } }; }
   function sizeRow(s) { return '<div class="adm-size-row"><input class="input" data-sz placeholder="Размер" value="' + esc(s.size) + '" aria-label="Размер"><input class="input num" data-st type="number" min="0" placeholder="Остаток" value="' + esc(s.stock) + '" aria-label="Остаток, шт."><span class="muted" style="font-size:14px">шт.</span><button type="button" class="adm-x" data-szrm title="Удалить">✕</button></div>'; }
@@ -1368,44 +1394,6 @@
   }
 
   /* ================= Размерные сетки ================= */
-  function sizeCharts(m, q) {
-    collection(m, q, {
-      key: 'sizeCharts', prefix: 'sc', title: 'Размерные сетки', newTitle: 'Новая размерная сетка', addLabel: 'Добавить сетку',
-      sub: 'Таблицы размеров показываются в карточке товара и на странице «Таблица размеров». Столбцы и строки можно добавлять и удалять.',
-      itemTitle: function (x) { return x.name; },
-      blank: function () { return { name: '', columns: ['Размер', 'RU', 'Обхват груди, см'], rows: [['S', '44', '88'], ['M', '46', '92']], note: '' }; },
-      cols: ['Название', 'Размеры', 'Товаров'],
-      row: function (c) { return [esc(c.name), esc((c.rows || []).map(function (r) { return r[0]; }).join(', ')), '<span class="num">' + DATA.products.filter(function (p) { return p.sizeChartId === c.id; }).length + '</span>']; },
-      fields: function () { return [{ k: 'name', label: 'Название', wide: true }, { k: 'note', label: 'Подсказка под таблицей', type: 'textarea', rows: 2 }]; },
-      extra: function (c) { return '<h4 class="adm-sub">Таблица</h4><div class="table-wrap"><table class="adm-grid" id="scGrid"></table></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button type="button" class="btn ghost sm" id="scAddRow">+ Строка</button><button type="button" class="btn ghost sm" id="scAddCol">+ Столбец</button></div><p class="muted" style="font-size:13px;margin-top:8px">Первый столбец — название размера, его же покупатель выбирает в карточке товара.</p>'; },
-      mount: function (box, c) {
-        var cols = (c.columns || []).slice(), rows = (c.rows || []).map(function (r) { return r.slice(); });
-        var grid = $('#scGrid', box);
-        function sync() {
-          cols = $$('thead input', grid).map(function (i) { return i.value; });
-          rows = $$('tbody tr', grid).map(function (tr) { return $$('input', tr).map(function (i) { return i.value; }); });
-        }
-        function draw() {
-          grid.innerHTML = '<thead><tr>' + cols.map(function (h, i) { return '<th><div class="adm-cell"><input class="input" value="' + esc(h) + '" aria-label="Заголовок столбца">' + (cols.length > 1 ? '<button type="button" class="adm-x" data-dc="' + i + '" title="Удалить столбец">✕</button>' : '') + '</div></th>'; }).join('') + '<th></th></tr></thead><tbody>' +
-            rows.map(function (r, ri) { return '<tr>' + cols.map(function (x, ci) { return '<td><input class="input" value="' + esc(r[ci] || '') + '" aria-label="Ячейка"></td>'; }).join('') + '<td><button type="button" class="adm-x" data-dr="' + ri + '" title="Удалить строку">✕</button></td></tr>'; }).join('') + '</tbody>';
-        }
-        draw();
-        grid.addEventListener('click', function (e) {
-          var b = e.target.closest('button'); if (!b) return; sync();
-          if (b.hasAttribute('data-dc')) { var i = +b.getAttribute('data-dc'); cols.splice(i, 1); rows.forEach(function (r) { r.splice(i, 1); }); }
-          if (b.hasAttribute('data-dr')) rows.splice(+b.getAttribute('data-dr'), 1);
-          draw();
-        });
-        $('#scAddRow', box).addEventListener('click', function () { sync(); rows.push(cols.map(function () { return ''; })); draw(); });
-        $('#scAddCol', box).addEventListener('click', function () { sync(); cols.push('Новый столбец'); rows.forEach(function (r) { r.push(''); }); draw(); });
-        box._readGrid = function () { sync(); return { columns: cols, rows: rows.filter(function (r) { return r.some(function (x) { return x; }); }) }; };
-      },
-      read: function (box, c) { var g = box._readGrid(); c.columns = g.columns; c.rows = g.rows; },
-      validate: function (c) { return !c.name ? 'Укажите название' : !c.columns.length ? 'Нужен хотя бы один столбец' : ''; }
-    });
-  }
-
-  /* ================= Акции ================= */
   function promotions(m, q) {
     collection(m, q, {
       key: 'promotions', prefix: 'a', title: 'Акции', newTitle: 'Новая акция', addLabel: 'Создать акцию',

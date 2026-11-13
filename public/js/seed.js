@@ -31,7 +31,6 @@
         { id: 'n1', label: 'Новинки', link: '#/catalog?tag=new' },
         { id: 'n2', label: 'Каталог', link: '#/catalog' },
         { id: 'n3', label: 'Акции', link: '#/sale' },
-        { id: 'n4', label: 'Размеры', link: '#/sizes' },
         { id: 'n5', label: 'О бренде', link: '#/page/about' }
       ],
       slider: {

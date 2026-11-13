@@ -179,6 +179,7 @@
   function safeUrl(u) { u = String(u || '').trim(); return /^(https?:\/\/|#|\/|mailto:|tel:)/i.test(u) || /^[\w.-]+(\/|$|\?|#)/.test(u) && !/^[\w.+-]+:/.test(u) ? u : '#/'; }
   // Пункт меню ведёт в пустой раздел (нет новинок, хитов, товаров категории или скидок) — прячем его, пока там пусто
   function navEmpty(link) {
+    if (/^[#/]*sizes\b/.test(String(link || ''))) return true; // общей таблицы размеров больше нет (13.64.3) — у каждого товара своя
     var m = /^#?\/?catalog\?(?:.*&)?(tag|cat)=([^&]+)/.exec(String(link || '').replace(/^\//, '#/').replace(/^#\//, ''));
     var ps = gProducts();
     if (m && m[1] === 'tag') return m[2] === 'new' ? !ps.some(function (p) { return (p.tags || []).indexOf('new') !== -1; }) : m[2] === 'hit' ? !hitList(ps).length : false;
@@ -292,7 +293,7 @@
       '</div>' +
       '<div class="f-grid">' +
         col('Магазин', sortedCats().map(function (x) { return '<li><a href="#/catalog?cat=' + esc(x.slug) + '">' + esc(x.name) + '</a></li>'; }).join('') + '<li><a href="#/catalog?tag=new">Новинки</a></li><li><a href="#/sale">Акции</a></li>' + (D.giftCfg && D.giftCfg.enabled !== false ? '<li><a href="#/gift">Подарочные сертификаты</a></li>' : '')) +
-        col('Покупателям', '<li><a href="#/track">Где мой заказ</a></li>' + pages('help') + '<li><a href="#/sizes">Таблица размеров</a></li>' + pages('brand') +
+        col('Покупателям', '<li><a href="#/track">Где мой заказ</a></li>' + pages('help') + '' + pages('brand') +
           (appStoreUrl() ? '<li><a href="' + esc(appStoreUrl()) + '" target="_blank" rel="noopener">Приложение для iPhone</a></li>' : '')) +
         col('Личный кабинет', '<li><a href="#/account?tab=orders">Мои заказы</a></li><li><a href="#/favorites">Избранное</a></li>' + (bonusCfg().enabled ? '<li><a href="#/account?tab=bonus">Бонусы</a></li>' : '') + '<li><a href="#/account?tab=support">Поддержка</a></li>') +
         '<div class="fcol fcol-contacts"><h4>Контакты</h4><ul class="f-contacts">' +
@@ -455,14 +456,13 @@
       var pg = D.pages.find(function (x) { return x.slug === p[1]; });
       if (pg) t = pg.slug === 'about' ? 'О бренде ' + store + ' — одежда из Ингушетии' : pg.title + ' — ' + store;
     } else if (name === 'sale') t = 'Акции и скидки — ' + store;
-    else if (name === 'sizes') t = 'Таблица размеров — ' + store;
     else if (name === 'favorites') t = 'Избранное — ' + store;
     else if (name === 'track') t = 'Где мой заказ — ' + store;
     else if (name === 'gift') t = 'Подарочный сертификат — ' + store;
     else if (name) t = store + (s.tagline ? ' — ' + s.tagline : '');
     document.title = t;
     var l = document.querySelector('link[rel="canonical"]');
-    if (l && ['', 'catalog', 'product', 'page', 'sale', 'sizes'].indexOf(name) !== -1) l.href = location.origin + canon;
+    if (l && ['', 'catalog', 'product', 'page', 'sale'].indexOf(name) !== -1) l.href = location.origin + canon;
   }
   function route() {
     closePanels();
@@ -470,7 +470,7 @@
     var r = parseHash(), v = $('#view'), p = r.parts;
     $$('.nav a').forEach(function (a) { a.classList.toggle('active', a.getAttribute('href') === curRoute()); });
     var name = p[0] || '';
-    var map = { '': home, catalog: catalog, product: product, sale: sale, sizes: sizes, cart: cartPage, checkout: checkout, account: account, order: orderPage, page: textPage, favorites: favoritesPage, track: trackPage, gift: giftPage };
+    var map = { '': home, catalog: catalog, product: product, sale: sale, sizes: function () { go('#/catalog'); }, cart: cartPage, checkout: checkout, account: account, order: orderPage, page: textPage, favorites: favoritesPage, track: trackPage, gift: giftPage };
     var fn = map.hasOwnProperty(name) ? map[name] : isAdminRoute(name) ? adminPage : notFound;
     if ((name === '' || name === 'catalog' || name === 'sale') && gClosed(curGender())) fn = soonPage;
     try { fn(v, p, r.q); }
@@ -1148,7 +1148,6 @@
     if (!p) return notFound(v);
     var colors = Pricing.colorsOf(p), notifyOn = ((D.settings.notify || {}).enabled) !== false; // «Сообщить о поступлении» включено, пока его не выключили в панели
     var pr = priceOf(p), cat = catById(p.categoryId);
-    var chart = D.sizeCharts.find(function (c) { return c.id === p.sizeChartId; });
     // Цвет: из адреса, иначе первый, где что-то есть в наличии
     var col = colors.find(function (c) { return c.id === q.color; }) || colors.find(function (c) { return Pricing.stockOf(c) > 0; }) || colors[0];
     var sel = null, qty = 1;
@@ -1170,7 +1169,7 @@
           var out = Pricing.stockOf(c) === 0;
           return '<button class="swatch-btn' + (out ? ' out' : '') + '" role="radio" data-color="' + esc(c.id) + '" title="' + esc(c.name) + (out ? ' — нет в наличии' : '') + '" aria-label="' + esc(c.name) + (out ? ', нет в наличии' : '') + '"><span class="sw" style="' + swatchStyle(c) + '"></span></button>';
         }).join('') + '</div></div>' +
-      '<div><div class="opt-head"><span>Размер</span>' + (chart || fitCanCompare(p) ? '<button class="link" style="font-size:14px" id="openChart">' + (chart ? 'Таблица размеров' : 'Мерки изделия') + '</button>' : '') + '</div>' +
+      '<div><div class="opt-head"><span>Размер</span>' + (sizeTableRows(p).length ? '<button class="link" style="font-size:14px" id="openChart">Таблица размеров</button>' : '') + '</div>' +
         '<div class="chips" id="sizeChips"></div><p class="stock-note" id="stockNote" style="margin-top:10px"></p>' + fitToolsHtml(p) + '<div id="fitCheck" aria-live="polite"></div></div>' +
       '<div class="sticky-buy"><div class="buy-row"><div class="qty"><button data-q="-1" aria-label="Меньше">−</button><span id="qty">1</span><button data-q="1" aria-label="Больше">+</button></div><button class="btn" id="addBtn">Добавить в корзину</button></div></div>' +
       '<div class="buy-more"><button type="button" class="btn ghost buy-now" id="buyNow"><span>Купить сейчас</span><span class="bn-ic" aria-hidden="true">' + ARROW + '</span></button>' +
@@ -1283,7 +1282,7 @@
       go('#/checkout?buy=1');
     });
     var oc = $('#openChart'); if (oc) oc.addEventListener('click', function () {
-      openModal(fitMeasuresHtml(p) + (chart ? '<h3 class="serif" style="font-size:34px;margin-bottom:6px">Таблица размеров</h3><p class="muted" style="margin-bottom:22px">' + esc(chart.name) + '</p>' + chartTable(chart) + (chart.note ? '<p class="muted" style="margin-top:16px;font-size:14px">' + esc(chart.note) + '</p>' : '') + measureHtml() : ''));
+      openModal(sizeTableHtml(p));
     });
     // Подбор размера: выбранный размер сразу отмечается в карточке
     function pickSize(size) {
@@ -1475,12 +1474,28 @@
     return '<div class="fit-guar">' + EXCH_IC + '<div><b>' + (c.free ? 'Не подошёл размер — обменяем бесплатно' : 'Не подошёл размер — обменяем') + '</b><span>В течение ' + c.days + ' ' + plural(c.days, 'дня', 'дней', 'дней') + ' после получения — в пару нажатий в личном кабинете. Новый размер отправим, как только вещь вернётся к нам' + (c.free ? ', доставка в обе стороны за наш счёт' : '') + '.</span></div></div>';
   }
   function cm(v) { return v > 0 ? String(v).replace('.', ',') + ' см' : '—'; }
-  function fitMeasuresHtml(p) {
-    var rows = fitRows(p).filter(function (r) { return r.w > 0 || r.l > 0 || r.sl > 0; }); if (!rows.length) return '';
-    var hasSl = rows.some(function (r) { return r.sl > 0; }), hasH = rows.some(function (r) { return r.hMin > 0; });
-    return '<h3 class="serif" style="font-size:34px;margin-bottom:6px">Мерки изделия</h3><p class="muted" style="margin-bottom:22px">Футболку разложили на столе и измерили. Ширина — от шва до шва под рукавами, длина — от верхней точки плеча до низа.</p>' +
-      '<div class="table-wrap" style="margin-bottom:36px"><table class="sizes"><thead><tr><th>Размер</th><th>Ширина</th><th>Длина</th>' + (hasSl ? '<th>Рукав</th>' : '') + (hasH ? '<th>Рост</th><th>Вес</th>' : '') + '</tr></thead><tbody>' +
-      rows.map(function (r) { return '<tr><td>' + esc(r.size) + '</td><td>' + cm(r.w) + '</td><td>' + cm(r.l) + '</td>' + (hasSl ? '<td>' + cm(r.sl) + '</td>' : '') + (hasH ? '<td>' + (r.hMin ? r.hMin + '–' + r.hMax : '—') + '</td><td>' + (r.kMin ? r.kMin + '–' + r.kMax + ' кг' : '—') + '</td>' : '') + '</tr>'; }).join('') + '</tbody></table></div>';
+  /* Таблица размеров товара (13.64.3): своя у каждого товара — мерки на каждый размер задаются в панели при создании товара.
+     Ширина, длина, рукав, свои столбцы (например «Обхват талии») и рост/вес, на кого рассчитан размер */
+  function sizeTableRows(p) {
+    var cols = ((p.fit || {}).cols || []);
+    return fitRows(p).filter(function (r) { return r.w > 0 || r.l > 0 || r.sl > 0 || r.hMin > 0 || (r.x || []).some(function (v, i) { return cols[i] && String(v || '').trim(); }); });
+  }
+  function sizeTableHtml(p) {
+    var rows = sizeTableRows(p), f = p.fit || {}, cols = f.cols || []; if (!rows.length) return '';
+    var has = function (k) { return rows.some(function (r) { return r[k] > 0; }); }, num = function (v) { return v > 0 ? String(v).replace('.', ',') : '—'; };
+    var xs = cols.map(function (c, i) { return { name: c, i: i }; }).filter(function (c) { return c.name && rows.some(function (r) { return String((r.x || [])[c.i] || '').trim(); }); });
+    var head = '<th>Размер</th>' + (has('w') ? '<th>Ширина, см</th>' : '') + (has('l') ? '<th>Длина, см</th>' : '') + (has('sl') ? '<th>Рукав, см</th>' : '') + xs.map(function (c) { return '<th>' + esc(c.name) + '</th>'; }).join('') + (has('hMin') ? '<th>Рост, см</th>' : '') + (has('kMin') ? '<th>Вес, кг</th>' : '');
+    var body = rows.map(function (r) {
+      return '<tr><td>' + esc(r.size) + '</td>' + (has('w') ? '<td>' + num(r.w) + '</td>' : '') + (has('l') ? '<td>' + num(r.l) + '</td>' : '') + (has('sl') ? '<td>' + num(r.sl) + '</td>' : '') +
+        xs.map(function (c) { var v = String((r.x || [])[c.i] || '').trim(); return '<td>' + (v ? esc(v) : '—') + '</td>'; }).join('') +
+        (has('hMin') ? '<td>' + (r.hMin ? r.hMin + '–' + r.hMax : '—') + '</td>' : '') + (has('kMin') ? '<td>' + (r.kMin ? r.kMin + '–' + r.kMax : '—') + '</td>' : '') + '</tr>';
+    }).join('');
+    var wide = 1 + ['w', 'l', 'sl', 'hMin', 'kMin'].filter(has).length + xs.length > 3;
+    return '<span class="eyebrow">' + esc(p.name) + '</span><h3 class="serif" style="font-size:34px;margin:10px 0 6px">Таблица размеров</h3>' +
+      '<p class="muted" style="margin-bottom:22px">' + (f.note ? esc(f.note) : 'Мерки этой вещи в сантиметрах: её разложили на столе и измерили. Ширина — от шва до шва под рукавами, длина — от верхней точки плеча до низа.') + '</p>' +
+      '<div class="table-wrap" style="margin-bottom:12px"><table class="sizes p-sizes"><thead><tr>' + head + '</tr></thead><tbody>' + body + '</tbody></table></div>' +
+      (wide ? '<p class="tw-hint" aria-hidden="true">Таблица листается вбок →</p>' : '') +
+      (f.modelSize && f.modelHeight ? '<p class="muted" style="margin-top:14px;font-size:14px">На модели размер ' + esc(f.modelSize) + ', рост ' + esc(f.modelHeight) + ' см</p>' : '');
   }
   function fitStockNote(col, size) {
     var s = (col.sizes || []).find(function (x) { return x.size === size; });
@@ -1583,14 +1598,7 @@
     });
   }
   function swatchStyle(c) { return c.hex ? 'background:' + esc(c.hex) : 'background:var(--surface-2)'; }
-  function chartTable(c) {
-    return '<div class="table-wrap"><table class="sizes"><thead><tr>' + (c.columns || []).map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr></thead><tbody>' +
-      (c.rows || []).map(function (r) { return '<tr>' + (c.columns || []).map(function (x, i) { return '<td>' + esc(r[i] || '') + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>' +
-      ((c.columns || []).length > 3 ? '<p class="tw-hint" aria-hidden="true">Таблица листается вбок →</p>' : '');
-  }
-  function measureHtml() {
-    return '<div class="how-measure"><div><b>Обхват груди</b>По самым выступающим точкам, лента горизонтально под мышками.</div><div><b>Обхват талии</b>По самой узкой части туловища, не затягивая ленту.</div><div><b>Обхват бёдер</b>По самым выступающим точкам ягодиц.</div></div>';
-  }
+
 
   /* ---------- Акции ---------- */
   function sale(v) {
@@ -1600,15 +1608,6 @@
       (promos.length ? '<div class="deals">' + promos.map(function (a) { return dealCard(a, false); }).join('') + '</div>' : '<p class="muted" style="margin-bottom:40px">Сейчас нет активных акций. Подпишитесь на наши соцсети, чтобы не пропустить следующую.</p>') +
       (items.length ? '<div class="section-head"><h2>Товары со скидкой</h2></div><div class="grid" style="padding-bottom:96px">' + items.map(card).join('') + '</div>' : '<div style="padding-bottom:96px"></div>') + '</div>';
     startDealTimers(v);
-  }
-
-  /* ---------- Размеры ---------- */
-  function sizes(v, parts, q) {
-    var charts = D.sizeCharts, cur = charts.find(function (c) { return c.id === q.id; }) || charts[0];
-    v.innerHTML = '<div class="wrap"><div class="page-head"><span class="eyebrow">Как выбрать размер</span><h1>Таблица размеров</h1></div><div style="padding-bottom:96px;max-width:980px">' +
-      (charts.length ? '<div class="tabs" style="margin-bottom:28px;overflow-x:auto">' + charts.map(function (c) { return '<button data-id="' + esc(c.id) + '"' + (c === cur ? ' class="on"' : '') + '>' + esc(c.name) + '</button>'; }).join('') + '</div><div id="chartBox"></div>' + measureHtml() : '<p class="muted">Таблицы размеров пока не добавлены.</p>') + '</div></div>';
-    function draw() { $('#chartBox').innerHTML = chartTable(cur) + (cur.note ? '<p class="muted" style="margin-top:16px;font-size:14px">' + esc(cur.note) + '</p>' : ''); }
-    if (cur) { draw(); $$('.tabs button').forEach(function (b) { b.addEventListener('click', function () { cur = charts.find(function (c) { return c.id === b.getAttribute('data-id'); }); $$('.tabs button').forEach(function (x) { x.classList.toggle('on', x === b); }); draw(); }); }); }
   }
 
   /* ---------- Корзина ---------- */

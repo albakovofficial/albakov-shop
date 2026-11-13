@@ -44,7 +44,7 @@
     if (ft) { var tmp = document.createElement('div'); tmp.innerHTML = footerHtml(); ft.replaceWith(tmp.firstElementChild); bindFooter(); }
     routeKeepScroll = true; route();
   }
-  // Закрытые разделы не показываются, пока их не откроют в панели (13.63.3); открыт один раздел — переключателя нет
+  // Закрытые разделы не показываются, пока их не откроют в панели (13.64.0); открыт один раздел — переключателя нет
   function openGenders() { return Object.keys(GENDERS).filter(function (g) { return !gClosed(g); }); }
   function genderTabs(cls) {
     var gs = openGenders(); if (gs.length < 2) return '';
@@ -484,7 +484,7 @@
     if (routeN++ && window.Metrika && fn !== adminPage) setTimeout(function () { Metrika.hit(location.pathname + location.search); }, 50);
     pageMeta(name, p, r.q);
     if ($('.nf', v)) document.title = 'Страница не найдена — ' + (D.settings.storeName || 'ALBAKOV'); // 404, в том числе для удалённого товара
-    document.body.classList.toggle('hero-under', !!$('#view > .slider:first-child'));
+    document.body.classList.toggle('hero-under', !!$('#view > .slider:first-child:not(.sl-b)'));
     var fab = $('#fab'); if (fab) { fab.hidden = fn === adminPage || (name === 'account' && r.q.tab === 'support'); fabSet(false); }
     syncHeaderH();
     if (!routeQuiet) { v.classList.remove('view-in'); void v.offsetWidth; v.classList.add('view-in'); }
@@ -549,7 +549,8 @@
     var pr = slidePromo(sl);
     var eyebrow = (sl.eyebrow || '') + (pr && pr.endsAt ? (sl.eyebrow ? ' · ' : '') + 'до ' + fmtDate(pr.endsAt) : '');
     var badge = sl.badge || (pr ? (pr.type === 'percent' ? '−' + pr.value + '%' : '−' + fmt(pr.value)) : '');
-    var title = esc(sl.title || '').replace(/\*(.+?)\*/g, '<em>$1</em>').replace(/^([−–-]\s?\d[\d\s]*(?:%|₽)?)/, '<span class="st-off">$1</span>');
+    var rawT = String(sl.title || ''); if (rawT.indexOf('*') === -1 && rawT.indexOf('\n') !== -1) { var nl = rawT.indexOf('\n'); rawT = rawT.slice(0, nl + 1) + '*' + rawT.slice(nl + 1).replace(/\n/g, ' ') + '*'; }
+    var title = esc(rawT).replace(/\*(.+?)\*/g, '<em>$1</em>').replace(/^([−–-]\s?\d[\d\s]*(?:%|₽)?)/, '<span class="st-off">$1</span>');
     var btn = function (b, cls, arrow) { return b && b.label ? '<a class="sbtn ' + cls + '" href="' + esc(safeUrl(b.link || '#/catalog')) + '"><span>' + esc(b.label) + '</span>' + (cls === 'sbtn-primary' ? '<span class="sbtn-ic" aria-hidden="true">' + ARROW + '</span>' : arrow ? '<span class="sbtn-arrow" aria-hidden="true"></span>' : '') + '</a>' : ''; };
     return '<article class="slide layout-' + (sl.layout === 'full' ? 'full' : 'split') + (active ? ' is-active' : '') + '" aria-roledescription="слайд" aria-label="' + (i + 1) + ' из ' + total + '"' + (active ? '' : ' aria-hidden="true"') + '>' +
       '<div class="slide-media"><img src="' + esc(sl.image || Art.make({ kind: 'coat', tone: '#3d3d40' })) + '" alt=""' + (i ? ' loading="lazy"' : '') + '></div>' +
@@ -562,14 +563,17 @@
         ((sl.btn1 && sl.btn1.label) || (sl.btn2 && sl.btn2.label) ? '<div class="slide-actions">' + btn(sl.btn1, 'sbtn-primary', true) + btn(sl.btn2, 'sbtn-line', true) + '</div>' : '') +
       '</div></article>';
   }
+  /* Слайдер (вариант B, 13.64): карточка в светлом тоне раздела; на компьютере текст слева и фото справа,
+     на телефоне фото сверху. Внизу счётчик «01 / 03», полоса времени и стрелки */
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
   function sliderHtml(list) {
     var c = D.settings.slider || {}, n = list.length;
-    return '<section class="slider" id="slider" aria-roledescription="карусель" aria-label="Главное" style="--dur:' + Math.max(3, Number(c.interval) || 7) + 's">' +
-      '<div class="sl-track">' + list.map(function (sl, i) { return slideHtml(sl, i, n, i === 0); }).join('') + '</div>' +
-      (n > 1 ? '<div class="slider-ui">' +
-        '<div class="sl-dots">' + list.map(function (sl, i) { return '<button class="sl-dot' + (i === 0 ? ' on' : '') + '" data-sl="' + i + '" aria-label="Слайд ' + (i + 1) + '"><b>' + (i + 1) + '</b><i></i></button>'; }).join('') + '</div>' +
-        '<div class="sl-arrows"><button class="sl-arrow" data-sl-step="-1" aria-label="Предыдущий слайд"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><button class="sl-arrow" data-sl-step="1" aria-label="Следующий слайд"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button></div></div>' : '') +
-      '</section>';
+    return '<section class="slider sl-b" id="slider" aria-roledescription="карусель" aria-label="Главное" style="--dur:' + Math.max(3, Number(c.interval) || 7) + 's">' +
+      '<div class="slb-card"><div class="sl-track">' + list.map(function (sl, i) { return slideHtml(sl, i, n, i === 0); }).join('') + '</div>' +
+      (n > 1 ? '<div class="slb-ui"><span class="slb-num"><b id="slNum">01</b> / ' + pad2(n) + '</span><span class="slb-prog" aria-hidden="true"><i></i></span>' +
+        '<button class="sl-arrow" data-sl-step="-1" aria-label="Предыдущий слайд"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>' +
+        '<button class="sl-arrow" data-sl-step="1" aria-label="Следующий слайд"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button></div>' : '') +
+      '</div></section>';
   }
   function initSlider() {
     var el = $('#slider'); if (!el) return;
@@ -585,7 +589,8 @@
         $$('a,button', s).forEach(function (a) { a.tabIndex = on ? 0 : -1; });
       });
       dots.forEach(function (d, k) { d.classList.remove('on'); if (k === idx) { void d.offsetWidth; d.classList.add('on'); } });
-      var num = $('#slNum'); if (num) num.textContent = idx + 1;
+      var num = $('#slNum'); if (num) num.textContent = pad2(idx + 1);
+      var pg = $('.slb-prog', el); if (pg) { pg.classList.remove('run'); void pg.offsetWidth; pg.classList.add('run'); }
     }
     show(slideKeep < n ? slideKeep : 0); slideKeep = 0;
     el.addEventListener('click', function (e) {
@@ -604,7 +609,7 @@
         try { navigator.clipboard.writeText(code).then(ok, function () { toast('Промокод: ' + code); }); } catch (ex) { toast('Промокод: ' + code); }
       }
     });
-    if (auto) el.addEventListener('animationend', function (e) { if (e.target.parentNode && e.target.parentNode.classList.contains('on')) show(idx + 1); });
+    if (auto) el.addEventListener('animationend', function (e) { var p = e.target.parentNode; if (p && (p.classList.contains('on') || p.classList.contains('run'))) show(idx + 1); });
     el.addEventListener('pointermove', function (e) {
       if (e.pointerType !== 'mouse') return;
       var r = el.getBoundingClientRect();
@@ -2372,7 +2377,7 @@
     '</div>';
   }
 
-  /* Удаление аккаунта (13.63.3): окно с последствиями и паролем; заказы в пути доставляем, чеки остаются у магазина */
+  /* Удаление аккаунта (13.64.0): окно с последствиями и паролем; заказы в пути доставляем, чеки остаются у магазина */
   var DEL_IC = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>';
   async function deleteAccount(u) {
     var orders = []; try { orders = await API.myOrders(); } catch (e) { /* без списка заказов окно всё равно покажем */ }

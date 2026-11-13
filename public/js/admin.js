@@ -2825,7 +2825,7 @@
       var stage = $('#slpvStage', m), wrap = $('#slpv', m), w = mode === 'desk' ? 1280 : 390;
       stage.style.width = w + 'px';
       stage.className = 'slpv-stage ' + mode;
-      stage.innerHTML = '<section class="slider sl-b" style="--dur:7s"><div class="slb-card"><div class="sl-track">' + A().slideHtml(current(), 0, 1, true) + '</div></div></section>';
+      stage.innerHTML = '<section class="slider sl-g" style="--dur:7s"><div class="slg-card"><div class="slg-track">' + A().slideHtml(current(), 0, 1, true) + '</div></div></section>';
       var k = Math.min(1, wrap.clientWidth / w);
       stage.style.transform = 'scale(' + k + ')';
       stage.style.left = Math.max(0, (wrap.clientWidth - w * k) / 2) + 'px';

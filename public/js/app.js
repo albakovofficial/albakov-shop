@@ -179,6 +179,7 @@
   function safeUrl(u) { u = String(u || '').trim(); return /^(https?:\/\/|#|\/|mailto:|tel:)/i.test(u) || /^[\w.-]+(\/|$|\?|#)/.test(u) && !/^[\w.+-]+:/.test(u) ? u : '#/'; }
   // Пункт меню ведёт в пустой раздел (нет новинок, хитов, товаров категории или скидок) — прячем его, пока там пусто
   function navEmpty(link) {
+    if (/^[#/]*sizes\b/.test(String(link || ''))) return true; // общей таблицы размеров больше нет (13.64.3) — у каждого товара своя
     var m = /^#?\/?catalog\?(?:.*&)?(tag|cat)=([^&]+)/.exec(String(link || '').replace(/^\//, '#/').replace(/^#\//, ''));
     var ps = gProducts();
     if (m && m[1] === 'tag') return m[2] === 'new' ? !ps.some(function (p) { return (p.tags || []).indexOf('new') !== -1; }) : m[2] === 'hit' ? !hitList(ps).length : false;
@@ -292,7 +293,7 @@
       '</div>' +
       '<div class="f-grid">' +
         col('Магазин', sortedCats().map(function (x) { return '<li><a href="#/catalog?cat=' + esc(x.slug) + '">' + esc(x.name) + '</a></li>'; }).join('') + '<li><a href="#/catalog?tag=new">Новинки</a></li><li><a href="#/sale">Акции</a></li>' + (D.giftCfg && D.giftCfg.enabled !== false ? '<li><a href="#/gift">Подарочные сертификаты</a></li>' : '')) +
-        col('Покупателям', '<li><a href="#/track">Где мой заказ</a></li>' + pages('help') + '<li><a href="#/sizes">Таблица размеров</a></li>' + pages('brand') +
+        col('Покупателям', '<li><a href="#/track">Где мой заказ</a></li>' + pages('help') + '' + pages('brand') +
           (appStoreUrl() ? '<li><a href="' + esc(appStoreUrl()) + '" target="_blank" rel="noopener">Приложение для iPhone</a></li>' : '')) +
         col('Личный кабинет', '<li><a href="#/account?tab=orders">Мои заказы</a></li><li><a href="#/favorites">Избранное</a></li>' + (bonusCfg().enabled ? '<li><a href="#/account?tab=bonus">Бонусы</a></li>' : '') + '<li><a href="#/account?tab=support">Поддержка</a></li>') +
         '<div class="fcol fcol-contacts"><h4>Контакты</h4><ul class="f-contacts">' +
@@ -455,14 +456,13 @@
       var pg = D.pages.find(function (x) { return x.slug === p[1]; });
       if (pg) t = pg.slug === 'about' ? 'О бренде ' + store + ' — одежда из Ингушетии' : pg.title + ' — ' + store;
     } else if (name === 'sale') t = 'Акции и скидки — ' + store;
-    else if (name === 'sizes') t = 'Таблица размеров — ' + store;
     else if (name === 'favorites') t = 'Избранное — ' + store;
     else if (name === 'track') t = 'Где мой заказ — ' + store;
     else if (name === 'gift') t = 'Подарочный сертификат — ' + store;
     else if (name) t = store + (s.tagline ? ' — ' + s.tagline : '');
     document.title = t;
     var l = document.querySelector('link[rel="canonical"]');
-    if (l && ['', 'catalog', 'product', 'page', 'sale', 'sizes'].indexOf(name) !== -1) l.href = location.origin + canon;
+    if (l && ['', 'catalog', 'product', 'page', 'sale'].indexOf(name) !== -1) l.href = location.origin + canon;
   }
   function route() {
     closePanels();
@@ -470,7 +470,7 @@
     var r = parseHash(), v = $('#view'), p = r.parts;
     $$('.nav a').forEach(function (a) { a.classList.toggle('active', a.getAttribute('href') === curRoute()); });
     var name = p[0] || '';
-    var map = { '': home, catalog: catalog, product: product, sale: sale, sizes: sizes, cart: cartPage, checkout: checkout, account: account, order: orderPage, page: textPage, favorites: favoritesPage, track: trackPage, gift: giftPage };
+    var map = { '': home, catalog: catalog, product: product, sale: sale, sizes: function () { go('#/catalog'); }, cart: cartPage, checkout: checkout, account: account, order: orderPage, page: textPage, favorites: favoritesPage, track: trackPage, gift: giftPage };
     var fn = map.hasOwnProperty(name) ? map[name] : isAdminRoute(name) ? adminPage : notFound;
     if ((name === '' || name === 'catalog' || name === 'sale') && gClosed(curGender())) fn = soonPage;
     try { fn(v, p, r.q); }
@@ -1148,7 +1148,6 @@
     if (!p) return notFound(v);
     var colors = Pricing.colorsOf(p), notifyOn = ((D.settings.notify || {}).enabled) !== false; // «Сообщить о поступлении» включено, пока его не выключили в панели
     var pr = priceOf(p), cat = catById(p.categoryId);
-    var chart = D.sizeCharts.find(function (c) { return c.id === p.sizeChartId; });
     // Цвет: из адреса, иначе первый, где что-то есть в наличии
     var col = colors.find(function (c) { return c.id === q.color; }) || colors.find(function (c) { return Pricing.stockOf(c) > 0; }) || colors[0];
     var sel = null, qty = 1;
@@ -1170,7 +1169,7 @@
           var out = Pricing.stockOf(c) === 0;
           return '<button class="swatch-btn' + (out ? ' out' : '') + '" role="radio" data-color="' + esc(c.id) + '" title="' + esc(c.name) + (out ? ' — нет в наличии' : '') + '" aria-label="' + esc(c.name) + (out ? ', нет в наличии' : '') + '"><span class="sw" style="' + swatchStyle(c) + '"></span></button>';
         }).join('') + '</div></div>' +
-      '<div><div class="opt-head"><span>Размер</span>' + (chart || fitCanCompare(p) ? '<button class="link" style="font-size:14px" id="openChart">' + (chart ? 'Таблица размеров' : 'Мерки изделия') + '</button>' : '') + '</div>' +
+      '<div><div class="opt-head"><span>Размер</span>' + (sizeTableRows(p).length ? '<button class="link" style="font-size:14px" id="openChart">Таблица размеров</button>' : '') + '</div>' +
         '<div class="chips" id="sizeChips"></div><p class="stock-note" id="stockNote" style="margin-top:10px"></p>' + fitToolsHtml(p) + '<div id="fitCheck" aria-live="polite"></div></div>' +
       '<div class="sticky-buy"><div class="buy-row"><div class="qty"><button data-q="-1" aria-label="Меньше">−</button><span id="qty">1</span><button data-q="1" aria-label="Больше">+</button></div><button class="btn" id="addBtn">Добавить в корзину</button></div></div>' +
       '<div class="buy-more"><button type="button" class="btn ghost buy-now" id="buyNow"><span>Купить сейчас</span><span class="bn-ic" aria-hidden="true">' + ARROW + '</span></button>' +
@@ -1283,7 +1282,7 @@
       go('#/checkout?buy=1');
     });
     var oc = $('#openChart'); if (oc) oc.addEventListener('click', function () {
-      openModal(fitMeasuresHtml(p) + (chart ? '<h3 class="serif" style="font-size:34px;margin-bottom:6px">Таблица размеров</h3><p class="muted" style="margin-bottom:22px">' + esc(chart.name) + '</p>' + chartTable(chart) + (chart.note ? '<p class="muted" style="margin-top:16px;font-size:14px">' + esc(chart.note) + '</p>' : '') + measureHtml() : ''));
+      openModal(sizeTableHtml(p));
     });
     // Подбор размера: выбранный размер сразу отмечается в карточке
     function pickSize(size) {
@@ -1475,12 +1474,28 @@
     return '<div class="fit-guar">' + EXCH_IC + '<div><b>' + (c.free ? 'Не подошёл размер — обменяем бесплатно' : 'Не подошёл размер — обменяем') + '</b><span>В течение ' + c.days + ' ' + plural(c.days, 'дня', 'дней', 'дней') + ' после получения — в пару нажатий в личном кабинете. Новый размер отправим, как только вещь вернётся к нам' + (c.free ? ', доставка в обе стороны за наш счёт' : '') + '.</span></div></div>';
   }
   function cm(v) { return v > 0 ? String(v).replace('.', ',') + ' см' : '—'; }
-  function fitMeasuresHtml(p) {
-    var rows = fitRows(p).filter(function (r) { return r.w > 0 || r.l > 0 || r.sl > 0; }); if (!rows.length) return '';
-    var hasSl = rows.some(function (r) { return r.sl > 0; }), hasH = rows.some(function (r) { return r.hMin > 0; });
-    return '<h3 class="serif" style="font-size:34px;margin-bottom:6px">Мерки изделия</h3><p class="muted" style="margin-bottom:22px">Футболку разложили на столе и измерили. Ширина — от шва до шва под рукавами, длина — от верхней точки плеча до низа.</p>' +
-      '<div class="table-wrap" style="margin-bottom:36px"><table class="sizes"><thead><tr><th>Размер</th><th>Ширина</th><th>Длина</th>' + (hasSl ? '<th>Рукав</th>' : '') + (hasH ? '<th>Рост</th><th>Вес</th>' : '') + '</tr></thead><tbody>' +
-      rows.map(function (r) { return '<tr><td>' + esc(r.size) + '</td><td>' + cm(r.w) + '</td><td>' + cm(r.l) + '</td>' + (hasSl ? '<td>' + cm(r.sl) + '</td>' : '') + (hasH ? '<td>' + (r.hMin ? r.hMin + '–' + r.hMax : '—') + '</td><td>' + (r.kMin ? r.kMin + '–' + r.kMax + ' кг' : '—') + '</td>' : '') + '</tr>'; }).join('') + '</tbody></table></div>';
+  /* Таблица размеров товара (13.64.3): своя у каждого товара — мерки на каждый размер задаются в панели при создании товара.
+     Ширина, длина, рукав, свои столбцы (например «Обхват талии») и рост/вес, на кого рассчитан размер */
+  function sizeTableRows(p) {
+    var cols = ((p.fit || {}).cols || []);
+    return fitRows(p).filter(function (r) { return r.w > 0 || r.l > 0 || r.sl > 0 || r.hMin > 0 || (r.x || []).some(function (v, i) { return cols[i] && String(v || '').trim(); }); });
+  }
+  function sizeTableHtml(p) {
+    var rows = sizeTableRows(p), f = p.fit || {}, cols = f.cols || []; if (!rows.length) return '';
+    var has = function (k) { return rows.some(function (r) { return r[k] > 0; }); }, num = function (v) { return v > 0 ? String(v).replace('.', ',') : '—'; };
+    var xs = cols.map(function (c, i) { return { name: c, i: i }; }).filter(function (c) { return c.name && rows.some(function (r) { return String((r.x || [])[c.i] || '').trim(); }); });
+    var head = '<th>Размер</th>' + (has('w') ? '<th>Ширина, см</th>' : '') + (has('l') ? '<th>Длина, см</th>' : '') + (has('sl') ? '<th>Рукав, см</th>' : '') + xs.map(function (c) { return '<th>' + esc(c.name) + '</th>'; }).join('') + (has('hMin') ? '<th>Рост, см</th>' : '') + (has('kMin') ? '<th>Вес, кг</th>' : '');
+    var body = rows.map(function (r) {
+      return '<tr><td>' + esc(r.size) + '</td>' + (has('w') ? '<td>' + num(r.w) + '</td>' : '') + (has('l') ? '<td>' + num(r.l) + '</td>' : '') + (has('sl') ? '<td>' + num(r.sl) + '</td>' : '') +
+        xs.map(function (c) { var v = String((r.x || [])[c.i] || '').trim(); return '<td>' + (v ? esc(v) : '—') + '</td>'; }).join('') +
+        (has('hMin') ? '<td>' + (r.hMin ? r.hMin + '–' + r.hMax : '—') + '</td>' : '') + (has('kMin') ? '<td>' + (r.kMin ? r.kMin + '–' + r.kMax : '—') + '</td>' : '') + '</tr>';
+    }).join('');
+    var wide = 1 + ['w', 'l', 'sl', 'hMin', 'kMin'].filter(has).length + xs.length > 3;
+    return '<span class="eyebrow">' + esc(p.name) + '</span><h3 class="serif" style="font-size:34px;margin:10px 0 6px">Таблица размеров</h3>' +
+      '<p class="muted" style="margin-bottom:22px">' + (f.note ? esc(f.note) : 'Мерки этой вещи в сантиметрах: её разложили на столе и измерили. Ширина — от шва до шва под рукавами, длина — от верхней точки плеча до низа.') + '</p>' +
+      '<div class="table-wrap" style="margin-bottom:12px"><table class="sizes p-sizes"><thead><tr>' + head + '</tr></thead><tbody>' + body + '</tbody></table></div>' +
+      (wide ? '<p class="tw-hint" aria-hidden="true">Таблица листается вбок →</p>' : '') +
+      (f.modelSize && f.modelHeight ? '<p class="muted" style="margin-top:14px;font-size:14px">На модели размер ' + esc(f.modelSize) + ', рост ' + esc(f.modelHeight) + ' см</p>' : '');
   }
   function fitStockNote(col, size) {
     var s = (col.sizes || []).find(function (x) { return x.size === size; });
@@ -1583,14 +1598,7 @@
     });
   }
   function swatchStyle(c) { return c.hex ? 'background:' + esc(c.hex) : 'background:var(--surface-2)'; }
-  function chartTable(c) {
-    return '<div class="table-wrap"><table class="sizes"><thead><tr>' + (c.columns || []).map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr></thead><tbody>' +
-      (c.rows || []).map(function (r) { return '<tr>' + (c.columns || []).map(function (x, i) { return '<td>' + esc(r[i] || '') + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>' +
-      ((c.columns || []).length > 3 ? '<p class="tw-hint" aria-hidden="true">Таблица листается вбок →</p>' : '');
-  }
-  function measureHtml() {
-    return '<div class="how-measure"><div><b>Обхват груди</b>По самым выступающим точкам, лента горизонтально под мышками.</div><div><b>Обхват талии</b>По самой узкой части туловища, не затягивая ленту.</div><div><b>Обхват бёдер</b>По самым выступающим точкам ягодиц.</div></div>';
-  }
+
 
   /* ---------- Акции ---------- */
   function sale(v) {
@@ -1600,15 +1608,6 @@
       (promos.length ? '<div class="deals">' + promos.map(function (a) { return dealCard(a, false); }).join('') + '</div>' : '<p class="muted" style="margin-bottom:40px">Сейчас нет активных акций. Подпишитесь на наши соцсети, чтобы не пропустить следующую.</p>') +
       (items.length ? '<div class="section-head"><h2>Товары со скидкой</h2></div><div class="grid" style="padding-bottom:96px">' + items.map(card).join('') + '</div>' : '<div style="padding-bottom:96px"></div>') + '</div>';
     startDealTimers(v);
-  }
-
-  /* ---------- Размеры ---------- */
-  function sizes(v, parts, q) {
-    var charts = D.sizeCharts, cur = charts.find(function (c) { return c.id === q.id; }) || charts[0];
-    v.innerHTML = '<div class="wrap"><div class="page-head"><span class="eyebrow">Как выбрать размер</span><h1>Таблица размеров</h1></div><div style="padding-bottom:96px;max-width:980px">' +
-      (charts.length ? '<div class="tabs" style="margin-bottom:28px;overflow-x:auto">' + charts.map(function (c) { return '<button data-id="' + esc(c.id) + '"' + (c === cur ? ' class="on"' : '') + '>' + esc(c.name) + '</button>'; }).join('') + '</div><div id="chartBox"></div>' + measureHtml() : '<p class="muted">Таблицы размеров пока не добавлены.</p>') + '</div></div>';
-    function draw() { $('#chartBox').innerHTML = chartTable(cur) + (cur.note ? '<p class="muted" style="margin-top:16px;font-size:14px">' + esc(cur.note) + '</p>' : ''); }
-    if (cur) { draw(); $$('.tabs button').forEach(function (b) { b.addEventListener('click', function () { cur = charts.find(function (c) { return c.id === b.getAttribute('data-id'); }); $$('.tabs button').forEach(function (x) { x.classList.toggle('on', x === b); }); draw(); }); }); }
   }
 
   /* ---------- Корзина ---------- */
@@ -2434,14 +2433,82 @@
     });
   }
 
-  /* ---------- Поддержка в кабинете: список обращений и переписка ---------- */
-  var SUPPORT_STATE = { open: 'Ждёт ответа', answered: 'Есть ответ', closed: 'Закрыто' };
+  /* ---------- Поддержка в кабинете (13.64.3, вариант B): обращения с номерами и переписка ----------
+     Список — карточки «№ 1043 · тема · статус», переписка — пузыри с фото, отметкой «прочитано» и карточкой заказа,
+     новое обращение — тема плиткой, заказ карточкой, до 5 фото. Фото уменьшаются в браузере до 1600 px. */
+  var SUPPORT_STATE = { open: 'Ждёт ответа', answered: 'Есть ответ', closed: 'Решено' };
+  var SUP_IC = (function () {
+    var s = function (d, w) { return '<svg viewBox="0 0 24 24" width="' + (w || 22) + '" height="' + (w || 22) + '" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>'; };
+    return {
+      back: s('<path d="M19 12H5M11 6l-6 6 6 6"/>'), pen: s('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13 7l4 4"/>'), check: s('<path d="M5 12.5l4.5 4.5L19 7"/>', 20),
+      clip: s('<path d="M8.5 12.5l6.5-6.5a3 3 0 0 1 4.2 4.2l-8 8a5 5 0 0 1-7-7l7.5-7.5"/>'), send: s('<path d="M12 19V5M6 11l6-6 6 6"/>', 20), chev: s('<path d="M9 6l6 6-6 6"/>', 16),
+      ticks: '<svg viewBox="0 0 22 14" width="16" height="11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 7.5l4 4L13 3.5M8 10.5l1 1L17 3.5"/></svg>',
+      tick: '<svg viewBox="0 0 22 14" width="12" height="11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5l4 4L15 3.5"/></svg>',
+      photo: s('<rect x="3" y="5" width="18" height="14" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="M4 17l5-5 4 4 3-3 4 4"/>'), x: s('<path d="M6 6l12 12M18 6L6 18"/>', 14),
+      'Заказ': s('<path d="M5 8h14l-1 12H6z"/><path d="M9 8a3 3 0 0 1 6 0"/>', 24), 'Доставка': s('<path d="M3 7h11v9H3z"/><path d="M14 10h4l3 3v3h-7"/><circle cx="7" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/>', 24),
+      'Размер и посадка': s('<path d="M3 9h18v6H3z"/><path d="M7 9v3M11 9v3M15 9v3"/>', 24), 'Возврат и обмен': s('<path d="M9 7L5 11l4 4"/><path d="M5 11h10a4 4 0 0 1 0 8h-2"/>', 24),
+      'Другое': '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true"><circle cx="6" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="18" cy="12" r="1.4"/></svg>'
+    };
+  })();
   function msgTime(iso) {
     var d = new Date(iso), now = new Date();
     var t = d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
     return d.toDateString() === now.toDateString() ? t : d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) + ', ' + t;
   }
+  function msgClock(iso) { return new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }); }
+  function msgDay(iso) {
+    var d = new Date(iso), now = new Date(), y = new Date(now); y.setDate(now.getDate() - 1);
+    return d.toDateString() === now.toDateString() ? 'Сегодня' : d.toDateString() === y.toDateString() ? 'Вчера' : d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) + (d.getFullYear() !== now.getFullYear() ? ' ' + d.getFullYear() : '');
+  }
   function supportHours() { var h = (D.settings.contacts || {}).hours; return h ? 'Отвечаем ' + h.charAt(0).toLowerCase() + h.slice(1) + '. ' : ''; }
+  // Фото: уменьшаем до 1600 px по длинной стороне и сохраняем в JPEG — так iPhone (HEIC) и большие снимки уходят быстро
+  function supPhoto(file) {
+    return new Promise(function (ok, bad) {
+      var img = new Image(), url = URL.createObjectURL(file);
+      img.onload = function () {
+        var k = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight)), c = document.createElement('canvas');
+        c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+        ok(c.toDataURL('image/jpeg', 0.85));
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); bad(new Error('Не получилось открыть фото')); };
+      img.src = url;
+    });
+  }
+  // Поле «прикрепить фото»: выбранные фото сразу загружаются, в отправку идут их имена
+  function supFiles(root, uploadFn) {
+    var st = { files: [], busy: 0 }, box = $('.sup-att', root), input = $('.sup-file', root);
+    var draw = function () {
+      box.hidden = !st.files.length && !st.busy;
+      box.innerHTML = st.files.map(function (f, i) { return '<span class="sup-att-i"><img src="' + f.preview + '" alt=""><button type="button" data-rm="' + i + '" aria-label="Убрать фото">' + SUP_IC.x + '</button></span>'; }).join('') +
+        (st.busy ? '<span class="sup-att-i is-busy" aria-label="Загружаем фото"></span>' : '');
+    };
+    box.addEventListener('click', function (e) { var b = e.target.closest('[data-rm]'); if (b) { st.files.splice(+b.getAttribute('data-rm'), 1); draw(); } });
+    input.addEventListener('change', async function () {
+      var list = Array.prototype.slice.call(input.files || []).slice(0, 5 - st.files.length); input.value = '';
+      if (!list.length) { toast('Не больше 5 фото в одном сообщении'); return; }
+      for (var i = 0; i < list.length; i++) {
+        st.busy++; draw();
+        try { var d = await supPhoto(list[i]), r = await uploadFn(d); st.files.push({ name: r.file, preview: d }); }
+        catch (e) { toast(errMsg(e)); }
+        st.busy--; draw();
+      }
+    });
+    return { names: function () { return st.files.map(function (f) { return f.name; }); }, busy: function () { return st.busy > 0; }, clear: function () { st.files = []; draw(); } };
+  }
+  function supImgs(files, base) {
+    if (!files || !files.length) return '';
+    return '<span class="sup-ph n' + Math.min(files.length, 3) + '">' + files.map(function (f) { var u = base + encodeURIComponent(f); return '<a href="' + u + '" target="_blank" rel="noopener"><img src="' + u + '" alt="Фото" loading="lazy"></a>'; }).join('') + '</span>';
+  }
+  function supNum(t, on) { return '<span class="sup-num' + (on ? ' on' : '') + '">№ ' + esc(t.number) + '</span>'; }
+  function supCard(t, cur) {
+    var last = t.messages[t.messages.length - 1], who = last.from === 'shop' ? '<b>' + esc(D.settings.storeName || 'Магазин') + ':</b> ' : 'Вы: ';
+    var txt = last.text ? esc(last.text.slice(0, 90)) : (last.files || []).length ? 'Фото' : '';
+    return '<a class="sup-card' + (cur && cur.id === t.id ? ' on' : '') + (t.unread ? ' unread' : '') + (t.status === 'closed' ? ' closed' : '') + '" href="#/account?tab=support&id=' + esc(t.id) + '">' +
+      '<span class="sc-top">' + supNum(t, t.status !== 'closed') + '<b>' + esc(t.topic) + '</b>' + (t.unread ? '<i class="sc-dot" aria-label="Новый ответ"></i>' : '') + '</span>' +
+      '<span class="sc-text">' + who + txt + '</span>' +
+      '<span class="sc-meta"><span class="sup-st s-' + t.status + '">' + (t.status === 'closed' ? SUP_IC.check : '') + SUPPORT_STATE[t.status] + '</span>' + (t.orderNumber ? '<span>Заказ № ' + esc(t.orderNumber) + '</span>' : '') + '<time>' + esc(msgTime(t.updatedAt)) + '</time></span></a>';
+  }
   async function supportTab(body, q) {
     var r;
     try { r = await API.support(); } catch (e) { body.innerHTML = '<p class="form-error">' + esc(errMsg(e)) + '</p>'; return; }
@@ -2449,81 +2516,117 @@
     var list = r.tickets, topics = r.topics;
     var cur = q.id ? list.find(function (t) { return t.id === q.id; }) : null;
     var isNew = q.new === '1' || (!cur && !list.length);
+    var open = list.filter(function (t) { return t.status !== 'closed'; }), done = list.filter(function (t) { return t.status === 'closed'; });
     var side = '<aside class="sup-list">' +
-      '<a class="btn block" href="#/account?tab=support&new=1">Новое обращение</a>' +
-      (list.length ? '<ul>' + list.map(function (t) {
-        var last = t.messages[t.messages.length - 1];
-        return '<li><a class="sup-item' + (cur && cur.id === t.id ? ' on' : '') + (t.unread ? ' unread' : '') + '" href="#/account?tab=support&id=' + esc(t.id) + '">' +
-          '<span class="si-top"><b>' + esc(t.topic) + (t.orderNumber ? ' · № ' + esc(t.orderNumber) : '') + '</b><time>' + esc(msgTime(t.updatedAt)) + '</time></span>' +
-          '<span class="si-text">' + (last.from === 'shop' ? 'Поддержка: ' : 'Вы: ') + esc(last.text.slice(0, 90)) + '</span>' +
-          '<span class="si-state s-' + t.status + '">' + SUPPORT_STATE[t.status] + '</span></a></li>';
-      }).join('') + '</ul>' : '') +
+      '<a class="sup-write" href="#/account?tab=support&new=1"><span class="sw-ic">' + SUP_IC.pen + '</span><span><b>Написать в поддержку</b><small>' + supportHours() + 'Ответ придёт сюда, на почту и уведомлением</small></span></a>' +
+      (open.length ? '<div class="sup-group">' + open.map(function (t) { return supCard(t, cur); }).join('') + '</div>' : '') +
+      (done.length ? '<p class="sup-cap">Решённые</p><div class="sup-group">' + done.map(function (t) { return supCard(t, cur); }).join('') + '</div>' : '') +
     '</aside>';
-    var pane = cur ? threadHtml(cur) : isNew ? newTicketHtml(topics, q) : '<div class="sup-pick"><h3>Выберите обращение</h3><p>Или напишите новое — ответим здесь и продублируем ответ на почту.</p></div>';
+    var pane = cur ? threadHtml(cur) : isNew ? newTicketHtml(topics, q) : '<div class="sup-pick"><span class="sp-ic">' + ACC_ICON.chat + '</span><h3>Выберите обращение</h3><p>Или напишите новое — у него сразу появится номер, по нему вас быстро найдут.</p></div>';
     body.innerHTML = '<div class="sup' + (cur || isNew ? ' has-pane' : '') + '">' + side + '<section class="sup-pane">' + pane + '</section></div>';
     if (cur) bindThread(body, cur);
     else if (isNew) bindNewTicket(body);
   }
+  function supOrderCard(o) {
+    if (!o) return '';
+    return '<a class="sup-order" href="#/order/' + esc(o.id) + '"><span class="so-ph">' + (o.image ? '<img src="' + esc(o.image) + '" alt="">' : '') + '</span>' +
+      '<span class="so-t"><b>Заказ № ' + esc(o.number) + ' · ' + esc((STATUS[o.status] || o.status).toLowerCase()) + '</b><small>' + esc([o.name, [o.color, o.size].filter(Boolean).join(', ')].filter(Boolean).join(' · ')) + (o.items > 1 ? ' и ещё ' + (o.items - 1) : '') + '</small></span>' + SUP_IC.chev + '</a>';
+  }
   function threadHtml(t) {
+    var closed = t.status === 'closed';
+    var chips = (!closed ? '<button type="button" class="sup-chip" data-close>' + SUP_IC.check + 'Вопрос решён</button>' : '') +
+      (t.order ? '<a class="sup-chip" href="#/order/' + esc(t.order.id) + '">' + (t.topic === 'Возврат и обмен' || t.topic === 'Размер и посадка' ? 'Обменять размер или вернуть' : 'Открыть заказ № ' + esc(t.order.number)) + '</a>' : '');
     return '<div class="sup-thread">' +
-      '<header class="st-head"><a class="st-back" href="#/account?tab=support" aria-label="Все обращения">←</a><div><b>' + esc(t.topic) + '</b><span>Обращение № ' + esc(t.number) +
-        (t.orderNumber ? ' · <a href="#/order/' + esc(t.orderId) + '">заказ № ' + esc(t.orderNumber) + '</a>' : '') + '</span></div><span class="si-state s-' + t.status + '">' + SUPPORT_STATE[t.status] + '</span></header>' +
+      '<header class="st-head"><a class="st-back" href="#/account?tab=support" aria-label="Все обращения">' + SUP_IC.back + '</a>' +
+        '<div><b>Обращение № ' + esc(t.number) + '</b><span>' + esc(t.topic) + ' · <em class="s-' + t.status + '">' + SUPPORT_STATE[t.status].toLowerCase() + '</em></span></div>' +
+        (!closed ? '<button type="button" class="st-done" data-close aria-label="Вопрос решён" title="Вопрос решён">' + SUP_IC.check + '</button>' : '') + '</header>' +
+      supOrderCard(t.order) +
       '<div class="st-msgs" id="stMsgs">' + msgsHtml(t) + '</div>' +
-      '<form class="st-send" id="stSend"><textarea class="textarea" id="stText" rows="2" placeholder="Напишите сообщение" maxlength="2000" aria-label="Сообщение"></textarea>' +
-        '<button class="btn" id="stBtn">Отправить</button></form>' +
-      '<p class="st-note">' + supportHours() + 'Ответ придёт сюда и на почту.</p>' +
+      (chips ? '<div class="sup-chips">' + chips + '</div>' : '') +
+      '<form class="st-send" id="stSend">' +
+        '<div class="sup-att" hidden></div>' +
+        '<div class="sup-row"><label class="st-attach" aria-label="Прикрепить фото"><input class="sup-file" type="file" accept="image/*" multiple hidden>' + SUP_IC.clip + '</label>' +
+        '<textarea class="st-text" id="stText" rows="1" placeholder="' + (closed ? 'Написать — обращение откроется снова' : 'Сообщение') + '" maxlength="2000" aria-label="Сообщение"></textarea>' +
+        '<button class="st-go" id="stBtn" aria-label="Отправить">' + SUP_IC.send + '</button></div>' +
+      '</form>' +
     '</div>';
   }
   function msgsHtml(t) {
-    var store = D.settings.storeName || 'Магазин';
+    var store = D.settings.storeName || 'Магазин', day = '', base = 'api/support/file/';
     return t.messages.map(function (m) {
-      return '<div class="msg ' + (m.from === 'shop' ? 'from-shop' : 'from-me') + '"><div class="msg-b">' + (m.from === 'shop' ? '<span class="msg-who">' + esc(store) + '</span>' : '') +
-        '<p>' + esc(m.text) + '</p></div><time>' + esc(msgTime(m.at)) + '</time></div>';
-    }).join('');
+      var d = msgDay(m.at), sep = d !== day ? '<span class="msg-day">' + esc(d) + '</span>' : ''; day = d;
+      var shop = m.from === 'shop', read = !shop && t.shopReadAt && t.shopReadAt >= m.at;
+      var bubble = (m.text ? '<p>' + esc(m.text) + '</p>' : '');
+      return sep + '<div class="msg ' + (shop ? 'from-shop' : 'from-me') + '">' + (shop ? '<span class="msg-ava" aria-hidden="true">AV</span>' : '') + '<div class="msg-col">' +
+        (shop && bubble ? '<div class="msg-b"><span class="msg-who">' + esc(store) + (m.by ? ' · ' + esc(m.by) : '') + '</span>' + bubble + '</div>' : bubble ? '<div class="msg-b">' + bubble + '</div>' : '') +
+        supImgs(m.files, base) +
+        '<time>' + esc(msgClock(m.at)) + (!shop ? '<span class="msg-read' + (read ? ' on' : '') + '" title="' + (read ? 'Прочитано' : 'Отправлено') + '">' + (read ? SUP_IC.ticks : SUP_IC.tick) + '</span>' : '') + '</time></div></div>';
+    }).join('') + (t.status === 'closed' ? '<span class="msg-day msg-closed">' + SUP_IC.check + 'Вопрос решён · можно написать снова</span>' : '');
   }
+  // Переписка — к последнему сообщению, и ещё раз, когда догрузятся фото
+  function supBottom(box) { box.scrollTop = box.scrollHeight; $$('img', box).forEach(function (im) { if (!im.complete) im.addEventListener('load', function () { box.scrollTop = box.scrollHeight; }, { once: true }); }); }
+  function supGrow(ta) { var f = function () { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 160) + 'px'; }; ta.addEventListener('input', f); f(); }
   function bindThread(body, t) {
-    var box = $('#stMsgs', body), ta = $('#stText', body);
-    box.scrollTop = box.scrollHeight;
+    var box = $('#stMsgs', body), ta = $('#stText', body), files = supFiles(body, API.supportUpload.bind(API));
+    supBottom(box); supGrow(ta);
     var count = t.messages.length;
     if (t.unread) API.supportGet(t.id).then(function () { if (API.user) { API.user.supportUnread = Math.max(0, (API.user.supportUnread || 1) - 1); markBonusDot(); } }).catch(function () {});
     var send = async function () {
-      var text = ta.value.trim(); if (!text) { ta.focus(); return; }
+      var text = ta.value.trim(), names = files.names();
+      if (files.busy()) { toast('Фото ещё загружается'); return; }
+      if (!text && !names.length) { ta.focus(); return; }
       var btn = $('#stBtn', body); btn.disabled = true;
-      try { var nt = await API.supportSend(t.id, text); ta.value = ''; box.innerHTML = msgsHtml(nt); count = nt.messages.length; box.scrollTop = box.scrollHeight; }
+      try { await API.supportSend(t.id, text, names); supportTab(body, { id: t.id }); return; }
       catch (e) { toast(errMsg(e)); }
       btn.disabled = false; ta.focus();
     };
     $('#stSend', body).addEventListener('submit', function (e) { e.preventDefault(); send(); });
-    ta.addEventListener('keydown', function (e) { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); } });
-    // новые ответы магазина подгружаются сами, пока переписка открыта
+    // на компьютере Enter — отправить, Shift + Enter — новая строка; на телефоне Enter — новая строка
+    ta.addEventListener('keydown', function (e) { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey || (!e.shiftKey && matchMedia('(hover: hover)').matches))) { e.preventDefault(); send(); } });
+    $$('[data-close]', body).forEach(function (b) {
+      b.addEventListener('click', async function () { try { await API.supportClose(t.id); toast('Рады, что помогли'); supportTab(body, { id: t.id }); } catch (e) { toast(errMsg(e)); } });
+    });
+    // новые ответы магазина и отметка «прочитано» подгружаются сами, пока переписка открыта
+    var seen = t.shopReadAt;
     supportPoll = setInterval(async function () {
       if (!document.body.contains(box)) { clearInterval(supportPoll); return; }
       if (document.hidden) return;
-      try { var nt = await API.supportGet(t.id); if (nt.messages.length !== count) { count = nt.messages.length; box.innerHTML = msgsHtml(nt); box.scrollTop = box.scrollHeight; } } catch (e) {}
-    }, 20000);
+      try { var nt = await API.supportGet(t.id); if (nt.messages.length !== count || nt.shopReadAt !== seen) { count = nt.messages.length; seen = nt.shopReadAt; box.innerHTML = msgsHtml(nt); supBottom(box); } } catch (e) {}
+    }, 15000);
   }
   function newTicketHtml(topics, q) {
-    return '<form class="sup-new" id="supNew" novalidate><a class="st-back" href="#/account?tab=support" aria-label="Все обращения">←</a><h3>Новое обращение</h3>' +
-      '<p class="muted">' + supportHours() + 'Ответ придёт сюда и на почту.</p>' +
-      '<fieldset class="sup-topics"><legend>Тема</legend>' + topics.map(function (t, i) {
-        return '<label><input type="radio" name="sup-topic" value="' + esc(t) + '"' + ((q.order ? t === 'Заказ' : i === topics.length - 1) ? ' checked' : '') + '><span>' + esc(t) + '</span></label>';
+    return '<form class="sup-new" id="supNew" novalidate>' +
+      '<header class="sn-head"><a class="st-back" href="#/account?tab=support" aria-label="Все обращения">' + SUP_IC.back + '</a><h3>Новое обращение</h3></header>' +
+      '<fieldset class="sup-topics"><legend>О чём вопрос</legend>' + topics.map(function (t, i) {
+        return '<label class="' + (t === 'Другое' ? 'wide' : '') + '"><input type="radio" name="sup-topic" value="' + esc(t) + '"' + ((q.order ? t === 'Заказ' : i === topics.length - 1) ? ' checked' : '') + '><span>' + (SUP_IC[t] || SUP_IC['Другое']) + esc(t) + '</span></label>';
       }).join('') + '</fieldset>' +
-      '<label class="field" id="supOrderWrap"><span>Заказ</span><select class="select" id="supOrder"><option value="">Без заказа</option></select></label>' +
-      '<label class="field"><span>Сообщение</span><textarea class="textarea" id="supText" rows="5" maxlength="2000" placeholder="Опишите вопрос: что случилось и чем помочь"></textarea></label>' +
-      '<p class="form-error" id="supErr"></p><button class="btn" id="supBtn">Отправить</button></form>';
+      '<fieldset class="sup-orders" id="supOrders" hidden><legend>Какой заказ</legend><div class="so-row" id="supOrderRow"></div></fieldset>' +
+      '<label class="field sup-msg"><span>Сообщение</span><textarea class="textarea" id="supText" rows="4" maxlength="2000" placeholder="Что случилось и чем помочь"></textarea></label>' +
+      '<div class="sup-add"><label class="sup-add-b" aria-label="Добавить фото"><input class="sup-file" type="file" accept="image/*" multiple hidden>' + SUP_IC.photo + '</label><div class="sup-att" hidden></div><small>Фото вещи или бирки — до 5 штук. Так ответим быстрее</small></div>' +
+      '<p class="form-error" id="supErr"></p><button class="btn block" id="supBtn">Отправить</button>' +
+      '<p class="sup-foot">' + supportHours() + 'Номер обращения появится сразу — по нему вас быстро найдут.</p></form>';
   }
   function bindNewTicket(body) {
-    var q = parseHash().q, sel = $('#supOrder', body);
+    var q = parseHash().q, picked = q.order || '', files = supFiles(body, API.supportUpload.bind(API));
     API.myOrders().then(function (list) {
-      if (!list.length) { $('#supOrderWrap', body).hidden = true; return; }
-      sel.insertAdjacentHTML('beforeend', list.map(function (o) { return '<option value="' + esc(o.id) + '"' + (q.order === o.id ? ' selected' : '') + '>№ ' + esc(o.number) + ' от ' + esc(fmtDate(o.createdAt).replace(/ \d{4} г\.$/, '')) + ' — ' + fmt(o.total) + '</option>'; }).join(''));
-    }).catch(function () { $('#supOrderWrap', body).hidden = true; });
+      var row = $('#supOrderRow', body); if (!row || !list.length) return;
+      $('#supOrders', body).hidden = false;
+      var draw = function () {
+        row.innerHTML = list.slice(0, 8).map(function (o) {
+          var img = (o.items.find(function (i) { return i.image; }) || {}).image;
+          return '<button type="button" class="so-card' + (picked === o.id ? ' on' : '') + '" data-o="' + esc(o.id) + '" aria-pressed="' + (picked === o.id) + '"><span class="so-ph">' + (img ? '<img src="' + esc(img) + '" alt="">' : '') + '</span><span><b>№ ' + esc(o.number) + '</b><small>' + esc((STATUS[o.status] || '').toLowerCase()) + '</small></span></button>';
+        }).join('') + '<button type="button" class="so-card so-none' + (!picked ? ' on' : '') + '" data-o="" aria-pressed="' + !picked + '">Без заказа</button>';
+      };
+      draw();
+      row.addEventListener('click', function (e) { var b = e.target.closest('[data-o]'); if (!b) return; picked = b.getAttribute('data-o'); draw(); });
+    }).catch(function () {});
     $('#supNew', body).addEventListener('submit', async function (e) {
       e.preventDefault();
-      var text = $('#supText', body).value.trim(), topic = ($('input[name="sup-topic"]:checked', body) || {}).value;
-      if (!text) { $('#supErr', body).textContent = 'Напишите, чем мы можем помочь'; $('#supText', body).focus(); return; }
+      var text = $('#supText', body).value.trim(), topic = ($('input[name="sup-topic"]:checked', body) || {}).value, names = files.names();
+      if (files.busy()) { $('#supErr', body).textContent = 'Фото ещё загружается'; return; }
+      if (!text && !names.length) { $('#supErr', body).textContent = 'Напишите, чем мы можем помочь'; $('#supText', body).focus(); return; }
       var btn = $('#supBtn', body); btn.disabled = true; btn.textContent = 'Отправляем…';
-      try { var t = await API.supportCreate({ topic: topic, orderId: sel.value, text: text }); toast('Сообщение отправлено'); go('#/account?tab=support&id=' + t.id); }
+      try { var t = await API.supportCreate({ topic: topic, orderId: picked, text: text, files: names }); toast('Обращение № ' + t.number + ' отправлено'); go('#/account?tab=support&id=' + t.id); }
       catch (ex) { $('#supErr', body).textContent = errMsg(ex); btn.disabled = false; btn.textContent = 'Отправить'; }
     });
   }
@@ -3259,7 +3362,7 @@
     API = c.api; D = c.data;
     // Покупатель был в разделе, который закрыли, — показываем всю коллекцию
     if (curGender() && gClosed(curGender())) { genderChoice = 'all'; try { localStorage.setItem(LS_G, 'all'); } catch (e) {} paintGender(); }
-    window.App = { careIcon: careIcon, API: API, D: D, plural: plural, slideHtml: slideHtml, brandHtml: brandHtml, brandMode: brandMode, esc: esc, fmt: fmt, toast: toast, errMsg: errMsg, imgOf: imgOf, refresh: refresh, go: go, openModal: openModal, closePanels: closePanels, fmtPhone: fmtPhone, fmtDate: fmtDate, STATUS: STATUS, PAY: PAY };
+    window.App = { careIcon: careIcon, API: API, D: D, plural: plural, slideHtml: slideHtml, brandHtml: brandHtml, brandMode: brandMode, esc: esc, fmt: fmt, toast: toast, errMsg: errMsg, imgOf: imgOf, refresh: refresh, go: go, openModal: openModal, closePanels: closePanels, fmtPhone: fmtPhone, fmtDate: fmtDate, STATUS: STATUS, PAY: PAY, supPhoto: supPhoto, msgDay: msgDay };
     renderShell();
     initAnalytics();
     setTimeout(appPushAsk, 2200);

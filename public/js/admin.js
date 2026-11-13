@@ -9,14 +9,14 @@
   var DATA = null;
 
   var SECTIONS = [
-    ['overview', 'Обзор'], ['orders', 'Заказы'], ['support', 'Поддержка'], ['products', 'Товары'], ['categories', 'Категории'], ['sizeCharts', 'Размерные сетки'],
+    ['overview', 'Обзор'], ['orders', 'Заказы'], ['support', 'Поддержка'], ['products', 'Товары'], ['categories', 'Категории'],
     ['promotions', 'Акции'], ['promocodes', 'Промокоды'], ['bonus', 'Бонусы'], ['exchange', 'Обмен и возвраты'], ['customers', 'Покупатели'], ['mail', 'Почта'], ['analytics', 'Аналитика'], ['finance', 'Финансы'], ['gifts', 'Подарочные сертификаты'], ['sections', 'Разделы'], ['brand', 'Логотип и название'], ['slider', 'Слайдер на главной'], ['home', 'Главная страница'], ['pages', 'Страницы'],
     ['menu', 'Меню, контакты, соцсети'], ['payment', 'Оплата и доставка'], ['push', 'Push-уведомления'], ['staff', 'Сотрудники'], ['audit', 'Журнал действий'], ['settings', 'Настройки']
   ];
   /* Разделы по группам (13.63): рабочий стол и меню панели. Значок, короткое название, цвет группы */
   var GROUPS = [
     ['Продажи', 'g-sales', ['orders', 'support', 'exchange', 'customers']],
-    ['Каталог', 'g-cat', ['products', 'categories', 'sizeCharts', 'sections']],
+    ['Каталог', 'g-cat', ['products', 'categories', 'sections']],
     ['Маркетинг', 'g-mkt', ['promotions', 'promocodes', 'bonus', 'gifts', 'mail', 'push']],
     ['Цифры', 'g-cat', ['overview', 'analytics', 'finance']],
     ['Витрина', 'g-mkt', ['home', 'slider', 'brand', 'menu', 'pages']],
@@ -31,7 +31,6 @@
     customers: '<circle cx="9" cy="8.5" r="3.2"/><path d="M3 19c.9-3 3.2-4.6 6-4.6s5.1 1.6 6 4.6"/><circle cx="17" cy="9" r="2.6"/><path d="M16.5 14.4c2.2.2 3.8 1.7 4.5 4.1"/>',
     products: '<path d="M8.5 4L4 6.5l1.7 4 2.3-1V20h8V9.5l2.3 1 1.7-4L15.5 4c-.6 1.6-1.9 2.5-3.5 2.5S9.1 5.6 8.5 4z"/>',
     categories: '<rect x="4" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.6"/>',
-    sizeCharts: '<rect x="2.5" y="8" width="19" height="8" rx="1.8"/><path d="M6.5 8v3M9.5 8v4.5M12.5 8v3M15.5 8v4.5M18.5 8v3"/>',
     sections: '<circle cx="6.5" cy="9" r="2.4"/><circle cx="12" cy="7.5" r="2.8"/><circle cx="17.5" cy="9.5" r="2"/><path d="M2.5 18c.6-2.4 2-3.6 4-3.6M7.2 19c.7-3.1 2.4-4.6 4.8-4.6s4.1 1.5 4.8 4.6M17.5 14.6c1.9 0 3.3 1.2 4 3.4"/>',
     promotions: '<path d="M3.5 12.5V4.8A1.3 1.3 0 0 1 4.8 3.5h7.7L21 12l-9 9z"/><circle cx="8.3" cy="8.3" r="1.6"/>',
     promocodes: '<path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h15A1.5 1.5 0 0 1 21 7.5v2a2.5 2.5 0 0 0 0 5v2a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 16.5v-2a2.5 2.5 0 0 0 0-5z"/><path d="M14 7v10" stroke-dasharray="1.6 2"/>',
@@ -58,7 +57,7 @@
   /* Какие разделы видит роль (13.57): права приходят с сервера в DATA.perms, сервер проверяет их на каждом запросе */
   var SECTION_PERMS = {
     overview: [], orders: ['orders'], support: ['orders'], exchange: ['orders'], customers: ['orders', 'marketing'], gifts: ['orders', 'marketing'],
-    products: ['content'], categories: ['content'], sizeCharts: ['content'], promotions: ['content', 'marketing'], promocodes: ['content', 'marketing'],
+    products: ['content'], categories: ['content'], promotions: ['content', 'marketing'], promocodes: ['content', 'marketing'],
     sections: ['content'], brand: ['content'], slider: ['content'], home: ['content'], pages: ['content'], menu: ['content'],
     bonus: ['marketing'], mail: ['mail'], analytics: ['finance', 'marketing'], finance: ['finance'],
     payment: ['payment'], push: [], staff: ['staff'], audit: ['staff'], settings: ['settings']
@@ -332,7 +331,7 @@
       (s !== 'desk' ? '<a class="adm-back" href="#/admin">' + secIcon('home') + 'Рабочий стол</a>' : '') + '<div id="admMain"></div></section></div>';
     $('#admOut').addEventListener('click', async function () { await API.logout(); DATA = null; window.ALB_NAV.go('#/'); await A().refresh(); });
     var main = $('#admMain');
-    var fn = { desk: desk, overview: overview, orders: orders, support: supportSection, products: products, categories: categories, sizeCharts: sizeCharts, promotions: promotions, promocodes: promocodes, bonus: bonusSection, exchange: exchangeSection, customers: customers,  mail: mailHub, push: pushSection, staff: staffSection, audit: auditSection,  analytics: analyticsSection, finance: financeSection, gifts: giftsSection, sections: sectionsSettings, brand: brandSection, slider: sliderSection, home: homeSettings, pages: pages, menu: menuSettings, payment: paymentSettings, settings: generalSettings }[s] || overview;
+    var fn = { desk: desk, overview: overview, orders: orders, support: supportSection, products: products, categories: categories, promotions: promotions, promocodes: promocodes, bonus: bonusSection, exchange: exchangeSection, customers: customers,  mail: mailHub, push: pushSection, staff: staffSection, audit: auditSection,  analytics: analyticsSection, finance: financeSection, gifts: giftsSection, sections: sectionsSettings, brand: brandSection, slider: sliderSection, home: homeSettings, pages: pages, menu: menuSettings, payment: paymentSettings, settings: generalSettings }[s] || overview;
     fn(main, q);
   }
   /* ================= Рабочий стол (13.63): сводка дня, ежедневное — карточками, остальное — значками ================= */
@@ -1050,7 +1049,7 @@
       sub: 'Нажмите на строку, чтобы изменить товар: цены, цвета, фото, размеры и остатки. Галочками можно выбрать несколько товаров или все сразу и удалить их.',
       itemTitle: function (x) { return x.name; },
       view: function (x) { return '<a class="btn ghost sm" href="#/product/' + esc(x.slug) + '">Открыть на сайте</a>'; },
-      blank: function () { return { name: '', slug: '', gender: 'women', categoryId: (DATA.categories[0] || {}).id || '', price: 0, compareAt: 0, tags: ['new'], description: '', composition: '', care: '', colors: [newColor(1, '#3a3734')], sizeChartId: (DATA.sizeCharts[0] || {}).id || '', active: true, createdAt: new Date().toISOString().slice(0, 10) }; },
+      blank: function () { return { name: '', slug: '', gender: 'women', categoryId: (DATA.categories[0] || {}).id || '', price: 0, compareAt: 0, tags: ['new'], description: '', composition: '', care: '', colors: [newColor(1, '#3a3734')], active: true, createdAt: new Date().toISOString().slice(0, 10) }; },
       cols: ['', 'Название', 'Для кого', 'Категория', 'Цвета', 'Цена', 'Остаток', 'В продаже'],
       row: function (p) {
         var c = DATA.categories.find(function (x) { return x.id === p.categoryId; }), st = productStock(p), pr = Pricing.productPrice(p, DATA.promotions);
@@ -1066,7 +1065,6 @@
           { k: 'sku', label: 'Артикул', hint: 'Заполнится сам: ALB-0001, ALB-0002… Можно указать свой — латиница, цифры, дефис' },
           { k: 'categoryId', label: 'Категория', type: 'select', options: catOpts() },
           { k: 'gender', label: 'Для кого', type: 'select', options: [['women', 'Женщинам'], ['men', 'Мужчинам'], ['kids', 'Детям'], ['unisex', 'Унисекс — женщинам и мужчинам']] },
-          { k: 'sizeChartId', label: 'Размерная сетка', type: 'select', options: [['', 'Без таблицы размеров']].concat(DATA.sizeCharts.map(function (c) { return [c.id, c.name]; })) },
           { k: 'price', label: 'Цена, ₽', type: 'number', hint: 'Одна для всех цветов' },
           { k: 'compareAt', label: 'Старая цена, ₽', type: 'number', hint: 'Если больше цены — показывается зачёркнутой. Оставьте 0, если скидки нет.' },
           { k: 'badges', type: 'badges' },
@@ -1115,7 +1113,7 @@
               '<div class="adm-imgs">' + imgs.map(function (src, k) { return '<div class="adm-img"><img src="' + esc(src) + '" alt=""><div class="adm-img-tools">' + (k > 0 ? '<button type="button" data-ileft="' + k + '" title="Сделать раньше">←</button>' : '') + '<button type="button" data-idel="' + k + '" title="Удалить">✕</button></div>' + (k === 0 ? '<span class="adm-img-main">Главное</span>' : '') + '</div>'; }).join('') +
                 '<label class="adm-img add"><input type="file" accept="image/*" multiple hidden data-iup><span>+ Фото этого цвета</span></label></div>' +
               '<div class="adm-size-rows">' + (c.sizes || []).map(sizeRow).join('') + '</div>' +
-              '<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn ghost sm" data-szadd>+ Размер</button><button type="button" class="btn ghost sm" data-szchart>Размеры из сетки</button>' + (i > 0 ? '<button type="button" class="btn ghost sm" data-szcopy>Размеры как у «' + esc(colorsState[0].name || 'первого цвета') + '»</button>' : '') + '</div></div>';
+              '<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn ghost sm" data-szadd>+ Размер</button>' + (i > 0 ? '<button type="button" class="btn ghost sm" data-szcopy>Размеры как у «' + esc(colorsState[0].name || 'первого цвета') + '»</button>' : '') + '</div></div>';
           }).join('');
         }
         draw();
@@ -1126,11 +1124,6 @@
           var c = colorsState[i];
           if (b.hasAttribute('data-szrm')) { b.closest('.adm-size-row').remove(); sync(); return; }
           if (b.hasAttribute('data-szadd')) { $('.adm-size-rows', el).insertAdjacentHTML('beforeend', sizeRow({ size: '', stock: 0 })); $('.adm-size-rows .adm-size-row:last-child [data-sz]', el).focus(); return; }
-          if (b.hasAttribute('data-szchart')) {
-            var ch = DATA.sizeCharts.find(function (x) { return x.id === $('#f-sizeChartId', box).value; });
-            if (!ch) { toast('Сначала выберите размерную сетку', true); return; }
-            ch.rows.forEach(function (r) { if (r[0] && !c.sizes.some(function (x) { return x.size === r[0]; })) c.sizes.push({ size: r[0], stock: 0 }); });
-          }
           if (b.hasAttribute('data-szcopy')) colorsState[0].sizes.forEach(function (x) { if (!c.sizes.some(function (y) { return y.size === x.size; })) c.sizes.push({ size: x.size, stock: 0 }); });
           if (b.hasAttribute('data-cdel')) colorsState.splice(i, 1);
           if (b.hasAttribute('data-cup')) colorsState.splice(i - 1, 0, colorsState.splice(i, 1)[0]);
@@ -1303,23 +1296,50 @@
   /* Мерки изделия и подбор размера: ширина, длина, рукав и на какой рост/вес рассчитан каждый размер */
   var FIT_TYPICAL = { XS: [150, 165, 45, 58], S: [160, 172, 52, 66], M: [170, 180, 62, 76], L: [176, 186, 72, 86], XL: [182, 192, 82, 96], '2XL': [186, 198, 92, 110], XXL: [186, 198, 92, 110], '3XL': [190, 205, 105, 125] };
   var FIT_COLS = [['w', 'Ширина'], ['l', 'Длина'], ['sl', 'Рукав'], ['hMin', 'Рост от'], ['hMax', 'Рост до'], ['kMin', 'Вес от'], ['kMax', 'Вес до']];
+  /* Таблица размеров товара (13.64.3): своя у каждого товара, покупатель видит её в карточке товара.
+     Мерки на каждый размер: ширина, длина, рукав, свои столбцы (например «Обхват талии») и рост/вес — на кого рассчитан размер */
   function fitEditorHtml(p) {
     var f = p.fit || {};
-    return '<div class="adm-fit"><h4 class="adm-sub">Мерки и подбор размера</h4><p class="muted" style="font-size:14px;margin-bottom:14px;max-width:72ch">Мерки готовой вещи в сантиметрах: футболку кладут на стол, ширина — от шва до шва под рукавами, длина — от верхней точки плеча до низа. Рост и вес — на кого рассчитан размер. Когда заполнены рост и вес хотя бы двух размеров, в карточке появляется «Подобрать размер»; ширина и длина — «Сравнить со своей футболкой» и таблица мерок.</p>' +
-      '<div class="table-wrap"><table class="adm-fit-t"><thead><tr><th>Размер</th>' + FIT_COLS.map(function (c) { return '<th>' + c[1] + (c[0] === 'kMin' || c[0] === 'kMax' ? ', кг' : ', см') + '</th>'; }).join('') + '</tr></thead><tbody data-fit-body></tbody></table></div>' +
-      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button type="button" class="btn ghost sm" data-fit-sync>Обновить размеры из цветов</button><button type="button" class="btn ghost sm" data-fit-typical>Заполнить пустой рост и вес типовыми для оверсайза</button></div>' +
-      '<div class="adm-form" style="margin-top:16px"><label class="field"><span>На модели размер</span><input class="input" data-fit-msize value="' + esc(f.modelSize || '') + '" placeholder="например, L"></label><label class="field"><span>Рост модели, см</span><input class="input" type="number" data-fit-mh value="' + esc(f.modelHeight || '') + '" placeholder="например, 182"></label></div></div>';
+    return '<div class="adm-fit"><h4 class="adm-sub">Таблица размеров</h4><p class="muted" style="font-size:14px;margin-bottom:14px;max-width:72ch">Своя у каждого товара — покупатель видит её в карточке товара по кнопке «Таблица размеров». Мерки готовой вещи в сантиметрах на каждый размер: вещь кладут на стол, ширина — от шва до шва под рукавами, длина — от верхней точки плеча до низа. Нужен другой замер — добавьте свой столбец. Рост и вес — на кого рассчитан размер: по ним работает «Подобрать размер».</p>' +
+      '<div class="table-wrap"><table class="adm-fit-t"><thead data-fit-head></thead><tbody data-fit-body></tbody></table></div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button type="button" class="btn ghost sm" data-fit-col>+ Свой столбец</button><button type="button" class="btn ghost sm" data-fit-sync>Обновить размеры из цветов</button><button type="button" class="btn ghost sm" data-fit-typical>Заполнить пустой рост и вес типовыми для оверсайза</button></div>' +
+      '<div class="adm-form" style="margin-top:16px"><label class="field" style="grid-column:1/-1"><span>Подсказка над таблицей</span><input class="input" data-fit-note maxlength="300" value="' + esc(f.note || '') + '" placeholder="Например: брюки измерены в расслабленном виде, длина — по внутреннему шву"></label>' +
+      '<label class="field"><span>На модели размер</span><input class="input" data-fit-msize value="' + esc(f.modelSize || '') + '" placeholder="например, L"></label><label class="field"><span>Рост модели, см</span><input class="input" type="number" data-fit-mh value="' + esc(f.modelHeight || '') + '" placeholder="например, 182"></label></div></div>';
   }
   function bindFitEditor(el, fit, getColors) {
-    var body = $('[data-fit-body]', el), rows = ((fit && fit.rows) || []).slice();
+    var head = $('[data-fit-head]', el), body = $('[data-fit-body]', el), rows = ((fit && fit.rows) || []).slice(), cols = ((fit && fit.cols) || []).slice();
     function sizes() { var out = []; (getColors() || []).forEach(function (c) { (c.sizes || []).forEach(function (s) { if (s.size && out.indexOf(s.size) === -1) out.push(s.size); }); }); return out; }
-    function current() { return $$('tr', body).map(function (tr) { var r = { size: tr.getAttribute('data-size') }; FIT_COLS.forEach(function (c) { var v = parseFloat(String($('[data-f="' + c[0] + '"]', tr).value).replace(',', '.')); if (v > 0) r[c[0]] = v; }); return r; }); }
+    function current() {
+      cols = $$('[data-xc]', head).map(function (i) { return i.value.trim().slice(0, 40); });
+      return $$('tr', body).filter(function (tr) { return tr.hasAttribute('data-size'); }).map(function (tr) {
+        var r = { size: tr.getAttribute('data-size') };
+        FIT_COLS.forEach(function (c) { var v = parseFloat(String($('[data-f="' + c[0] + '"]', tr).value).replace(',', '.')); if (v > 0) r[c[0]] = v; });
+        var x = $$('[data-x]', tr).map(function (i) { return i.value.trim().slice(0, 30); }); if (x.some(Boolean)) r.x = x;
+        return r;
+      });
+    }
     function draw(list) {
-      body.innerHTML = list.map(function (r) { return '<tr data-size="' + esc(r.size) + '"><th>' + esc(r.size) + '</th>' + FIT_COLS.map(function (c) { return '<td><input class="input num" type="number" step="0.5" min="0" data-f="' + c[0] + '" value="' + esc(r[c[0]] || '') + '" aria-label="' + esc(r.size + ': ' + c[1]) + '"></td>'; }).join('') + '</tr>'; }).join('') ||
-        '<tr><td colspan="8" class="muted">Сначала добавьте размеры в цвета товара</td></tr>';
+      head.innerHTML = '<tr><th>Размер</th>' + FIT_COLS.slice(0, 3).map(function (c) { return '<th>' + c[1] + ', см</th>'; }).join('') +
+        cols.map(function (c, i) { return '<th><span class="adm-cell"><input class="input" data-xc value="' + esc(c) + '" placeholder="Название" aria-label="Название столбца"><button type="button" class="adm-x" data-xdel="' + i + '" title="Удалить столбец">✕</button></span></th>'; }).join('') +
+        FIT_COLS.slice(3).map(function (c) { return '<th>' + c[1] + (c[0] === 'kMin' || c[0] === 'kMax' ? ', кг' : ', см') + '</th>'; }).join('') + '</tr>';
+      var inp = function (r, c) { return '<td><input class="input num" type="number" step="0.5" min="0" data-f="' + c[0] + '" value="' + esc(r[c[0]] || '') + '" aria-label="' + esc(r.size + ': ' + c[1]) + '"></td>'; };
+      body.innerHTML = list.map(function (r) {
+        return '<tr data-size="' + esc(r.size) + '"><th>' + esc(r.size) + '</th>' + FIT_COLS.slice(0, 3).map(function (c) { return inp(r, c); }).join('') +
+          cols.map(function (c, i) { return '<td><input class="input" data-x value="' + esc((r.x || [])[i] || '') + '" aria-label="' + esc(r.size + ': ' + (c || 'свой столбец')) + '"></td>'; }).join('') +
+          FIT_COLS.slice(3).map(function (c) { return inp(r, c); }).join('') + '</tr>';
+      }).join('') || '<tr><td colspan="' + (8 + cols.length) + '" class="muted">Сначала добавьте размеры в цвета товара</td></tr>';
     }
     function merge(prev) { return sizes().map(function (sz) { return prev.find(function (r) { return r.size === sz; }) || { size: sz }; }); }
     draw(merge(rows));
+    head.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-xdel]'); if (!b) return;
+      var list = current(), i = +b.getAttribute('data-xdel');
+      cols.splice(i, 1); list.forEach(function (r) { if (r.x) r.x.splice(i, 1); }); draw(list);
+    });
+    $('[data-fit-col]', el).addEventListener('click', function () {
+      var list = current(); if (cols.length >= 6) { toast('Не больше 6 своих столбцов', true); return; }
+      cols.push(''); draw(list); var ins = $$('[data-xc]', head); ins[ins.length - 1].focus();
+    });
     $('[data-fit-sync]', el).addEventListener('click', function () { draw(merge(current())); });
     $('[data-fit-typical]', el).addEventListener('click', function () {
       var list = merge(current()), n = 0;
@@ -1327,12 +1347,18 @@
       draw(list); toast(n ? 'Заполнено — проверьте и поправьте под свои лекала' : 'Нечего заполнять: типовые значения есть для XS–3XL', !n);
     });
     el._fitRows = current;
+    el._fitCols = function () { current(); return cols; };
   }
   function readFitEditor(el) {
     var rows = (el._fitRows ? el._fitRows() : []).filter(function (r) { return Object.keys(r).length > 1; });
-    var ms = $('[data-fit-msize]', el).value.trim().slice(0, 10), mh = Math.round(Number($('[data-fit-mh]', el).value) || 0);
-    if (!rows.length && !ms && !mh) return null;
-    return { rows: rows, modelSize: ms, modelHeight: mh > 0 ? mh : '' };
+    var cols = el._fitCols ? el._fitCols() : [];
+    // пустые свои столбцы не сохраняем
+    var keep = cols.map(function (c, i) { return !!c || rows.some(function (r) { return r.x && r.x[i]; }); });
+    var outCols = cols.filter(function (c, i) { return keep[i]; }).map(function (c) { return c || 'Мерка'; });
+    rows.forEach(function (r) { if (r.x) { r.x = r.x.filter(function (v, i) { return keep[i]; }); if (!r.x.some(Boolean)) delete r.x; } });
+    var ms = $('[data-fit-msize]', el).value.trim().slice(0, 10), mh = Math.round(Number($('[data-fit-mh]', el).value) || 0), note = $('[data-fit-note]', el).value.trim().slice(0, 300);
+    if (!rows.length && !ms && !mh && !note) return null;
+    return { rows: rows, cols: outCols, note: note, modelSize: ms, modelHeight: mh > 0 ? mh : '' };
   }
   function newColor(n, hex, kind) { return { id: uid('col'), name: '', hex: hex, images: [], sizes: [], art: { kind: kind || 'tee', tone: hex } }; }
   function sizeRow(s) { return '<div class="adm-size-row"><input class="input" data-sz placeholder="Размер" value="' + esc(s.size) + '" aria-label="Размер"><input class="input num" data-st type="number" min="0" placeholder="Остаток" value="' + esc(s.stock) + '" aria-label="Остаток, шт."><span class="muted" style="font-size:14px">шт.</span><button type="button" class="adm-x" data-szrm title="Удалить">✕</button></div>'; }
@@ -1368,44 +1394,6 @@
   }
 
   /* ================= Размерные сетки ================= */
-  function sizeCharts(m, q) {
-    collection(m, q, {
-      key: 'sizeCharts', prefix: 'sc', title: 'Размерные сетки', newTitle: 'Новая размерная сетка', addLabel: 'Добавить сетку',
-      sub: 'Таблицы размеров показываются в карточке товара и на странице «Таблица размеров». Столбцы и строки можно добавлять и удалять.',
-      itemTitle: function (x) { return x.name; },
-      blank: function () { return { name: '', columns: ['Размер', 'RU', 'Обхват груди, см'], rows: [['S', '44', '88'], ['M', '46', '92']], note: '' }; },
-      cols: ['Название', 'Размеры', 'Товаров'],
-      row: function (c) { return [esc(c.name), esc((c.rows || []).map(function (r) { return r[0]; }).join(', ')), '<span class="num">' + DATA.products.filter(function (p) { return p.sizeChartId === c.id; }).length + '</span>']; },
-      fields: function () { return [{ k: 'name', label: 'Название', wide: true }, { k: 'note', label: 'Подсказка под таблицей', type: 'textarea', rows: 2 }]; },
-      extra: function (c) { return '<h4 class="adm-sub">Таблица</h4><div class="table-wrap"><table class="adm-grid" id="scGrid"></table></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button type="button" class="btn ghost sm" id="scAddRow">+ Строка</button><button type="button" class="btn ghost sm" id="scAddCol">+ Столбец</button></div><p class="muted" style="font-size:13px;margin-top:8px">Первый столбец — название размера, его же покупатель выбирает в карточке товара.</p>'; },
-      mount: function (box, c) {
-        var cols = (c.columns || []).slice(), rows = (c.rows || []).map(function (r) { return r.slice(); });
-        var grid = $('#scGrid', box);
-        function sync() {
-          cols = $$('thead input', grid).map(function (i) { return i.value; });
-          rows = $$('tbody tr', grid).map(function (tr) { return $$('input', tr).map(function (i) { return i.value; }); });
-        }
-        function draw() {
-          grid.innerHTML = '<thead><tr>' + cols.map(function (h, i) { return '<th><div class="adm-cell"><input class="input" value="' + esc(h) + '" aria-label="Заголовок столбца">' + (cols.length > 1 ? '<button type="button" class="adm-x" data-dc="' + i + '" title="Удалить столбец">✕</button>' : '') + '</div></th>'; }).join('') + '<th></th></tr></thead><tbody>' +
-            rows.map(function (r, ri) { return '<tr>' + cols.map(function (x, ci) { return '<td><input class="input" value="' + esc(r[ci] || '') + '" aria-label="Ячейка"></td>'; }).join('') + '<td><button type="button" class="adm-x" data-dr="' + ri + '" title="Удалить строку">✕</button></td></tr>'; }).join('') + '</tbody>';
-        }
-        draw();
-        grid.addEventListener('click', function (e) {
-          var b = e.target.closest('button'); if (!b) return; sync();
-          if (b.hasAttribute('data-dc')) { var i = +b.getAttribute('data-dc'); cols.splice(i, 1); rows.forEach(function (r) { r.splice(i, 1); }); }
-          if (b.hasAttribute('data-dr')) rows.splice(+b.getAttribute('data-dr'), 1);
-          draw();
-        });
-        $('#scAddRow', box).addEventListener('click', function () { sync(); rows.push(cols.map(function () { return ''; })); draw(); });
-        $('#scAddCol', box).addEventListener('click', function () { sync(); cols.push('Новый столбец'); rows.forEach(function (r) { r.push(''); }); draw(); });
-        box._readGrid = function () { sync(); return { columns: cols, rows: rows.filter(function (r) { return r.some(function (x) { return x; }); }) }; };
-      },
-      read: function (box, c) { var g = box._readGrid(); c.columns = g.columns; c.rows = g.rows; },
-      validate: function (c) { return !c.name ? 'Укажите название' : !c.columns.length ? 'Нужен хотя бы один столбец' : ''; }
-    });
-  }
-
-  /* ================= Акции ================= */
   function promotions(m, q) {
     collection(m, q, {
       key: 'promotions', prefix: 'a', title: 'Акции', newTitle: 'Новая акция', addLabel: 'Создать акцию',
@@ -2993,73 +2981,164 @@
       '. Пополните остаток нужного цвета и размера и нажмите «Сохранить» — письма уйдут автоматически.</div>';
   }
 
-  /* ================= Поддержка: переписка с покупателями ================= */
-  var SUP_STATE = { open: 'Ждёт ответа', answered: 'Отвечено', closed: 'Закрыто' };
+  /* ================= Поддержка (13.64.3): все обращения с поиском, переписка, карточка покупателя ================= */
+  var SUP_STATE = { open: 'Ждёт ответа', answered: 'Отвечено', closed: 'Решено' };
+  var SUP_F = [['active', 'В работе'], ['open', 'Ждут ответа'], ['closed', 'Решённые'], ['all', 'Все']];
   function supTime(iso) {
     var d = new Date(iso), t = d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
     return d.toDateString() === new Date().toDateString() ? t : d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) + ', ' + t;
   }
-  var supPoll = null;
+  function supAgo(a, b) { var m = Math.max(1, Math.round((Date.parse(b) - Date.parse(a)) / 60000)); return m < 60 ? m + ' мин' : m < 1440 ? Math.round(m / 60) + ' ч' : Math.round(m / 1440) + ' дн'; }
+  var supPoll = null, supQ = '', supTopic = '';
+  // Поиск: номер обращения, имя, телефон, почта, номер заказа и текст переписки
+  function supMatch(t, q) {
+    if (!q) return true;
+    var d = q.replace(/\D/g, ''), hay = [t.number, t.name, t.email, t.orderNumber, t.topic].concat(t.messages.map(function (x) { return x.text; })).join(' ').toLowerCase();
+    return hay.indexOf(q.toLowerCase().replace(/^№\s*/, '')) >= 0 || (d.length >= 4 && String(t.phone || '').replace(/\D/g, '').indexOf(d) >= 0);
+  }
   async function supportSection(m, q) {
     clearInterval(supPoll);
-    m.innerHTML = head('Поддержка', '', 'Вопросы покупателей из личного кабинета. Ответ сразу появится у покупателя в кабинете, а если настроена почта — придёт ему и письмом.') + '<div class="loader" style="min-height:200px">…</div>';
-    var list;
-    try { list = await A().API.adminSupport(); } catch (e) { m.lastElementChild.outerHTML = '<p class="form-error">' + esc(A().errMsg(e)) + '</p>'; return; }
+    m.innerHTML = head('Поддержка', '', 'Все обращения покупателей хранятся здесь: решённые — в архиве, их находит поиск. Ответ сразу появится у покупателя в кабинете и приложении, придёт письмом и уведомлением.') + '<div class="loader" style="min-height:200px">…</div>';
+    var r;
+    try { r = await A().API.adminSupport(); } catch (e) { m.lastElementChild.outerHTML = '<p class="form-error">' + esc(A().errMsg(e)) + '</p>'; return; }
     if (!document.body.contains(m)) return;
-    var f = q.f || 'active';
-    var inF = function (t, k) { return k === 'all' ? true : k === 'closed' ? t.status === 'closed' : t.status !== 'closed'; };
-    var shown = list.filter(function (t) { return inF(t, f); });
+    var list = r.tickets, templates = r.templates || [], f = q.f || 'active';
+    var inF = function (t, k) { return k === 'all' ? true : k === 'closed' ? t.status === 'closed' : k === 'open' ? t.status === 'open' : t.status !== 'closed'; };
+    var topics = []; list.forEach(function (t) { if (topics.indexOf(t.topic) < 0) topics.push(t.topic); });
     var cur = q.id ? list.find(function (t) { return t.id === q.id; }) : null;
-    var filters = [['active', 'Открытые'], ['closed', 'Закрытые'], ['all', 'Все']].map(function (x) {
-      return '<a class="adm-chip' + (f === x[0] ? ' on' : '') + '" href="#/admin?s=support&f=' + x[0] + '">' + x[1] + ' <span>' + list.filter(function (t) { return inF(t, x[0]); }).length + '</span></a>';
+    var items = function () {
+      var shown = list.filter(function (t) { return (supQ ? true : inF(t, f)) && (!supTopic || t.topic === supTopic) && supMatch(t, supQ.trim()); });
+      if (!shown.length) return '<p class="as-empty">' + (supQ ? 'Ничего не нашлось. Ищем по номеру обращения, имени, телефону, почте, номеру заказа и тексту.' : f === 'closed' ? 'Решённых обращений пока нет.' : 'Новых вопросов нет. Когда покупатель напишет, обращение появится здесь.') + '</p>';
+      return shown.map(function (t) {
+        var last = t.messages.filter(function (x) { return x.from !== 'note'; }).slice(-1)[0] || t.messages[0];
+        var txt = last.text ? esc(last.text.slice(0, 90)) : (last.files || []).length ? 'Фото' : '';
+        return '<a class="as-item' + (cur && cur.id === t.id ? ' on' : '') + (t.unreadShop ? ' unread' : '') + '" href="#/admin?s=support&f=' + f + '&id=' + esc(t.id) + '">' +
+          '<span class="as-top"><span class="sup-num' + (t.status !== 'closed' ? ' on' : '') + '">№ ' + esc(t.number) + '</span><b>' + esc(t.name || 'Покупатель') + '</b>' + (t.unreadShop ? '<i class="sc-dot" aria-label="Не прочитано"></i>' : '') + '<time>' + esc(supTime(t.updatedAt)) + '</time></span>' +
+          '<span class="as-sub">' + esc(t.topic) + (t.orderNumber ? ' · заказ № ' + esc(t.orderNumber) : '') + (t.assignee ? ' · ' + esc(t.assignee.name) : '') + '</span>' +
+          '<span class="as-text">' + (last.from === 'shop' ? 'Вы: ' : '') + txt + '</span>' +
+          '<span class="sup-st s-' + t.status + '">' + SUP_STATE[t.status] + '</span></a>';
+      }).join('');
+    };
+    var chips = SUP_F.map(function (x) {
+      return '<a class="adm-chip' + (f === x[0] && !supQ ? ' on' : '') + '" href="#/admin?s=support&f=' + x[0] + '">' + x[1] + ' <span>' + list.filter(function (t) { return inF(t, x[0]); }).length + '</span></a>';
     }).join('');
-    var items = shown.length ? shown.map(function (t) {
-      var last = t.messages[t.messages.length - 1];
-      return '<a class="sup-item' + (cur && cur.id === t.id ? ' on' : '') + (t.unreadShop ? ' unread' : '') + '" href="#/admin?s=support&f=' + f + '&id=' + esc(t.id) + '">' +
-        '<span class="si-top"><b>' + esc(t.name || 'Покупатель') + '</b><time>' + esc(supTime(t.updatedAt)) + '</time></span>' +
-        '<span class="si-sub">№ ' + esc(t.number) + ' · ' + esc(t.topic) + (t.orderNumber ? ' · заказ ' + esc(t.orderNumber) : '') + '</span>' +
-        '<span class="si-text">' + (last.from === 'shop' ? 'Вы: ' : '') + esc(last.text.slice(0, 80)) + '</span>' +
-        '<span class="si-state s-' + t.status + '">' + SUP_STATE[t.status] + '</span></a>';
-    }).join('') : '<p class="muted" style="padding:18px 4px;font-size:14px">' + (f === 'closed' ? 'Закрытых обращений нет.' : 'Новых вопросов нет. Когда покупатель напишет из кабинета, обращение появится здесь.') + '</p>';
-    var pane = cur ? '<div class="sup-thread adm-thread">' +
-        '<header class="st-head"><div><b>' + esc(cur.name || 'Покупатель') + ' · ' + esc(cur.topic) + '</b><span>№ ' + esc(cur.number) + (cur.orderNumber ? ' · <a href="#/admin?s=orders&id=' + esc(cur.orderId) + '">заказ № ' + esc(cur.orderNumber) + '</a>' : '') +
-          (cur.email ? ' · ' + esc(cur.email) : '') + (cur.phone ? ' · ' + esc(A().fmtPhone(cur.phone)) : '') + '</span></div>' +
-          '<button class="btn ghost sm" id="supToggle" type="button">' + (cur.status === 'closed' ? 'Открыть снова' : 'Закрыть обращение') + '</button></header>' +
-        '<div class="st-msgs" id="stMsgs">' + supMsgs(cur) + '</div>' +
-        '<form class="st-send" id="stSend"><textarea class="textarea" id="stText" rows="3" placeholder="Ответ покупателю" maxlength="2000" aria-label="Ответ покупателю"></textarea><button class="btn" id="stBtn">Ответить</button></form>' +
-        '<p class="st-note">Ctrl + Enter — отправить</p></div>'
-      : '<div class="sup-pick"><h3>' + (list.length ? 'Выберите обращение' : 'Обращений пока нет') + '</h3><p>Покупатели пишут из личного кабинета, со страницы заказа или через кнопку связи на сайте.</p></div>';
-    m.lastElementChild.outerHTML = '<div class="adm-sup"><div class="adm-chips">' + filters + '</div><div class="sup adm-sup-grid' + (cur ? ' has-pane' : '') + '"><aside class="sup-list"><div class="sup-items">' + items + '</div></aside><section class="sup-pane">' + pane + '</section></div></div>';
-    if (!cur) return;
-    var box = $('#stMsgs', m), ta = $('#stText', m), count = cur.messages.length;
-    box.scrollTop = box.scrollHeight;
-    if (cur.unreadShop) A().API.adminSupportPatch(cur.id, { read: true }).then(function () {
+    var pane = cur ? '<section class="as-pane"><div class="loader" style="min-height:300px">…</div></section>'
+      : '<section class="as-pane as-pick"><span class="sp-ic"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M5 5h14v11H10l-5 4z"/></svg></span><h3>' + (list.length ? 'Выберите обращение' : 'Обращений пока нет') + '</h3><p>Покупатели пишут из личного кабинета на сайте, из приложения и со страницы заказа.</p></section>';
+    m.lastElementChild.outerHTML = '<div class="as' + (cur ? ' as-focus' : '') + '">' +
+      '<div class="as-tools"><label class="as-search"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>' +
+        '<input type="search" id="asQ" value="' + esc(supQ) + '" placeholder="№ обращения, имя, телефон, почта, заказ или текст" aria-label="Поиск обращений"></label>' +
+        '<select class="select as-topic" id="asTopic" aria-label="Тема"><option value="">Все темы</option>' + topics.map(function (x) { return '<option' + (x === supTopic ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + '</select></div>' +
+      '<div class="adm-chips">' + chips + '</div>' +
+      '<div class="as-grid' + (cur ? ' has-pane' : '') + '"><aside class="as-list" id="asList">' + items() + '</aside>' + pane + '</div></div>';
+    var qi = $('#asQ', m);
+    qi.addEventListener('input', function () { supQ = qi.value; $('#asList', m).innerHTML = items(); $$('.adm-chip', m).forEach(function (c) { c.classList.toggle('on', !supQ && c.getAttribute('href').indexOf('f=' + f) > 0); }); });
+    $('#asTopic', m).addEventListener('change', function (e) { supTopic = e.target.value; $('#asList', m).innerHTML = items(); });
+    if (cur) supThread(m, q, cur.id, templates);
+  }
+  function supNote(x) { return '<div class="msg from-note"><div class="msg-col"><div class="msg-b"><span class="msg-who">Заметка · ' + esc(x.by || 'сотрудник') + '</span><p>' + esc(x.text) + '</p></div><time>' + esc(supTime(x.at)) + '</time></div></div>'; }
+  function supMsgs(t) {
+    var base = 'api/admin/support/file/', day = '';
+    var imgs = function (fs) { return fs && fs.length ? '<span class="sup-ph n' + Math.min(fs.length, 3) + '">' + fs.map(function (f) { var u = base + encodeURIComponent(f); return '<a href="' + u + '" target="_blank" rel="noopener"><img src="' + u + '" alt="Фото" loading="lazy"></a>'; }).join('') + '</span>' : ''; };
+    return t.messages.map(function (x) {
+      var d = A().msgDay(x.at), sep = d !== day ? '<span class="msg-day">' + esc(d) + '</span>' : ''; day = d;
+      if (x.from === 'note') return sep + supNote(x);
+      var shop = x.from === 'shop', read = shop && t.userReadAt && t.userReadAt >= x.at;
+      return sep + '<div class="msg ' + (shop ? 'from-me' : 'from-shop') + '">' + (!shop ? '<span class="msg-ava" aria-hidden="true">' + esc((t.name || 'П').charAt(0).toUpperCase()) + '</span>' : '') + '<div class="msg-col">' +
+        (x.text ? '<div class="msg-b">' + (!shop ? '<span class="msg-who">' + esc(t.name || 'Покупатель') + '</span>' : '') + '<p>' + esc(x.text) + '</p></div>' : '') + imgs(x.files) +
+        '<time>' + (shop && x.by ? esc(x.by) + ' · ' : '') + esc(supTime(x.at)) + (shop ? (read ? ' · прочитано' : ' · отправлено') : '') + '</time></div></div>';
+    }).join('');
+  }
+  async function supThread(m, q, id, templates) {
+    var pane = $('.as-pane', m), r;
+    try { r = await A().API.adminSupportGet(id); } catch (e) { pane.innerHTML = '<p class="form-error">' + esc(A().errMsg(e)) + '</p>'; return; }
+    if (!document.body.contains(pane)) return;
+    var t = r.ticket, c = r.customer, me = (A().API.user || {}).id, closed = t.status === 'closed';
+    var STATUS = A().STATUS, fmt = A().fmt;
+    var tpl = function () { return templates.map(function (x, i) { return '<button type="button" class="as-tpl" data-tpl="' + i + '" title="' + esc(x.text) + '">' + esc(x.title) + '</button>'; }).join('') + '<button type="button" class="as-tpl as-tpl-edit" id="asTplEdit">Шаблоны…</button>'; };
+    pane.innerHTML = '<div class="as-thread">' +
+        '<header class="as-head"><a class="st-back as-back" href="#/admin?s=support&f=' + esc(q.f || 'active') + '" aria-label="Все обращения"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 6l-6 6 6 6"/></svg></a>' +
+          '<div><b>№ ' + esc(t.number) + ' · ' + esc(t.topic) + '</b><span>Создано ' + esc(supTime(t.createdAt)) + (t.firstReplyAt ? ' · ответили за ' + supAgo(t.createdAt, t.firstReplyAt) : ' · ждёт ответа ' + supAgo(t.createdAt, new Date().toISOString())) + (t.closedAt ? ' · решено ' + (t.closedBy === 'user' ? 'покупателем' : 'магазином') : '') + '</span></div>' +
+          '<button type="button" class="btn ghost sm" id="asAssign">' + (t.assignee ? (t.assignee.id === me ? 'Ведёте вы' : 'Ведёт ' + esc(t.assignee.name)) : 'Взять себе') + '</button>' +
+          '<button type="button" class="btn sm ' + (closed ? 'ghost' : 'as-solve') + '" id="asToggle">' + (closed ? 'Открыть снова' : 'Решено') + '</button></header>' +
+        (t.order ? '<a class="sup-order" href="#/admin?s=orders&id=' + esc(t.order.id) + '"><span class="so-ph">' + (t.order.image ? '<img src="' + esc(t.order.image) + '" alt="">' : '') + '</span><span class="so-t"><b>Заказ № ' + esc(t.order.number) + ' · ' + esc((STATUS[t.order.status] || '').toLowerCase()) + ' · ' + fmt(t.order.total) + '</b><small>' + esc([t.order.name, [t.order.color, t.order.size].filter(Boolean).join(', ')].filter(Boolean).join(' · ')) + '</small></span></a>' : '') +
+        '<div class="st-msgs" id="asMsgs">' + supMsgs(t) + '</div>' +
+        '<div class="as-send">' +
+          '<div class="as-tpls" id="asTpls">' + tpl() + '</div>' +
+          '<div class="sup-att" hidden></div>' +
+          '<div class="sup-row"><label class="st-attach" aria-label="Прикрепить фото"><input class="sup-file" type="file" accept="image/*" multiple hidden><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 12.5l6.5-6.5a3 3 0 0 1 4.2 4.2l-8 8a5 5 0 0 1-7-7l7.5-7.5"/></svg></label>' +
+          '<textarea class="st-text" id="asText" rows="2" maxlength="2000" placeholder="Ответ покупателю" aria-label="Ответ"></textarea>' +
+          '<button class="btn" id="asBtn" type="button">Ответить</button></div>' +
+          '<div class="as-foot"><label class="check"><input type="checkbox" id="asNote"> <span>Заметка для сотрудников — покупатель её не увидит</span></label><span>Ctrl + Enter — отправить</span></div>' +
+        '</div>' +
+      '</div>' +
+      (c ? '<aside class="as-cust">' +
+        '<div class="as-card"><span class="as-me"><span class="msg-ava">' + esc((c.name || 'П').charAt(0).toUpperCase()) + '</span><span><b>' + esc(c.name || 'Покупатель') + '</b><small>С нами с ' + esc(A().fmtDate(c.createdAt).replace(/^\d+\s/, '').replace(/ г\.$/, '')) + ' · ' + c.orders.length + ' ' + A().plural(c.orders.length, 'заказ', 'заказа', 'заказов') + '</small></span></span>' +
+          (c.phone ? '<a href="tel:+' + esc(String(c.phone).replace(/\D/g, '')) + '">' + esc(A().fmtPhone(c.phone)) + '</a>' : '') + (c.email ? '<a href="mailto:' + esc(c.email) + '">' + esc(c.email) + '</a>' : '') +
+          '<span>Бонусы: ' + (c.bonus || 0) + '</span></div>' +
+        (c.orders.length ? '<div class="as-card"><b class="as-cap">Заказы</b>' + c.orders.map(function (o) { return '<a class="as-row" href="#/admin?s=orders&id=' + esc(o.id) + '"><span>№ ' + esc(o.number) + ' · ' + esc((STATUS[o.status] || '').toLowerCase()) + '</span><span>' + fmt(o.total) + '</span></a>'; }).join('') + '</div>' : '') +
+        (c.tickets.length ? '<div class="as-card"><b class="as-cap">Другие обращения</b>' + c.tickets.map(function (x) { return '<a class="as-row" href="#/admin?s=support&f=all&id=' + esc(x.id) + '"><span>№ ' + esc(x.number) + ' · ' + esc(x.topic) + '</span><span>' + SUP_STATE[x.status].toLowerCase() + '</span></a>'; }).join('') + '</div>' : '') +
+      '</aside>' : '<aside class="as-cust"><div class="as-card"><b>' + esc(t.name || 'Покупатель') + '</b><span>Аккаунт удалён</span></div></aside>');
+    var box = $('#asMsgs', pane), ta = $('#asText', pane), count = t.messages.length;
+    var files = (function () { // те же фото, что у покупателя: уменьшаем в браузере и загружаем сразу
+      var st = [], busy = 0, att = $('.sup-att', pane), input = $('.sup-file', pane);
+      var draw = function () { att.hidden = !st.length && !busy; att.innerHTML = st.map(function (f, i) { return '<span class="sup-att-i"><img src="' + f.p + '" alt=""><button type="button" data-rm="' + i + '" aria-label="Убрать фото">×</button></span>'; }).join('') + (busy ? '<span class="sup-att-i is-busy"></span>' : ''); };
+      att.addEventListener('click', function (e) { var b = e.target.closest('[data-rm]'); if (b) { st.splice(+b.getAttribute('data-rm'), 1); draw(); } });
+      input.addEventListener('change', async function () {
+        var fl = Array.prototype.slice.call(input.files || []).slice(0, 5 - st.length); input.value = '';
+        for (var i = 0; i < fl.length; i++) { busy++; draw(); try { var d = await A().supPhoto(fl[i]), u = await A().API.adminSupportUpload(d); st.push({ n: u.file, p: d }); } catch (e) { toast(A().errMsg(e), true); } busy--; draw(); }
+      });
+      return { names: function () { return st.map(function (x) { return x.n; }); }, busy: function () { return busy > 0; } };
+    })();
+    var bottom = function () { box.scrollTop = box.scrollHeight; $$('img', box).forEach(function (im) { if (!im.complete) im.addEventListener('load', function () { box.scrollTop = box.scrollHeight; }, { once: true }); }); };
+    bottom();
+    if (t.unreadShop) A().API.adminSupportPatch(t.id, { read: true }).then(function () {
       DATA.supportNew = Math.max(0, (DATA.supportNew || 1) - 1);
-      var it = $('.sup-item.on', m); if (it) it.classList.remove('unread');
+      var it = $('.as-item.on', m); if (it) { it.classList.remove('unread'); var dot = $('.sc-dot', it); if (dot) dot.remove(); }
       var b = $('.adm-side a[href="#/admin?s=support"] .adm-badge'); if (b) { if (DATA.supportNew) b.textContent = DATA.supportNew; else b.remove(); }
     }).catch(function () {});
     var send = async function () {
-      var text = ta.value.trim(); if (!text) { ta.focus(); return; }
-      $('#stBtn', m).disabled = true;
-      try { var r = await A().API.adminSupportReply(cur.id, text); toast(r.mailed ? 'Ответ отправлен и продублирован на почту' : 'Ответ отправлен'); supportSection(m, q); return; }
+      var text = ta.value.trim(), note = $('#asNote', pane).checked, names = note ? [] : files.names();
+      if (files.busy()) { toast('Фото ещё загружается', true); return; }
+      if (!text && !names.length) { ta.focus(); return; }
+      $('#asBtn', pane).disabled = true;
+      try { var res = await A().API.adminSupportReply(t.id, text, names, note); toast(note ? 'Заметка сохранена' : res.mailed ? 'Ответ отправлен и продублирован на почту' : 'Ответ отправлен'); supportSection(m, q); return; }
       catch (e) { toast(A().errMsg(e), true); }
-      $('#stBtn', m).disabled = false;
+      $('#asBtn', pane).disabled = false;
     };
-    $('#stSend', m).addEventListener('submit', function (e) { e.preventDefault(); send(); });
+    $('#asBtn', pane).addEventListener('click', send);
+    $('#asNote', pane).addEventListener('change', function (e) { ta.placeholder = e.target.checked ? 'Заметка для сотрудников' : 'Ответ покупателю'; $('#asBtn', pane).textContent = e.target.checked ? 'Сохранить заметку' : 'Ответить'; pane.querySelector('.as-send').classList.toggle('is-note', e.target.checked); });
     ta.addEventListener('keydown', function (e) { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); } });
-    $('#supToggle', m).addEventListener('click', async function () {
-      try { await A().API.adminSupportPatch(cur.id, { status: cur.status === 'closed' ? 'open' : 'closed' }); supportSection(m, q); } catch (e) { toast(A().errMsg(e), true); }
+    $('#asTpls', pane).addEventListener('click', function (e) {
+      var b = e.target.closest('[data-tpl]');
+      if (b) { var x = templates[+b.getAttribute('data-tpl')]; ta.value = (ta.value.trim() ? ta.value.trim() + '\n\n' : '') + x.text; ta.focus(); return; }
+      if (e.target.closest('#asTplEdit')) supTplEditor(templates, function (list) { templates = list; $('#asTpls', pane).innerHTML = tpl(); });
+    });
+    $('#asAssign', pane).addEventListener('click', async function () {
+      try { await A().API.adminSupportPatch(t.id, { assign: !(t.assignee && t.assignee.id === me) }); supportSection(m, q); } catch (e) { toast(A().errMsg(e), true); }
+    });
+    $('#asToggle', pane).addEventListener('click', async function () {
+      try { await A().API.adminSupportPatch(t.id, { status: closed ? 'open' : 'closed' }); toast(closed ? 'Обращение открыто снова' : 'Обращение № ' + t.number + ' решено'); supportSection(m, q); } catch (e) { toast(A().errMsg(e), true); }
     });
     supPoll = setInterval(async function () {
       if (!document.body.contains(box)) { clearInterval(supPoll); return; }
       if (document.hidden) return;
-      try { var all = await A().API.adminSupport(), t = all.find(function (x) { return x.id === cur.id; }); if (t && t.messages.length !== count) { count = t.messages.length; box.innerHTML = supMsgs(t); box.scrollTop = box.scrollHeight; } } catch (e) {}
-    }, 20000);
+      try { var nr = await A().API.adminSupportGet(t.id); if (nr.ticket.messages.length !== count || nr.ticket.userReadAt !== t.userReadAt) { count = nr.ticket.messages.length; t = nr.ticket; box.innerHTML = supMsgs(t); bottom(); } } catch (e) {}
+    }, 15000);
   }
-  function supMsgs(t) {
-    return t.messages.map(function (x) {
-      return '<div class="msg ' + (x.from === 'shop' ? 'from-me' : 'from-shop') + '"><div class="msg-b">' + (x.from === 'shop' ? '' : '<span class="msg-who">' + esc(t.name || 'Покупатель') + '</span>') + '<p>' + esc(x.text) + '</p></div><time>' + esc(supTime(x.at)) + '</time></div>';
-    }).join('');
+  // Шаблоны ответов: название кнопки и текст; одни на всех сотрудников
+  function supTplEditor(templates, done) {
+    var rows = templates.map(function (x) { return { title: x.title, text: x.text }; });
+    A().openModal('<div class="as-tpl-ed"><h2>Шаблоны ответов</h2><p class="muted">Кнопки над полем ответа: нажатие вставляет текст, его можно поправить перед отправкой.</p><div id="tplRows"></div>' +
+      '<button type="button" class="btn ghost sm" id="tplAdd">+ Добавить шаблон</button><div class="as-tpl-act"><button type="button" class="btn" id="tplSave">Сохранить</button></div></div>');
+    var md = $('#modalBody'), box = $('#tplRows', md);
+    var draw = function () { box.innerHTML = rows.map(function (x, i) { return '<div class="as-tpl-row"><input class="input" data-i="' + i + '" data-k="title" maxlength="60" placeholder="Название" value="' + esc(x.title) + '"><textarea class="textarea" data-i="' + i + '" data-k="text" rows="3" maxlength="2000" placeholder="Текст ответа">' + esc(x.text) + '</textarea><button type="button" class="link" data-del="' + i + '">Удалить</button></div>'; }).join(''); };
+    draw();
+    box.addEventListener('input', function (e) { var el = e.target; if (el.hasAttribute('data-k')) rows[+el.getAttribute('data-i')][el.getAttribute('data-k')] = el.value; });
+    box.addEventListener('click', function (e) { var b = e.target.closest('[data-del]'); if (b) { rows.splice(+b.getAttribute('data-del'), 1); draw(); } });
+    $('#tplAdd', md).addEventListener('click', function () { rows.push({ title: '', text: '' }); draw(); });
+    $('#tplSave', md).addEventListener('click', async function () {
+      try { var list = await A().API.adminSupportTemplates(rows); toast('Шаблоны сохранены'); A().closePanels(); done(list); } catch (e) { toast(A().errMsg(e), true); }
+    });
   }
 
   function notifyPanel(m, q, mail) {

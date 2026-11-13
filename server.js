@@ -80,6 +80,17 @@ db.expenses = db.expenses || [];
 db.receipts = db.receipts || [];
 db.intakes = db.intakes || [];
 db.pushsubs = db.pushsubs || []; // в новой базе списка ещё нет
+// Юридические документы (13.64.3): новая редакция — приложение, push-уведомления, поддержка с фото, удаление аккаунта.
+// Меняем текст, только если на сайте стоит прежняя редакция без правок владельца (сверяем отпечаток текста)
+{
+  const LEGAL_OLD = { privacy: '4fb32ae6188caa50aea66a024be6442ba2ad0ded', consent: 'cc7a98dd7dd8f7d3433e8b5186fc528fdfe3ad5b', offer: '1f490ab8c27ba2d37118f23890b11b746c611fb9' };
+  let changed = false;
+  for (const slug of Object.keys(LEGAL_OLD)) {
+    const pg = db.pages.find((x) => x.slug === slug), fresh = SEED.pages.find((x) => x.slug === slug);
+    if (pg && fresh && crypto.createHash('sha1').update(String(pg.body || '')).digest('hex') === LEGAL_OLD[slug]) { pg.body = fresh.body; changed = true; }
+  }
+  if (changed) setImmediate(save); // save() объявлен ниже — записываем, когда сервер загрузится
+}
 db.audit = db.audit || [];
 db.finance = Finance.cleanSettings(db.finance, db.finance);
 if (db.settings && db.settings.payment && db.settings.payment.parts) delete db.settings.payment.parts; // оплата частями убрана в 13.43

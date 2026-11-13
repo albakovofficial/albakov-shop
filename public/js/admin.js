@@ -2678,6 +2678,8 @@
         var st = slideStatus(x), pr = x.promotionId && DATA.promotions.find(function (p) { return p.id === x.promotionId; });
         var pills = [x.layout === 'full' ? 'Фото на весь экран' : 'Фото справа'];
         if (x.gender) pills.push('Только «' + ({ women: 'Женщинам', men: 'Мужчинам', kids: 'Детям' }[x.gender] || x.gender) + '»');
+        var aud = x.audience || (/tab=register/.test(((x.btn1 && x.btn1.link) || '') + ' ' + ((x.btn2 && x.btn2.link) || '')) ? 'guest' : '');
+        if (aud === 'guest') pills.push('Только гостям'); else if (aud === 'user') pills.push('Только вошедшим');
         if (pr) pills.push('Акция: ' + pr.title);
         if (x.code) pills.push('Промокод ' + x.code);
         return '<div class="adm-sl-row' + (x.active ? '' : ' off') + '"><span class="adm-sl-num num">' + (i + 1) + '</span>' +
@@ -2715,6 +2717,7 @@
       { section: 'Основное' },
       { k: 'active', label: 'Показывать слайд на сайте', type: 'checkbox' },
       { k: 'layout', label: 'Макет', type: 'select', options: [['split', 'Фото справа, текст слева'], ['full', 'Фото на весь экран, текст поверх']] },
+      { k: 'audience', label: 'Кому показывать', type: 'select', options: [['', 'Сам решит: со ссылкой на регистрацию — только гостям'], ['all', 'Всем'], ['guest', 'Только тем, кто не вошёл'], ['user', 'Только вошедшим в личный кабинет']] },
       { k: 'gender', label: 'Для какого раздела', type: 'select', options: [['', 'Всем покупателям'], ['women', 'Только «Женщинам»'], ['men', 'Только «Мужчинам»'], ['kids', 'Только «Детям»']] },
       { section: 'Текст' },
       { k: 'eyebrow', label: 'Надзаголовок', wide: true, hint: 'Маленькая строка над заголовком' },
@@ -2748,7 +2751,7 @@
     var mode = 'desk';
     function current() {
       var f = readForm(box, defs, Object.assign({}, flat));
-      return Object.assign({}, sl, { active: f.active, layout: f.layout, gender: f.gender, eyebrow: f.eyebrow, title: f.title, text: f.text, badge: f.badge, image: f.image, promotionId: f.promotionId, code: f.code, startsAt: f.startsAt, endsAt: f.endsAt, btn1: { label: f.b1l, link: f.b1h }, btn2: { label: f.b2l, link: f.b2h } });
+      return Object.assign({}, sl, { active: f.active, layout: f.layout, audience: f.audience || '', gender: f.gender, eyebrow: f.eyebrow, title: f.title, text: f.text, badge: f.badge, image: f.image, promotionId: f.promotionId, code: f.code, startsAt: f.startsAt, endsAt: f.endsAt, btn1: { label: f.b1l, link: f.b1h }, btn2: { label: f.b2l, link: f.b2h } });
     }
     function preview() {
       var stage = $('#slpvStage', m), wrap = $('#slpv', m), w = mode === 'desk' ? 1280 : 390;

@@ -533,7 +533,16 @@
     if (!Pricing.inWindow({ active: true, startsAt: sl.startsAt, endsAt: sl.endsAt }, Date.now())) return false;
     if (sl.promotionId) { var pr = slidePromo(sl); if (!pr || !Pricing.inWindow(pr, Date.now())) return false; }
     if (sl.gender && g && sl.gender !== g) return false;
+    var who = slideAudience(sl);
+    if (who === 'guest' && API.user) return false;
+    if (who === 'user' && !API.user) return false;
     return true;
+  }
+  /* Кому показывать слайд: guest — только без входа, user — только вошедшим, all — всем.
+     Не задано: слайд с кнопкой «Регистрация» — только гостям (вошедшему «Зарегистрироваться» не к месту) */
+  function slideAudience(sl) {
+    if (sl.audience === 'guest' || sl.audience === 'user' || sl.audience === 'all') return sl.audience;
+    return /tab=register/.test(((sl.btn1 && sl.btn1.link) || '') + ' ' + ((sl.btn2 && sl.btn2.link) || '')) ? 'guest' : 'all';
   }
   function visibleSlides() { var c = D.settings.slider || {}; return c.enabled === false ? [] : (c.slides || []).filter(function (sl) { return slideVisible(sl, curGender()); }); }
   function slideHtml(sl, i, total, active) {

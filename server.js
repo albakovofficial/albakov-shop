@@ -1942,7 +1942,7 @@ async function api(req, res, url, body) {
     save(); return { user: publicUser(u) };
   }
 
-  // Удаление аккаунта (13.63.3, требование App Store 5.1.1(v)): по паролю. Личные данные, избранное, корзина, бонусы,
+  // Удаление аккаунта (13.64.0, требование App Store 5.1.1(v)): по паролю. Личные данные, избранное, корзина, бонусы,
   // подписки и вход удаляются; заказы и чеки остаются у магазина (учёт по закону), но больше не привязаны к аккаунту
   if (p[0] === 'me' && p[1] === 'delete' && M === 'POST') {
     const u = user(); if (!u) fail(401, 'Войдите в личный кабинет');
@@ -2403,7 +2403,8 @@ async function api(req, res, url, body) {
         if (o.cdek && o.cdek.uuid) fail(400, 'Отправление уже создано');
         if (o.payment.method === 'online' && o.payment.status !== 'paid') fail(400, 'Заказ ещё не оплачен');
         if (['canceled', 'returned'].includes(o.status)) fail(400, 'Заказ отменён');
-        const pkg = cdekPkg(body.pkg);
+        // Посылка: из окна в панели, иначе — по весу и размерам товаров заказа
+        const pkg = cdekPkg(body.pkg || Pricing.parcelFor(o.items.map((x) => ({ productId: x.productId, qty: x.qty - (x.refundedQty || 0) })), db.products, cdekCfg()));
         let uuid;
         try { uuid = await cdek.createOrder(cdekOrderBody(o, pkg)); }
         catch (e) { if (e instanceof HttpError) throw e; o.cdekTry = (o.cdekTry || 0) + 1; save(); fail(502, 'СДЭК: ' + e.message); }

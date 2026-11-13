@@ -349,8 +349,9 @@
   function isDoorMethod(m) { return !!(m && m.needsAddress !== false && m.cdekDoor === true); }
   function cdekMode(m) { return isDoorMethod(m) ? 'door' : isPvzMethod(m) ? 'pvz' : null; }
 
-  /* Посылка для СДЭК: вес вещей складывается, упаковка — по самой крупной вещи;
-     если вещей много — на размер больше. Вес и упаковка задаются в карточке товара */
+  /* Посылка для СДЭК. В карточке товара — вес и размер посылки (box: длина × ширина × высота, см).
+     Вещи со своим размером кладутся стопкой: длина и ширина — по самой крупной, высоты складываются.
+     Вещи без размера — в упаковку из настроек СДЭК (по самой крупной; если вещей много — на размер больше). */
   var DEFAULT_PACKS = [
     { id: 'bag', name: 'Пакет', length: 30, width: 25, height: 5, weight: 20 },
     { id: 'm', name: 'Коробка M', length: 40, width: 30, height: 10, weight: 150 },
@@ -360,24 +361,41 @@
     var list = c && Array.isArray(c.packs) && c.packs.length ? c.packs : DEFAULT_PACKS;
     return list.slice().sort(function (a, b) { return a.length * a.width * a.height - b.length * b.width * b.height; });
   }
+  // Размер посылки товара; старые товары с выбранной упаковкой — её размер
+  function boxOf(p, c) {
+    var b = p && p.box, n = function (v) { return Math.max(0, Math.round(Number(v) || 0)); };
+    if (b && n(b.length) && n(b.width) && n(b.height)) return { length: n(b.length), width: n(b.width), height: n(b.height) };
+    if (p && p.pack) { var pk = cdekPacks(c).find(function (x) { return x.id === p.pack; }); if (pk) return { length: n(pk.length), width: n(pk.width), height: n(pk.height), pack: true }; }
+    return null;
+  }
   function parcelFor(items, products, c) {
-    var packs = cdekPacks(c), def = Math.max(50, Number(c && c.pkg && c.pkg.weight) || 1000), n = 0, w = 0, idx = -1;
+    var packs = cdekPacks(c), def = Math.max(50, Number(c && c.pkg && c.pkg.weight) || 1000), n = 0, w = 0, other = 0;
     var defIdx = Math.max(0, packs.findIndex(function (x) { return c && x.id === c.defaultPack; }));
+    var stack = null;
     (items || []).forEach(function (it) {
       var q = Math.max(0, Math.floor(Number(it.qty) || 0)); if (!q) return;
       var p = (products || []).find(function (x) { return x.id === it.productId; }) || {};
       n += q; w += (Number(p.weight) > 0 ? Number(p.weight) : def) * q;
-      var k = p.pack ? packs.findIndex(function (x) { return x.id === p.pack; }) : -1;
-      idx = Math.max(idx, k >= 0 ? k : defIdx);
+      var b = boxOf(p, c);
+      if (!b) { other += q; return; }
+      var d = [b.length, b.width, b.height].sort(function (x, y) { return y - x; });
+      stack = stack ? { length: Math.max(stack.length, d[0]), width: Math.max(stack.width, d[1]), height: stack.height + d[2] * q } : { length: d[0], width: d[1], height: d[2] * q };
     });
-    if (idx < 0) idx = defIdx;
-    if (n >= 3) idx++;
-    if (n >= 6) idx++;
-    var pk = packs[Math.min(idx, packs.length - 1)];
-    return { weight: Math.min(30000, Math.max(50, Math.round(w + (Number(pk.weight) || 0)))), length: pk.length, width: pk.width, height: pk.height, pack: pk.name, count: n };
+    var lim = function (v) { return Math.min(150, Math.max(1, Math.round(v))); };
+    var out = { weight: w, length: 0, width: 0, height: 0, pack: '', count: n };
+    if (other || !stack) {
+      var idx = defIdx; if (other >= 3) idx++; if (other >= 6) idx++;
+      var pk = packs[Math.min(idx, packs.length - 1)];
+      out.weight += Number(pk.weight) || 0; out.pack = pk.name;
+      if (stack) { out.length = Math.max(stack.length, pk.length); out.width = Math.max(stack.width, pk.width); out.height = stack.height + pk.height; out.pack = 'По размерам товаров + ' + pk.name; }
+      else { out.length = pk.length; out.width = pk.width; out.height = pk.height; }
+    } else { out.length = stack.length; out.width = stack.width; out.height = stack.height; out.pack = 'По размерам товаров'; }
+    out.length = lim(out.length); out.width = lim(out.width); out.height = lim(out.height);
+    out.weight = Math.min(30000, Math.max(50, Math.round(out.weight)));
+    return out;
   }
 
-  var api = { isPvzMethod: isPvzMethod, isDoorMethod: isDoorMethod, cdekMode: cdekMode, cdekPacks: cdekPacks, parcelFor: parcelFor, bonusConf: bonusConf, bonusFor: bonusFor, bonusMove: bonusMove, syncOrderBonus: syncOrderBonus, badgesOf: badgesOf, preorderLeft: preorderLeft, inkFor: inkFor, BADGE_KEYS: BADGE_KEYS, forGender: forGender, migrateData: migrateData, migrateProduct: migrateProduct, colorsOf: colorsOf, colorOf: colorOf, stockOf: stockOf, productPrice: productPrice, calcCart: calcCart, inWindow: inWindow, format: format };
+  var api = { isPvzMethod: isPvzMethod, isDoorMethod: isDoorMethod, cdekMode: cdekMode, cdekPacks: cdekPacks, boxOf: boxOf, parcelFor: parcelFor, bonusConf: bonusConf, bonusFor: bonusFor, bonusMove: bonusMove, syncOrderBonus: syncOrderBonus, badgesOf: badgesOf, preorderLeft: preorderLeft, inkFor: inkFor, BADGE_KEYS: BADGE_KEYS, forGender: forGender, migrateData: migrateData, migrateProduct: migrateProduct, colorsOf: colorsOf, colorOf: colorOf, stockOf: stockOf, productPrice: productPrice, calcCart: calcCart, inWindow: inWindow, format: format };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Pricing = api;
 })(this);

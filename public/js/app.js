@@ -44,7 +44,7 @@
     if (ft) { var tmp = document.createElement('div'); tmp.innerHTML = footerHtml(); ft.replaceWith(tmp.firstElementChild); bindFooter(); }
     routeKeepScroll = true; route();
   }
-  // Закрытые разделы не показываются, пока их не откроют в панели (13.63.3); открыт один раздел — переключателя нет
+  // Закрытые разделы не показываются, пока их не откроют в панели (13.64.0); открыт один раздел — переключателя нет
   function openGenders() { return Object.keys(GENDERS).filter(function (g) { return !gClosed(g); }); }
   function genderTabs(cls) {
     var gs = openGenders(); if (gs.length < 2) return '';
@@ -484,7 +484,6 @@
     if (routeN++ && window.Metrika && fn !== adminPage) setTimeout(function () { Metrika.hit(location.pathname + location.search); }, 50);
     pageMeta(name, p, r.q);
     if ($('.nf', v)) document.title = 'Страница не найдена — ' + (D.settings.storeName || 'ALBAKOV'); // 404, в том числе для удалённого товара
-    document.body.classList.toggle('hero-under', !!$('#view > .slider:first-child'));
     var fab = $('#fab'); if (fab) { fab.hidden = fn === adminPage || (name === 'account' && r.q.tab === 'support'); fabSet(false); }
     syncHeaderH();
     if (!routeQuiet) { v.classList.remove('view-in'); void v.offsetWidth; v.classList.add('view-in'); }
@@ -533,38 +532,56 @@
     if (!Pricing.inWindow({ active: true, startsAt: sl.startsAt, endsAt: sl.endsAt }, Date.now())) return false;
     if (sl.promotionId) { var pr = slidePromo(sl); if (!pr || !Pricing.inWindow(pr, Date.now())) return false; }
     if (sl.gender && g && sl.gender !== g) return false;
+    var who = slideAudience(sl);
+    if (who === 'guest' && API.user) return false;
+    if (who === 'user' && !API.user) return false;
     return true;
   }
+  /* Кому показывать слайд: guest — только без входа, user — только вошедшим, all — всем.
+     Не задано: слайд с кнопкой «Регистрация» — только гостям (вошедшему «Зарегистрироваться» не к месту) */
+  function slideAudience(sl) {
+    if (sl.audience === 'guest' || sl.audience === 'user' || sl.audience === 'all') return sl.audience;
+    return /tab=register/.test(((sl.btn1 && sl.btn1.link) || '') + ' ' + ((sl.btn2 && sl.btn2.link) || '')) ? 'guest' : 'all';
+  }
   function visibleSlides() { var c = D.settings.slider || {}; return c.enabled === false ? [] : (c.slides || []).filter(function (sl) { return slideVisible(sl, curGender()); }); }
+  /* Слайдер на главной (вариант G, 13.64): фото в скруглённой карточке, внизу стеклянная панель —
+     заголовок, текст, промокод, кнопка и стрелки; по верхнему краю панели полоса времени.
+     Сверху на фото — надзаголовок и номер слайда. Цвета — палитра раздела (--acc, --acc-grad, --acc-tint) */
+  var SL_PREV = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>', SL_NEXT = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>';
   function slideHtml(sl, i, total, active) {
     var pr = slidePromo(sl);
     var eyebrow = (sl.eyebrow || '') + (pr && pr.endsAt ? (sl.eyebrow ? ' · ' : '') + 'до ' + fmtDate(pr.endsAt) : '');
     var badge = sl.badge || (pr ? (pr.type === 'percent' ? '−' + pr.value + '%' : '−' + fmt(pr.value)) : '');
-    var title = esc(sl.title || '').replace(/\*(.+?)\*/g, '<em>$1</em>').replace(/^([−–-]\s?\d[\d\s]*(?:%|₽)?)/, '<span class="st-off">$1</span>');
-    var btn = function (b, cls, arrow) { return b && b.label ? '<a class="sbtn ' + cls + '" href="' + esc(safeUrl(b.link || '#/catalog')) + '"><span>' + esc(b.label) + '</span>' + (cls === 'sbtn-primary' ? '<span class="sbtn-ic" aria-hidden="true">' + ARROW + '</span>' : arrow ? '<span class="sbtn-arrow" aria-hidden="true"></span>' : '') + '</a>' : ''; };
-    return '<article class="slide layout-' + (sl.layout === 'full' ? 'full' : 'split') + (active ? ' is-active' : '') + '" aria-roledescription="слайд" aria-label="' + (i + 1) + ' из ' + total + '"' + (active ? '' : ' aria-hidden="true"') + '>' +
-      '<div class="slide-media"><img src="' + esc(sl.image || Art.make({ kind: 'coat', tone: '#3d3d40' })) + '" alt=""' + (i ? ' loading="lazy"' : '') + '></div>' +
-      '<div class="slide-body">' +
-        (eyebrow ? '<span class="eyebrow slide-eb"><i></i>' + esc(eyebrow) + '</span>' : '') +
-        (badge ? '<span class="slide-badge">' + esc(badge) + '</span>' : '') +
-        '<' + (i === 0 ? 'h1' : 'h2') + ' class="slide-title">' + title + '</' + (i === 0 ? 'h1' : 'h2') + '>' +
-        (sl.text ? '<p class="slide-text">' + esc(sl.text) + '</p>' : '') +
-        (sl.code ? '<button class="slide-code" data-copy="' + esc(sl.code) + '" title="Скопировать промокод"><span>Промокод</span><b>' + esc(sl.code) + '</b><i>Скопировать</i><svg class="sc-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="3"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg></button>' : '') +
-        ((sl.btn1 && sl.btn1.label) || (sl.btn2 && sl.btn2.label) ? '<div class="slide-actions">' + btn(sl.btn1, 'sbtn-primary', true) + btn(sl.btn2, 'sbtn-line', true) + '</div>' : '') +
-      '</div></article>';
+    // Заголовок: со второй строки — цветом раздела (или *слова в звёздочках*)
+    var raw = String(sl.title || '').trim(), nl = raw.indexOf('\n');
+    if (raw.indexOf('*') === -1 && nl !== -1) raw = raw.slice(0, nl) + ' *' + raw.slice(nl + 1).replace(/\n/g, ' ') + '*';
+    var title = esc(raw.replace(/\n/g, ' ')).replace(/\*(.+?)\*/g, '<em>$1</em>');
+    var b1 = sl.btn1 && sl.btn1.label ? sl.btn1 : null, b2 = sl.btn2 && sl.btn2.label ? sl.btn2 : null;
+    var h = i === 0 ? 'h1' : 'h2';
+    return '<article class="slg-slide' + (active ? ' is-active' : '') + '" aria-roledescription="слайд" aria-label="' + (i + 1) + ' из ' + total + '"' + (active ? '' : ' aria-hidden="true"') + '>' +
+      '<img class="slg-img" src="' + esc(sl.image || Art.make({ kind: 'coat', tone: '#3d3d40' })) + '" alt=""' + (i ? ' loading="lazy"' : '') + '>' +
+      (eyebrow ? '<span class="slg-chip slg-eb"><i></i>' + esc(eyebrow) + '</span>' : '') +
+      '<div class="slg-panel"><div class="slg-prog" aria-hidden="true"><i></i></div><div class="slg-in">' +
+        '<' + h + ' class="slg-title">' + (badge ? '<span class="slg-badge">' + esc(badge) + '</span> ' : '') + title + '</' + h + '>' +
+        (sl.text ? '<p class="slg-text">' + esc(sl.text) + '</p>' : '') +
+        (sl.code ? '<button class="slg-code" data-copy="' + esc(sl.code) + '" title="Скопировать промокод"><span>Промокод</span><b>' + esc(sl.code) + '</b></button>' : '') +
+        '<div class="slg-acts">' +
+          (b1 ? '<a class="slg-btn" href="' + esc(safeUrl(b1.link || '#/catalog')) + '"><span>' + esc(b1.label) + '</span><i aria-hidden="true">' + ARROW + '</i></a>' : '') +
+          (b2 ? '<a class="slg-link" href="' + esc(safeUrl(b2.link || '#/catalog')) + '">' + esc(b2.label) + '</a>' : '') +
+          (total > 1 ? '<button class="slg-arrow" data-sl-step="-1" aria-label="Предыдущий слайд">' + SL_PREV + '</button><button class="slg-arrow" data-sl-step="1" aria-label="Следующий слайд">' + SL_NEXT + '</button>' : '') +
+        '</div>' +
+      '</div></div></article>';
   }
   function sliderHtml(list) {
     var c = D.settings.slider || {}, n = list.length;
-    return '<section class="slider" id="slider" aria-roledescription="карусель" aria-label="Главное" style="--dur:' + Math.max(3, Number(c.interval) || 7) + 's">' +
-      '<div class="sl-track">' + list.map(function (sl, i) { return slideHtml(sl, i, n, i === 0); }).join('') + '</div>' +
-      (n > 1 ? '<div class="slider-ui">' +
-        '<div class="sl-dots">' + list.map(function (sl, i) { return '<button class="sl-dot' + (i === 0 ? ' on' : '') + '" data-sl="' + i + '" aria-label="Слайд ' + (i + 1) + '"><b>' + (i + 1) + '</b><i></i></button>'; }).join('') + '</div>' +
-        '<div class="sl-arrows"><button class="sl-arrow" data-sl-step="-1" aria-label="Предыдущий слайд"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><button class="sl-arrow" data-sl-step="1" aria-label="Следующий слайд"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button></div></div>' : '') +
-      '</section>';
+    return '<section class="slider sl-g" id="slider" aria-roledescription="карусель" aria-label="Главное" style="--dur:' + Math.max(3, Number(c.interval) || 7) + 's">' +
+      '<div class="slg-card"><div class="slg-track">' + list.map(function (sl, i) { return slideHtml(sl, i, n, i === 0); }).join('') + '</div>' +
+      (n > 1 ? '<span class="slg-chip slg-num"><b id="slNum">1</b>&nbsp;/ ' + n + '</span>' : '') +
+      '</div></section>';
   }
   function initSlider() {
     var el = $('#slider'); if (!el) return;
-    var slides = $$('.slide', el), dots = $$('.sl-dot', el), n = slides.length, idx = 0;
+    var slides = $$('.slg-slide', el), n = slides.length, idx = 0;
     var c = D.settings.slider || {};
     var auto = c.autoplay !== false && n > 1;
     el.classList.toggle('autoplay', auto);
@@ -574,19 +591,18 @@
         var on = k === idx; s.classList.toggle('is-active', on);
         if (on) s.removeAttribute('aria-hidden'); else s.setAttribute('aria-hidden', 'true');
         $$('a,button', s).forEach(function (a) { a.tabIndex = on ? 0 : -1; });
+        var pg = $('.slg-prog', s); pg.classList.remove('run'); if (on) { void pg.offsetWidth; pg.classList.add('run'); }
       });
-      dots.forEach(function (d, k) { d.classList.remove('on'); if (k === idx) { void d.offsetWidth; d.classList.add('on'); } });
       var num = $('#slNum'); if (num) num.textContent = idx + 1;
     }
     show(slideKeep < n ? slideKeep : 0); slideKeep = 0;
     el.addEventListener('click', function (e) {
-      var d = e.target.closest('[data-sl]'); if (d) { show(+d.getAttribute('data-sl')); return; }
       var a = e.target.closest('[data-sl-step]'); if (a) { show(idx + +a.getAttribute('data-sl-step')); return; }
       var cp = e.target.closest('[data-copy]'); if (cp) {
         var code = cp.getAttribute('data-copy');
         var ok = async function () {
-          cp.classList.add('copied'); $('i', cp).textContent = 'Скопировано';
-          setTimeout(function () { cp.classList.remove('copied'); $('i', cp).textContent = 'Скопировать'; }, 2400);
+          cp.classList.add('copied');
+          setTimeout(function () { cp.classList.remove('copied'); }, 2400);
           var r = null; try { r = (await API.quote([], code)).promo; } catch (ex) {}
           if (r && (r.reason === 'used' || r.reason === 'first')) toast(r.message, true);
           else if (r && r.reason === 'login') toast('Промокод ' + code + ' скопирован. Скидка действует после входа в личный кабинет.');
@@ -595,14 +611,7 @@
         try { navigator.clipboard.writeText(code).then(ok, function () { toast('Промокод: ' + code); }); } catch (ex) { toast('Промокод: ' + code); }
       }
     });
-    if (auto) el.addEventListener('animationend', function (e) { if (e.target.parentNode && e.target.parentNode.classList.contains('on')) show(idx + 1); });
-    el.addEventListener('pointermove', function (e) {
-      if (e.pointerType !== 'mouse') return;
-      var r = el.getBoundingClientRect();
-      el.style.setProperty('--px', ((e.clientX - r.left) / r.width * 2 - 1).toFixed(3));
-      el.style.setProperty('--py', ((e.clientY - r.top) / r.height * 2 - 1).toFixed(3));
-    });
-    el.addEventListener('mouseleave', function () { el.style.setProperty('--px', 0); el.style.setProperty('--py', 0); });
+    if (auto) el.addEventListener('animationend', function (e) { if (e.target.parentNode && e.target.parentNode.classList.contains('run')) show(idx + 1); });
     el.addEventListener('mouseenter', function () { el.classList.add('paused'); });
     el.addEventListener('mouseleave', function () { el.classList.remove('paused'); });
     el.addEventListener('focusin', function () { el.classList.add('paused'); });
@@ -2363,7 +2372,7 @@
     '</div>';
   }
 
-  /* Удаление аккаунта (13.63.3): окно с последствиями и паролем; заказы в пути доставляем, чеки остаются у магазина */
+  /* Удаление аккаунта (13.64.0): окно с последствиями и паролем; заказы в пути доставляем, чеки остаются у магазина */
   var DEL_IC = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>';
   async function deleteAccount(u) {
     var orders = []; try { orders = await API.myOrders(); } catch (e) { /* без списка заказов окно всё равно покажем */ }
@@ -3210,7 +3219,7 @@
     try { var r = await fetch('api/state', { credentials: 'same-origin' }); var j = await r.json(); if (j.ok) D = j.data; } catch (e) {}
     window.App.D = D;
     // Тихое обновление: та же прокрутка и тот же слайд, страница не мигает
-    var act = $('#slider .slide.is-active'); slideKeep = act ? $$('#slider .slide').indexOf(act) : 0;
+    var act = $('#slider .slg-slide.is-active'); slideKeep = act ? $$('#slider .slg-slide').indexOf(act) : 0;
     var scroll = window.scrollY; renderShell(); routeKeepScroll = true; routeQuiet = true; route(); restoreScroll(scroll);
   }
 

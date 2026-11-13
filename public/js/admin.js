@@ -91,6 +91,8 @@
       case 'multi': return '<div class="field" style="grid-column:1/-1" data-multi="' + d.k + '"><span>' + esc(d.label) + '</span><div class="adm-multi">' + (d.options.length ? d.options.map(function (o) { return '<label class="check"><input type="checkbox" value="' + esc(o[0]) + '"' + ((v || []).indexOf(o[0]) !== -1 ? ' checked' : '') + '> ' + esc(o[1]) + '</label>'; }).join('') : '<span class="muted">Нет вариантов</span>') + '</div>' + hint + '</div>';
       case 'color': return '<label class="field"' + cls + '><span>' + esc(d.label) + '</span><input class="input adm-color-input" type="color" id="' + id + '" data-k="' + d.k + '" value="' + esc(v || '#141414') + '">' + hint + '</label>';
       case 'badges': return badgesField(obj);
+      case 'parcel': return parcelField(obj);
+      case 'look': return lookField(d, obj);
       case 'images': case 'image': return '<div class="field" style="grid-column:1/-1"><span>' + esc(d.label) + '</span><div class="adm-imgs" data-imgs="' + d.k + '" data-single="' + (d.type === 'image' ? 1 : 0) + '"></div>' + hint + '</div>';
       default: return '<label class="field"' + cls + '><span>' + esc(d.label) + '</span><input class="input" id="' + id + '" data-k="' + d.k + '" value="' + esc(v == null ? '' : v) + '"' + (d.placeholder ? ' placeholder="' + esc(d.placeholder) + '"' : '') + '>' + hint + '</label>';
     }
@@ -100,6 +102,8 @@
     defs.forEach(function (d) {
       if (d.section) return;
       if (d.type === 'badges') { readBadges(box, obj); return; }
+      if (d.type === 'parcel') { readParcel(box, obj); return; }
+      if (d.type === 'look') { obj[d.k] = $$('[data-look="' + d.k + '"] input:checked', box).map(function (i) { return i.value; }); return; }
       if (d.type === 'multi') { obj[d.k] = $$('[data-multi="' + d.k + '"] input:checked', box).map(function (i) { return i.value; }); return; }
       if (d.type === 'images' || d.type === 'image') { var st = imgState[d.k] || []; obj[d.k] = d.type === 'image' ? (st[0] || '') : st.slice(); return; }
       var el = $('[data-k="' + d.k + '"]', box); if (!el) return;
@@ -110,6 +114,72 @@
     });
     return obj;
   }
+
+
+  /* --- Посылка для СДЭК: вес и размер (д × ш × в). Попадает в расчёт доставки и в отправление СДЭК --- */
+  function cdekConf() { return (DATA.settings && DATA.settings.cdek) || {}; }
+  function parcelField(p) {
+    var b = Pricing.boxOf(p, cdekConf()) || {}, v = function (x) { return x ? String(x) : ''; };
+    var f = function (k, val, unit, label, step) { return '<label class="pc-f"><small>' + label + '</small><span class="pc-in"><input class="input num" type="number" min="0" step="' + step + '" data-pc="' + k + '" value="' + esc(v(val)) + '" inputmode="numeric"><i>' + unit + '</i></span></label>'; };
+    return '<div class="field pc" style="grid-column:1/-1" data-parcel><span>Посылка для СДЭК</span>' +
+      '<div class="pc-row">' + f('weight', p.weight, 'г', 'Вес', 10) + '<span class="pc-gap"></span>' + f('length', b.length, 'см', 'Длина', 1) + '<span class="pc-x">×</span>' + f('width', b.width, 'см', 'Ширина', 1) + '<span class="pc-x">×</span>' + f('height', b.height, 'см', 'Высота', 1) + '</div>' +
+      '<p class="pc-sum" data-pc-sum>' + parcelSum(p.weight, b) + '</p>' +
+      '<small class="muted" style="font-size:13px">Вес и размер одной вещи в упаковке — как вы её отправляете. Эти данные уйдут в расчёт цены доставки и в отправление СДЭК. Если в заказе несколько вещей, они сложатся стопкой: высоты сложатся, вес тоже.</small></div>';
+  }
+  function parcelSum(w, b) {
+    var c = cdekConf(), def = Pricing.cdekPacks(c), pk = def.find(function (x) { return x.id === c.defaultPack; }) || def[0];
+    var hasBox = b && Number(b.length) > 0 && Number(b.width) > 0 && Number(b.height) > 0;
+    var dims = hasBox ? b.length + '×' + b.width + '×' + b.height + ' см' : 'упаковка по умолчанию «' + pk.name + '» ' + pk.length + '×' + pk.width + '×' + pk.height + ' см';
+    var wt = Number(w) > 0 ? Number(w) + ' г' : 'вес по умолчанию ' + (Number(c.pkg && c.pkg.weight) || 1000) + ' г';
+    return '<b>В СДЭК уйдёт:</b> ' + dims + ', ' + wt;
+  }
+  function readParcel(box, p) {
+    var g = function (k) { var el = $('[data-pc="' + k + '"]', box); return el ? Math.max(0, Math.round(Number(el.value) || 0)) : 0; };
+    p.weight = g('weight');
+    var b = { length: g('length'), width: g('width'), height: g('height') };
+    if (b.length && b.width && b.height) p.box = b; else delete p.box;
+    delete p.pack;
+  }
+  document.addEventListener('input', function (e) {
+    var w = e.target.closest && e.target.closest('[data-parcel]'); if (!w) return;
+    var g = function (k) { return Number($('[data-pc="' + k + '"]', w).value) || 0; };
+    $('[data-pc-sum]', w).innerHTML = parcelSum(g('weight'), { length: g('length'), width: g('width'), height: g('height') });
+  });
+
+  /* --- «С этим носят»: крупные фото, поиск, до 4 вещей --- */
+  function pImg(p) { var c = Pricing.colorsOf(p)[0]; return (c && c.images && c.images[0]) || Art.make(c && c.art); }
+  function lookField(d, obj) {
+    var sel = (obj[d.k] || []).slice(), max = d.max || 4;
+    var list = DATA.products.filter(function (x) { return x.id !== obj.id; });
+    list.sort(function (a, b) { var x = sel.indexOf(a.id), y = sel.indexOf(b.id); return (x < 0 ? 99 : x) - (y < 0 ? 99 : y); });
+    var card = function (x) {
+      var on = sel.indexOf(x.id) !== -1;
+      return '<label class="lk-card' + (on ? ' on' : '') + (x.active === false ? ' off' : '') + '" data-q="' + esc((x.name + ' ' + (x.sku || '')).toLowerCase()) + '">' +
+        '<input type="checkbox" value="' + esc(x.id) + '"' + (on ? ' checked' : '') + '>' +
+        '<span class="lk-ph"><img src="' + esc(pImg(x)) + '" alt="" loading="lazy"><span class="lk-tick" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>' + (x.active === false ? '<span class="lk-hid">Скрыт</span>' : '') + '</span>' +
+        '<span class="lk-name">' + esc(x.name) + '</span><span class="lk-meta">' + (x.sku ? esc(x.sku) + ' · ' : '') + fmt(x.price || 0) + '</span></label>';
+    };
+    return '<div class="field lk" style="grid-column:1/-1" data-look="' + d.k + '" data-max="' + max + '">' +
+      '<div class="lk-head"><span>' + esc(d.label) + '</span><b class="lk-count">' + lookCount(sel.length, max) + '</b></div>' +
+      (d.hint ? '<small class="muted" style="font-size:13px">' + esc(d.hint) + '</small>' : '') +
+      '<input class="input lk-search" type="search" placeholder="Найти по названию или артикулу" aria-label="Поиск вещей">' +
+      '<div class="lk-grid">' + (list.length ? list.map(card).join('') : '<span class="muted">Других товаров пока нет</span>') + '</div>' +
+      '<p class="muted lk-none" hidden>Ничего не нашлось</p></div>';
+  }
+  function lookCount(n, max) { return n ? 'Выбрано ' + n + ' из ' + max : 'Ничего не выбрано'; }
+  document.addEventListener('change', function (e) {
+    var w = e.target.closest && e.target.closest('[data-look]'); if (!w || e.target.type !== 'checkbox') return;
+    var max = Number(w.dataset.max) || 4, on = $$('input:checked', w);
+    if (on.length > max) { e.target.checked = false; toast('Можно отметить до ' + max + ' вещей — снимите отметку с одной из выбранных', true); on = $$('input:checked', w); }
+    e.target.closest('.lk-card').classList.toggle('on', e.target.checked);
+    $('.lk-count', w).textContent = lookCount(on.length, max);
+  });
+  document.addEventListener('input', function (e) {
+    if (!e.target.classList || !e.target.classList.contains('lk-search')) return;
+    var w = e.target.closest('[data-look]'), q = e.target.value.trim().toLowerCase(), shown = 0;
+    $$('.lk-card', w).forEach(function (c) { var ok = !q || c.dataset.q.indexOf(q) !== -1; c.hidden = !ok; if (ok) shown++; });
+    $('.lk-none', w).hidden = shown > 0;
+  });
 
   /* --- Плашки товара: Новинка, Скидка, Хит --- */
   var BADGE_ROWS = [['new', 'Новинка', 'Товар также появится в разделе «Новинки».'], ['sale', 'Скидка', 'Видна, только если у товара есть скидка — старая цена или акция. {n} заменится на размер скидки в процентах.'], ['hit', 'Хит продаж', 'Товар попадёт в блок «Хиты продаж» на главной. Самые продаваемые товары попадают туда сами (настройка в «Главной странице»).']];
@@ -1002,14 +1072,13 @@
           { k: 'badges', type: 'badges' },
           { k: 'active', label: 'Показывать в магазине', type: 'checkbox' },
           { section: 'Доставка' },
-          { k: 'weight', label: 'Вес в упаковке, г', type: 'number', hint: 'Для цены доставки СДЭК. Например, футболка 300, пальто 1800. Пусто — возьмётся вес из настроек СДЭК' },
-          { k: 'pack', label: 'Упаковка', type: 'select', options: [['', 'По умолчанию из настроек СДЭК']].concat(Pricing.cdekPacks((DATA.settings && DATA.settings.cdek) || {}).map(function (x) { return [x.id, x.name + ' · ' + x.length + '×' + x.width + '×' + x.height + ' см']; })) },
+          { k: 'parcel', type: 'parcel' },
           { section: 'Описание' },
           { k: 'description', label: 'Описание', type: 'textarea' },
           { k: 'composition', label: 'Состав — свой текст', type: 'textarea', rows: 2, hint: 'Нужен, только если состава нет среди вариантов в «Характеристиках» ниже' },
           { k: 'care', label: 'Уход — дополнительно', type: 'textarea', rows: 2, hint: 'Основное отмечается значками в «Характеристиках». Сюда — то, чего там нет' },
           { section: 'Образ и предзаказ' },
-          { k: 'look', label: 'С этим носят — отметьте до 4 вещей', type: 'multi', options: DATA.products.map(function (x) { return [x.id, x.name]; }), hint: 'В карточке товара появится блок «Соберите образ»: покупатель выберет размеры и добавит все вещи одной кнопкой' },
+          { k: 'look', label: 'С этим носят — до 4 вещей', type: 'look', max: 4, hint: 'В карточке товара появится блок «Соберите образ»: покупатель выберет размеры и добавит все вещи одной кнопкой' },
           { k: 'preorder', label: 'Предзаказ: можно заказать размеры, которых нет в наличии', type: 'checkbox', hint: 'Подходит для вещей, которые ещё шьются. Такие заказы приходят с пометкой «предзаказ»' },
           { k: 'preorderShip', label: 'Когда отправим по предзаказу', type: 'date' },
           { k: 'preorderLimit', label: 'Мест в партии', type: 'number', hint: 'Сколько вещей можно заказать заранее. 0 — без ограничения' },
@@ -2676,8 +2745,10 @@
         '<label class="field adm-sl-int"><span>Смена слайда, секунд</span><input class="input num" type="number" min="3" max="20" id="slInt" value="' + (cfg.interval || 7) + '"></label></div>' +
       (sl.length ? '<div class="adm-sl-list">' + sl.map(function (x, i) {
         var st = slideStatus(x), pr = x.promotionId && DATA.promotions.find(function (p) { return p.id === x.promotionId; });
-        var pills = [x.layout === 'full' ? 'Фото на весь экран' : 'Фото справа'];
+        var pills = [];
         if (x.gender) pills.push('Только «' + ({ women: 'Женщинам', men: 'Мужчинам', kids: 'Детям' }[x.gender] || x.gender) + '»');
+        var aud = x.audience || (/tab=register/.test(((x.btn1 && x.btn1.link) || '') + ' ' + ((x.btn2 && x.btn2.link) || '')) ? 'guest' : '');
+        if (aud === 'guest') pills.push('Только гостям'); else if (aud === 'user') pills.push('Только вошедшим');
         if (pr) pills.push('Акция: ' + pr.title);
         if (x.code) pills.push('Промокод ' + x.code);
         return '<div class="adm-sl-row' + (x.active ? '' : ' off') + '"><span class="adm-sl-num num">' + (i + 1) + '</span>' +
@@ -2714,7 +2785,7 @@
     var defs = [
       { section: 'Основное' },
       { k: 'active', label: 'Показывать слайд на сайте', type: 'checkbox' },
-      { k: 'layout', label: 'Макет', type: 'select', options: [['split', 'Фото справа, текст слева'], ['full', 'Фото на весь экран, текст поверх']] },
+      { k: 'audience', label: 'Кому показывать', type: 'select', options: [['', 'Сам решит: со ссылкой на регистрацию — только гостям'], ['all', 'Всем'], ['guest', 'Только тем, кто не вошёл'], ['user', 'Только вошедшим в личный кабинет']] },
       { k: 'gender', label: 'Для какого раздела', type: 'select', options: [['', 'Всем покупателям'], ['women', 'Только «Женщинам»'], ['men', 'Только «Мужчинам»'], ['kids', 'Только «Детям»']] },
       { section: 'Текст' },
       { k: 'eyebrow', label: 'Надзаголовок', wide: true, hint: 'Маленькая строка над заголовком' },
@@ -2748,13 +2819,13 @@
     var mode = 'desk';
     function current() {
       var f = readForm(box, defs, Object.assign({}, flat));
-      return Object.assign({}, sl, { active: f.active, layout: f.layout, gender: f.gender, eyebrow: f.eyebrow, title: f.title, text: f.text, badge: f.badge, image: f.image, promotionId: f.promotionId, code: f.code, startsAt: f.startsAt, endsAt: f.endsAt, btn1: { label: f.b1l, link: f.b1h }, btn2: { label: f.b2l, link: f.b2h } });
+      return Object.assign({}, sl, { active: f.active, layout: sl.layout || 'split', audience: f.audience || '', gender: f.gender, eyebrow: f.eyebrow, title: f.title, text: f.text, badge: f.badge, image: f.image, promotionId: f.promotionId, code: f.code, startsAt: f.startsAt, endsAt: f.endsAt, btn1: { label: f.b1l, link: f.b1h }, btn2: { label: f.b2l, link: f.b2h } });
     }
     function preview() {
       var stage = $('#slpvStage', m), wrap = $('#slpv', m), w = mode === 'desk' ? 1280 : 390;
       stage.style.width = w + 'px';
       stage.className = 'slpv-stage ' + mode;
-      stage.innerHTML = '<section class="slider" style="--dur:7s"><div class="sl-track">' + A().slideHtml(current(), 0, 1, true) + '</div></section>';
+      stage.innerHTML = '<section class="slider sl-g" style="--dur:7s"><div class="slg-card"><div class="slg-track">' + A().slideHtml(current(), 0, 1, true) + '</div></div></section>';
       var k = Math.min(1, wrap.clientWidth / w);
       stage.style.transform = 'scale(' + k + ')';
       stage.style.left = Math.max(0, (wrap.clientWidth - w * k) / 2) + 'px';

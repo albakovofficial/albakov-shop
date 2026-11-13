@@ -137,7 +137,10 @@ const validEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(s || '').t
 const publicUser = (u) => u && { id: u.id, firstName: u.firstName, lastName: u.lastName, phone: u.phone, email: u.email, createdAt: u.createdAt, bonus: u.bonus || 0,
   supportUnread: db.tickets.filter((t) => t.userId === u.id && t.unreadUser).length,
   bonusNews: (u.bonusLog || []).filter((e) => !e.seen).slice(0, 5).map((e) => ({ id: e.id, amount: e.amount, type: e.type, orderNumber: e.orderNumber || '', note: e.note || '' })),
-  favorites: u.favorites || [], cartRemind: u.cartRemind === true ? true : u.cartRemind === false ? false : null, cart: (u.cart && u.cart.lines) || [] };
+  favorites: u.favorites || [], cartRemind: u.cartRemind === true ? true : u.cartRemind === false ? false : null, cart: (u.cart && u.cart.lines) || [],
+  // для слайда со скидкой новым покупателям: есть ли заказы и какие промокоды уже использованы
+  hasOrders: db.orders.some((o) => o.userId === u.id && o.status !== 'canceled'),
+  usedPromos: [...new Set(db.orders.filter((o) => o.promoCode && o.status !== 'canceled' && (o.userId === u.id || (u.email && o.customer.email === u.email) || (u.phone && o.customer.phone === u.phone))).map((o) => o.promoCode.toUpperCase()))] };
 /* Избранное покупателя: проверяем и обрезаем всё, что пришло из браузера */
 function cleanFavorites(list) {
   const ids = new Set(db.products.map((x) => x.id)), out = [];

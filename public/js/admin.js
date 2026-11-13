@@ -2748,7 +2748,7 @@
         var pills = [];
         if (x.gender) pills.push('Только «' + ({ women: 'Женщинам', men: 'Мужчинам', kids: 'Детям' }[x.gender] || x.gender) + '»');
         var aud = x.audience || (/tab=register/.test(((x.btn1 && x.btn1.link) || '') + ' ' + ((x.btn2 && x.btn2.link) || '')) ? 'guest' : '');
-        if (aud === 'guest') pills.push('Только гостям'); else if (aud === 'user') pills.push('Только вошедшим');
+        if (aud === 'guest') pills.push(x.audience ? 'Только гостям' : 'Новым покупателям'); else if (aud === 'user') pills.push('Только вошедшим');
         if (pr) pills.push('Акция: ' + pr.title);
         if (x.code) pills.push('Промокод ' + x.code);
         return '<div class="adm-sl-row' + (x.active ? '' : ' off') + '"><span class="adm-sl-num num">' + (i + 1) + '</span>' +
@@ -2785,7 +2785,7 @@
     var defs = [
       { section: 'Основное' },
       { k: 'active', label: 'Показывать слайд на сайте', type: 'checkbox' },
-      { k: 'audience', label: 'Кому показывать', type: 'select', options: [['', 'Сам решит: со ссылкой на регистрацию — только гостям'], ['all', 'Всем'], ['guest', 'Только тем, кто не вошёл'], ['user', 'Только вошедшим в личный кабинет']] },
+      { k: 'audience', label: 'Кому показывать', type: 'select', options: [['', 'Сам решит: со ссылкой на регистрацию — новым покупателям, пока не воспользовались скидкой'], ['all', 'Всем'], ['guest', 'Только тем, кто не вошёл'], ['user', 'Только вошедшим в личный кабинет']] },
       { k: 'gender', label: 'Для какого раздела', type: 'select', options: [['', 'Всем покупателям'], ['women', 'Только «Женщинам»'], ['men', 'Только «Мужчинам»'], ['kids', 'Только «Детям»']] },
       { section: 'Текст' },
       { k: 'eyebrow', label: 'Надзаголовок', wide: true, hint: 'Маленькая строка над заголовком' },

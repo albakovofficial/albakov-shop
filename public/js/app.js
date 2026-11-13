@@ -532,18 +532,31 @@
     if (!Pricing.inWindow({ active: true, startsAt: sl.startsAt, endsAt: sl.endsAt }, Date.now())) return false;
     if (sl.promotionId) { var pr = slidePromo(sl); if (!pr || !Pricing.inWindow(pr, Date.now())) return false; }
     if (sl.gender && g && sl.gender !== g) return false;
-    var who = slideAudience(sl);
-    if (who === 'guest' && API.user) return false;
-    if (who === 'user' && !API.user) return false;
+    var who = slideAudience(sl), u = API.user;
+    if (who === 'guest' && u) return false;
+    if (who === 'user' && !u) return false;
+    // Скидка новым покупателям: вошедшему — пока он ею не воспользовался (и пока у него нет заказов: она на первый заказ)
+    if (who === 'new' && u && (u.hasOrders || (sl.code && (u.usedPromos || []).indexOf(String(sl.code).toUpperCase()) !== -1))) return false;
     return true;
   }
   /* Кому показывать слайд: guest — только без входа, user — только вошедшим, all — всем.
-     Не задано: слайд с кнопкой «Регистрация» — только гостям (вошедшему «Зарегистрироваться» не к месту) */
+     Не задано: слайд с кнопкой «Регистрация» — новым покупателям (new): гостям и вошедшим, кто ещё не пользовался скидкой */
   function slideAudience(sl) {
     if (sl.audience === 'guest' || sl.audience === 'user' || sl.audience === 'all') return sl.audience;
-    return /tab=register/.test(((sl.btn1 && sl.btn1.link) || '') + ' ' + ((sl.btn2 && sl.btn2.link) || '')) ? 'guest' : 'all';
+    return slideToRegister(sl) ? 'new' : 'all';
   }
-  function visibleSlides() { var c = D.settings.slider || {}; return c.enabled === false ? [] : (c.slides || []).filter(function (sl) { return slideVisible(sl, curGender()); }); }
+  function slideToRegister(sl) { return /tab=register/.test(((sl.btn1 && sl.btn1.link) || '') + ' ' + ((sl.btn2 && sl.btn2.link) || '')); }
+  /* Вошедшему слайд с регистрацией показываем без неё: кнопка «Выбрать вещи», в тексте без «Зарегистрируйтесь» */
+  function slideForUser(sl) {
+    if (!API.user || !slideToRegister(sl)) return sl;
+    var x = Object.assign({}, sl), reg = function (b) { return b && /tab=register/.test(b.link || ''); };
+    if (reg(x.btn1)) x.btn1 = { label: 'Выбрать вещи', link: '#/catalog' };
+    if (reg(x.btn2)) x.btn2 = { label: '', link: '' };
+    var t = String(x.text || '').replace(/зарегистрируйтесь\s*(и\s*)?/i, '').trim();
+    x.text = t ? t.charAt(0).toUpperCase() + t.slice(1) : '';
+    return x;
+  }
+  function visibleSlides() { var c = D.settings.slider || {}; return c.enabled === false ? [] : (c.slides || []).filter(function (sl) { return slideVisible(sl, curGender()); }).map(slideForUser); }
   /* Слайдер на главной (вариант G, 13.64): фото в скруглённой карточке, внизу стеклянная панель —
      заголовок, текст, промокод, кнопка и стрелки; по верхнему краю панели полоса времени.
      Сверху на фото — надзаголовок и номер слайда. Цвета — палитра раздела (--acc, --acc-grad, --acc-tint) */

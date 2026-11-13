@@ -3978,15 +3978,15 @@ body::after { content: none; display: none; }
   .slg-chip { top: 20px; height: 30px; padding: 0 12px; font-size: 11px; }
   .slg-eb { left: 20px; }
   .slg-num { right: 20px; }
-  .slg-panel { left: 20px; right: auto; bottom: 20px; width: min(470px, 48%); border-radius: 22px; }
+  .slg-panel { left: 20px; right: auto; bottom: 20px; width: min(500px, 64%); border-radius: 22px; }
   .slg-in { gap: 12px; padding: 20px 22px; }
   .slg-title { font-size: clamp(28px, 3.4cqi, 40px); }
   .slg-text { font-size: 15px; line-height: 1.55; }
   .slg-btn { flex: 0 1 auto; height: 46px; padding-left: 20px; font-size: 14px; }
   .slg-btn i { width: 36px; height: 36px; }
-  .slg-link { display: inline; }
   .slg-acts .slg-arrow:first-of-type { margin-left: auto; }
   .slg-arrow { width: 48px; height: 46px; border-radius: 23px; }
 }
+@container slg (min-width: 1000px) { .slg-link { display: inline; } .slg-panel { width: min(500px, 46%); } }
 @media (min-width: 900px) { .slg-card { border-radius: 32px; } }
 @media (prefers-reduced-motion: reduce) { .slg-img { transition: none; transform: none; } }

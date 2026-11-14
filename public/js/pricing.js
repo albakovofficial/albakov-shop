@@ -73,6 +73,12 @@
     delete st.announcement; delete st.annFree;
     // «О бренде» (13.63.2): вместо фото основателя — знак бренда (страница сама показывает его, когда фото нет)
     (d.pages || []).forEach(function (pg) { if (pg.slug === 'about' && pg.body) pg.body = pg.body.replace(/^[ \t]*!\[[^\]]*\]\(img\/founder\.webp\)[ \t]*\n?/m, '').replace(/\n{3,}/g, '\n\n'); });
+    // Девиз (15.11.2026): «Стиль. Качество. Индивидуальность» → «Стильно. Модно. Скромно» — в слогане и первой строке «О бренде», один раз
+    if (!st.motto2) {
+      st.motto2 = true;
+      if (/^\s*Стиль\. Качество\. Индивидуальность\.?\s*$/.test(st.tagline || '')) st.tagline = 'Стильно. Модно. Скромно';
+      (d.pages || []).forEach(function (pg) { if (pg.slug === 'about' && pg.body) pg.body = pg.body.replace(/Стиль\. Качество\. Индивидуальность\./, 'Стильно. Модно. Скромно.'); });
+    }
     // Слайдер на главной: первый слайд берёт тексты и фото прежнего первого экрана, если их меняли
     if (!st.slider && seed && seed.settings.slider) {
       st.slider = JSON.parse(JSON.stringify(seed.settings.slider));

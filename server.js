@@ -71,6 +71,7 @@ function fixSkus(items, all, strict) {
 }
 fixSkus(db.products.slice().sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || ''))), db.products, false);
 Pricing.migrateData(db, SEED); // цвета товаров, логотип — для данных, созданных до обновления
+setImmediate(() => save()); // записать то, что поправил переход данных (например, новый девиз), когда сервер загрузится
 db.secrets = db.secrets || {};
 db.waitlist = db.waitlist || [];
 db.tickets = db.tickets || [];

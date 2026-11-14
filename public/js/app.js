@@ -859,7 +859,7 @@
     var steps = [
       ['Покупайте', pct + '% от суммы заказа возвращаем бонусами'],
       ['Копите', 'Бонусы приходят на счёт ' + (c.creditOn === 'done' ? 'после получения заказа' : 'после оплаты заказа')],
-      ['Оплачивайте', 'Тратьте на следующие покупки, хоть все сразу']
+      ['Оплачивайте', 'До 100% стоимости покупки бонусами']
     ];
     var bal = u ? (u.bonus || 0) : 0;
     var act = u
@@ -2271,7 +2271,7 @@
         '<nav class="acc-tiles" aria-label="Разделы кабинета">' +
           tile('orders', ACC_ICON.box, 'Заказы', 'загружаю…', 'accOrdersSub') +
           tile('favorites', ICON.heart, 'Избранное', Fav.count() + ' ' + plural(Fav.count(), 'товар', 'товара', 'товаров')) +
-          (exchangeCfg().enabled ? '<a class="acc-tile" href="#/account?tab=orders&exchange=1"><span class="acc-tile-ic">' + ACC_ICON.swap + '</span><b>Обмен и возврат</b><small>из своего заказа</small></a>' : '') +
+          (exchangeCfg().enabled ? '<a class="acc-tile" href="#/account?tab=orders&exchange=1"><span class="acc-tile-ic">' + ACC_ICON.swap + '</span><b>Обмен и возврат</b><small>оформить по своему заказу</small></a>' : '') +
           tile('support', ACC_ICON.chat, 'Поддержка', 'ответим в чате', '', u.supportUnread) +
         '</nav>' +
       '</section>' +
@@ -2356,7 +2356,7 @@
     }).join('') + '</ol></div>';
   }
   function ordersHtml(list) {
-    if (!list.length) return '<div class="acc-empty"><h3>Заказов пока нет</h3><p>Здесь появятся ваши покупки и статус доставки каждой из них.</p><a class="btn" href="#/catalog">Перейти в каталог</a></div>';
+    if (!list.length) return '<div class="acc-empty"><h3>У Вас пока нет заказов</h3><p>Здесь будут отображаться Ваши покупки и информация об их текущем статусе</p><a class="btn" href="#/catalog">Перейти в каталог</a></div>';
     return '<div class="acc-orders">' + list.map(function (o) {
       var n = o.items.reduce(function (s, i) { return s + (i.qty || 1); }, 0);
       var pay = o.payment && o.payment.status === 'pending' && o.payment.method === 'online' && o.status !== 'canceled' ? '<span class="ao-pay">Ожидает оплаты</span>' : '';

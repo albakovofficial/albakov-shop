@@ -1218,20 +1218,24 @@
       $('#sizeChips').innerHTML = sizes.map(function (s) {
         var out = s.stock <= 0;
         if (out && pre) return '<button class="chip preo' + (sel === s.size ? ' on' : '') + '" data-size="' + esc(s.size) + '" title="Предзаказ' + (preDate() ? ', отправим ' + esc(preDate()) : '') + '">' + esc(s.size) + '</button>';
-        return '<button class="chip' + (out ? ' out' : '') + (sel === s.size ? ' on' : '') + '" data-size="' + esc(s.size) + '"' +
+        return '<button class="chip' + (out ? ' out' : '') + (!out && bagged(s.size) >= s.stock ? ' in-bag' : '') + (sel === s.size ? ' on' : '') + '" data-size="' + esc(s.size) + '"' +
           (out ? (notifyOn ? ' title="Нет в наличии — можно подписаться на поступление" aria-label="' + esc(s.size) + ' — нет в наличии"' : ' disabled title="Нет в наличии" aria-label="' + esc(s.size) + ' — нет в наличии"') : '') + '>' + esc(s.size) + '</button>';
       }).join('');
       note();
     }
     // Кнопка: «Добавить в корзину» или «Сообщить о поступлении», если выбранного размера или всего цвета нет
+    /* Сколько этого цвета и размера уже в корзине (13.64.8): склад списывается только при заказе,
+       поэтому «осталось» считаем за вычетом корзины */
+    function bagged(size) { return size ? (Cart.find(p.id, col.id, size) || { qty: 0 }).qty : 0; }
+    function fullBag() { var s = sizeOf(); return !!s && s.stock > 0 && bagged(s.size) >= s.stock; }
     function waitMode() { if (pre) return false; var s = sizeOf(), anyAvail = (col.sizes || []).some(function (x) { return x.stock > 0; }); return notifyOn && ((s && s.stock <= 0) || !anyAvail); }
     function preMode() { var s = sizeOf(), anyAvail = (col.sizes || []).some(function (x) { return x.stock > 0; }); return pre && ((s && s.stock <= 0) || (!s && !anyAvail)); }
     function updateBtn() {
       var btn = $('#addBtn'), anyAvail = (col.sizes || []).some(function (x) { return x.stock > 0; }), wait = waitMode();
       btn.disabled = !anyAvail && !notifyOn && !pre;
       btn.classList.toggle('ghost', wait);
-      btn.textContent = wait ? 'Сообщить о поступлении' : preMode() ? 'Оформить предзаказ' : anyAvail ? 'Добавить в корзину' : 'Нет в наличии в этом цвете';
-      $('.buy-row .qty').hidden = wait;
+      btn.textContent = wait ? 'Сообщить о поступлении' : fullBag() ? 'Уже в корзине · перейти' : preMode() ? 'Оформить предзаказ' : anyAvail ? 'Добавить в корзину' : 'Нет в наличии в этом цвете';
+      $('.buy-row .qty').hidden = wait || fullBag();
       $('#buyNow').hidden = wait || (!anyAvail && !pre);
     }
     var fcLast = null;
@@ -1250,8 +1254,11 @@
       if (!anyAvail && (!s || s.stock <= 0)) { n.textContent = notifyOn ? 'Этого цвета сейчас нет. Оставьте почту — напишем, когда он появится.' : (colors.length > 1 ? 'Посмотрите другие цвета' : ''); return; }
       if (!s) { n.textContent = 'Выберите размер'; return; }
       if (s.stock <= 0) { n.textContent = 'Размера ' + s.size + ' сейчас нет. Можем сообщить на почту, когда он появится.'; n.classList.add('low'); return; }
-      if (s.stock <= 2) { n.textContent = 'Осталось ' + s.stock + ' шт.'; n.classList.add('low'); } else n.textContent = 'В наличии';
-      if (qty > s.stock) { qty = s.stock; $('#qty').textContent = qty; }
+      var inBag = bagged(s.size), l = s.stock - inBag;
+      if (l <= 0) n.textContent = s.stock === 1 ? 'Последний размер ' + s.size + ' уже в вашей корзине' : 'Все ' + s.stock + ' шт. размера ' + s.size + ' уже в вашей корзине';
+      else if (l <= 2) { n.textContent = 'Осталось ' + l + ' шт.' + (inBag ? ' · ещё ' + inBag + ' в вашей корзине' : ''); n.classList.add('low'); }
+      else n.textContent = inBag ? 'В наличии · ' + inBag + ' шт. уже в корзине' : 'В наличии';
+      if (qty > Math.max(1, l)) { qty = Math.max(1, l); $('#qty').textContent = qty; }
     }
     drawGallery(); drawOptions();
     $('#colorChips').addEventListener('click', function (e) {
@@ -1261,16 +1268,18 @@
       try { history.replaceState(null, '', '/product/' + p.slug + '?color=' + encodeURIComponent(col.id)); } catch (ex) {}
     });
     $('#sizeChips').addEventListener('click', function (e) { var b = e.target.closest('[data-size]'); if (!b || b.disabled) return; sel = b.getAttribute('data-size'); $$('#sizeChips .chip').forEach(function (c) { c.classList.toggle('on', c === b); }); note(); });
-    $$('[data-q]').forEach(function (b) { b.addEventListener('click', function () { var s = sizeOf(); var max = s ? (s.stock > 0 ? s.stock : pre ? (preLeft === Infinity ? 99 : preLeft) : 0) : 99; qty = Math.max(1, Math.min(max, qty + Number(b.getAttribute('data-q')))); $('#qty').textContent = qty; }); });
+    $$('[data-q]').forEach(function (b) { b.addEventListener('click', function () { var s = sizeOf(); var max = s ? (s.stock > 0 ? Math.max(1, s.stock - bagged(s.size)) : pre ? (preLeft === Infinity ? 99 : preLeft) : 0) : 99; qty = Math.max(1, Math.min(max, qty + Number(b.getAttribute('data-q')))); $('#qty').textContent = qty; }); });
     $('#addBtn').addEventListener('click', function () {
       if (waitMode()) { openNotify(p, col, sel); return; }
       if (!sel) { var n = $('#stockNote'); n.textContent = 'Сначала выберите размер'; n.className = 'stock-note low'; var sc0 = $('#sizeChips'); if (sc0) { sc0.classList.remove('shake'); void sc0.offsetWidth; sc0.classList.add('shake'); } return; }
       var s = sizeOf(), inCart = (Cart.find(p.id, col.id, sel) || { qty: 0 }).qty;
+      if (fullBag()) { openCart(); return; }
       if (pre && s.stock <= 0) { if (preLeft !== Infinity && inCart + qty > preLeft) { toast('По предзаказу осталось ' + preLeft + ' ' + plural(preLeft, 'место', 'места', 'мест'), true); return; } }
-      else if (inCart + qty > s.stock) { toast('В наличии только ' + s.stock + ' шт. этого размера в цвете «' + col.name + '»', true); return; }
+      else if (inCart + qty > s.stock) { toast('Можно добавить ещё ' + (s.stock - inCart) + ' шт. — ' + inCart + ' уже в корзине', true); return; }
       Cart.add(p.id, col.id, sel, qty);
+      drawOptions();   // размер мог целиком уйти в корзину — значок на размере и «Уже в корзине»
       var ab = $('#addBtn'); ab.classList.add('done'); ab.textContent = 'Добавлено';
-      setTimeout(function () { if (document.body.contains(ab)) { ab.classList.remove('done'); ab.textContent = 'Добавить в корзину'; } }, 1600);
+      setTimeout(function () { if (document.body.contains(ab)) { ab.classList.remove('done'); updateBtn(); } }, 1600);
       openCart();
     });
     // «Купить сейчас»: оформляем только этот товар, корзину не трогаем
@@ -1991,13 +2000,14 @@
       if (!$('#co-offer').checked) { err.textContent = 'Примите условия публичной оферты'; return; }
       if (!$('#co-agree').checked) { err.textContent = 'Нужно согласие на обработку персональных данных'; return; }
       err.textContent = '';
-      var btn = $('#coSubmit'); btn.disabled = true; btn.textContent = st.payment === 'online' && !st.free ? 'Переходим к оплате…' : 'Оформляем…';
+      var btn = $('#coSubmit'); btn.disabled = true; btn.textContent = 'Оформляем…';
       try {
         if (!st.idem) st.idem = Array.from(crypto.getRandomValues(new Uint8Array(16)), function (x) { return ('0' + x.toString(16)).slice(-2); }).join('');
         var r = await API.placeOrder({ gift: st.gift && st.q && st.q.gift && st.q.gift.ok ? st.gift : '', idem: st.idem, lines: coSrc().get(), code: st.code, deliveryId: st.deliveryId, payment: st.payment, useBonus: st.useBonus, customer: f, city: needAddr ? $('#co-city').value.trim() : '', address: needAddr ? $('#co-addr').value.trim() : doorMode() ? (st.addr || '').trim() : '', pvz: pvzMode() && st.pvz ? st.pvz.code : '', cityCode: cdekMode() && st.city ? st.city.code : '', pvzType: st.pvz ? st.pvz.type : '', comment: $('#co-comment').value.trim(), consent: true });
         if (window.Metrika && !r.repeated) { Metrika.ec('purchase', r.order.items.map(function (i) { var pp = D.products.find(function (x) { return x.id === i.productId; }); return pp ? ecItem(pp, i.color, i.size, i.qty, i.price) : { id: i.productId, name: i.name, price: i.price, quantity: i.qty }; }), { id: r.order.number, revenue: r.order.total }); Metrika.goal('order', { order_price: r.order.total, currency: 'RUB' }); }
         if (buy) BuyNow.clear(); else Cart.clear();
-        if (r.payUrl) { location.href = r.payUrl; return; }
+        // 13.64.8: онлайн-оплата — сначала страница заказа с отсчётом и кнопкой «Оплатить», ЮKassa — по нажатию
+        if (r.payUrl) toast('Заказ оформлен — осталось оплатить');
         go('#/order/' + r.order.id);
       } catch (ex) { err.textContent = errMsg(ex); btn.disabled = false; drawSum(); }
     });
@@ -3333,10 +3343,10 @@
       if (checks.some(function (c) { return !c[1]; })) { err.textContent = 'Заполните выделенные поля'; return; }
       if (!$('#gf-offer').checked) { err.textContent = 'Примите условия публичной оферты'; return; }
       if (!$('#gf-agree').checked) { err.textContent = 'Нужно согласие на обработку персональных данных'; return; }
-      err.textContent = ''; var b = $('#gfPay'); b.disabled = true; $('#gfPayT').textContent = 'Переходим к оплате…';
+      err.textContent = ''; var b = $('#gfPay'); b.disabled = true; $('#gfPayT').textContent = 'Оформляем…';
       try {
         var r = await API.buyGift({ amount: a, toName: $('#gf-to').value, toEmail: $('#gf-email').value, message: $('#gf-msg').value, fromName: $('#gf-from').value, sendAt: st.when === 'date' ? $('#gf-date').value : '', customer: f, consent: true });
-        if (r.payUrl) { location.href = r.payUrl; return; }
+        if (r.payUrl) toast('Сертификат оформлен — осталось оплатить');
         go('#/order/' + r.order.id);
       } catch (ex) { err.textContent = errMsg(ex); b.disabled = false; sync(); }
     });

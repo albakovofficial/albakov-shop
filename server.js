@@ -13,7 +13,6 @@ const Finance = require('./public/js/finance.js'); // раздел «Финан�
 const smtp = require('./lib/smtp.js');
 const Store = require('./lib/db.js');
 const CdekLib = require('./lib/cdek.js');
-const WebPush = require('./lib/webpush.js');
 const Audit = require('./lib/audit.js');
 const Apns = require('./lib/apns.js'); // уведомления в браузер и приложение на телефоне
 
@@ -146,6 +145,8 @@ function safeEqual(a, b) {
   return a.length > 0 && a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 const safeDecode = (s) => { try { return decodeURIComponent(s); } catch (e) { return null; } };
+// Обрезка по символам: эмодзи и другие «двойные» символы не разрезаются пополам (15.11.2026)
+const cut = (v, n) => Array.from(String(v == null ? '' : v)).slice(0, n).join('');
 const uid = (p) => (p || '') + Date.now().toString(36) + crypto.randomBytes(4).toString('hex');
 const normPhone = (p) => { let d = String(p || '').replace(/\D/g, ''); if (d.length === 11 && (d[0] === '8' || d[0] === '7')) d = '7' + d.slice(1); if (d.length === 10) d = '7' + d; return d; };
 const validEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(s || '').trim());
@@ -370,6 +371,14 @@ function hitIds() {
   const live = new Set(db.products.filter((p) => p.active !== false).map((p) => p.id));
   return [...sold].filter(([id, n]) => n > 0 && live.has(id)).sort((a, b) => b[1] - a[1]).slice(0, 24).map(([id]) => id);
 }
+// Настройки витрины: всё, кроме служебного (15.11.2026). Почта и события уведомлений владельца, ключи СДЭК и пункт отгрузки наружу не отдаются
+const PRIVATE_SETTINGS = ['ownerNotify', 'seo'];
+function publicSettings() {
+  const out = Object.assign({}, db.settings, { cdek: { services: (cdekCfg().services) || {} } });
+  for (const k of PRIVATE_SETTINGS) delete out[k];
+  if (out.payment) out.payment = Object.assign({}, out.payment, { yookassa: undefined });
+  return out;
+}
 function publicState() {
   return {
     hits: hitIds(),
@@ -378,7 +387,7 @@ function publicState() {
     mailReady: mailReady(),
     cdekReady: cdek.ready(),
     // ключ СДЭК и пункт отгрузки покупателям не нужны — наружу только услуги
-    settings: Object.assign({}, db.settings, { cdek: { services: (cdekCfg().services) || {} } }),
+    settings: publicSettings(),
     categories: db.categories,
     sizeCharts: db.sizeCharts,
     products: db.products.filter((p) => p.active !== false),
@@ -500,6 +509,14 @@ function throttle(req, key, limit) {
 }
 // Удачный вход обнуляет счётчик: блокируются только неверные пароли, а не частые входы
 function throttleOk(k) { attempts.delete(k); }
+// Счётчик по произвольному ключу (например, по логину), без учёта адреса
+function throttleKey(k, limit) {
+  const now = Date.now(), a = attempts.get(k) || { n: 0, t: now };
+  if (now - a.t > 15 * 60e3) { a.n = 0; a.t = now; }
+  a.n++; attempts.set(k, a);
+  if (a.n > limit) fail(429, 'Слишком много попыток. Попробуйте через 15 минут.');
+  return k;
+}
 
 /* ---------------- ЮKassa ---------------- */
 function yk() {
@@ -673,9 +690,18 @@ function applyPayment(order, p) {
   if (p.status === 'succeeded' && p.paid) {
     // способ оплаты нужен для комиссии в «Финансах»: у СБП она ниже
     if (p.payment_method && p.payment_method.type) order.payment.type = String(p.payment_method.type).slice(0, 30);
-    if (order.payment.status !== 'paid') { order.payment.status = 'paid'; order.payment.paidAt = p.captured_at || new Date().toISOString(); hist(order, 'Оплата получена онлайн'); sendOrderMails(order); giftActivate(order); }
+    if (order.payment.status !== 'paid') {
+      order.payment.status = 'paid'; order.payment.paidAt = p.captured_at || new Date().toISOString();
+      if (order.status === 'canceled') {
+        // Покупатель оплатил уже отменённый заказ (страница оплаты была открыта): товар уже вернулся на склад.
+        // Деньги сами не возвращаем — сообщаем владельцу: вернуть оплату или возобновить заказ (15.11.2026)
+        order.paidAfterCancel = true;
+        hist(order, 'Оплата пришла на отменённый заказ — верните деньги или возобновите заказ');
+        pushStaff('paid', { title: 'Оплачен отменённый заказ № ' + order.number, body: money(order.total) + ' — верните деньги или возобновите заказ', url: '/admin?s=orders&id=' + order.id, tag: 'order-' + order.id, urgent: true });
+      } else { hist(order, 'Оплата получена онлайн'); sendOrderMails(order); giftActivate(order); }
+    }
   }
-  else if (p.status === 'canceled') {
+  else if (p.status === 'canceled' && order.payment.status !== 'paid') {
     // оплата не прошла: возвращаем товар и промокод, если заказ ещё не был отменён вручную
     if (order.status !== 'canceled') {
       hist(order, 'Онлайн-оплата не прошла — заказ отменён, товар вернулся на склад');
@@ -690,6 +716,14 @@ function applyPayment(order, p) {
   syncBonus(order);
   save();
 }
+// Сверка с ЮKassa (15.11.2026): если уведомление ЮKassa не дошло, неоплаченные заказы старше 20 минут
+// проверяются раз в 15 минут (до 7 дней), по одному — оплаченный станет оплаченным, отменённый вернёт товар на склад
+setInterval(async () => {
+  const now = Date.now();
+  const list = db.orders.filter((o) => o.payment && o.payment.method === 'online' && o.payment.status === 'pending' && o.payment.providerId && o.status !== 'canceled' &&
+    now - Date.parse(o.createdAt) > 20 * 60e3 && now - Date.parse(o.createdAt) < 7 * 864e5).slice(0, 50);
+  for (const o of list) { await syncPayment(o); }
+}, 15 * 60e3).unref();
 async function syncPayment(order) {
   if (order.payment.method !== 'online' || order.payment.status !== 'pending' || !order.payment.providerId) return;
   try { applyPayment(order, await ykRequest('GET', '/payments/' + order.payment.providerId)); } catch (e) { /* не критично */ }
@@ -743,6 +777,13 @@ async function cdekCalcAny(from, to, type, pkg, log) {
 }
 // Расчёт корзины с ценой доставки СДЭК для выбранного города
 async function quoteFull(req, b, strict) {
+  const extra = await quoteExtra(req, b, strict);
+  const q = quote(req, b, extra);
+  if (q.delivery && extra.deliveryTariff) q.delivery.tariff = extra.deliveryTariff;
+  return q;
+}
+// Часть расчёта, которая ждёт сеть: цена доставки СДЭК. Остальное (quote) считается сразу, без ожиданий
+async function quoteExtra(req, b, strict) {
   const m = (db.settings.delivery.methods || []).find((x) => x.id === b.deliveryId);
   const mode = Pricing.cdekMode(m);
   const auto = !!(m && m.priceAuto && mode && cdek.ready() && cdekCfg().shipmentPoint && cdekCfg().shipmentPoint.cityCode);
@@ -757,9 +798,7 @@ async function quoteFull(req, b, strict) {
     }
   }
   if (auto && strict && typeof extra.deliveryPrice !== 'number') fail(400, mode === 'door' ? 'Выберите город из подсказок — по нему рассчитаем доставку' : 'Выберите пункт выдачи — по нему рассчитаем доставку');
-  const q = quote(req, b, extra);
-  if (q.delivery && extra.deliveryTariff) q.delivery.tariff = extra.deliveryTariff;
-  return q;
+  return extra;
 }
 function quote(req, b, extra) {
   const q = quoteBase(req, b, extra);
@@ -785,17 +824,40 @@ function quoteBase(req, b, extra) {
     cdekAuto: !!(extra && extra.cdekAuto), deliveryPrice: extra ? extra.deliveryPrice : undefined, deliveryDays: extra ? extra.deliveryDays : undefined
   });
 }
-// Защита от двойного заказа: если ответ потерялся и покупатель отправил форму ещё раз, возвращаем уже созданный заказ
-const recentOrders = new Map();
+// Защита от двойного заказа (15.11.2026): ключ повтора idem занимается в самом начале оформления.
+// Второй такой же запрос — двойное нажатие, повтор после обрыва связи — ждёт первый и получает тот же заказ, а не создаёт новый.
+// Ключ хранится и в заказе: защита работает и после перезапуска сервера (в пределах 30 минут).
+const recentOrders = new Map(); // idem → { id, t } — готовый заказ
+const inflightOrders = new Map(); // idem → обещание: заказ ещё оформляется
 setInterval(() => { const old = Date.now() - 30 * 60e3; for (const [k, v] of recentOrders) if (v.t < old) recentOrders.delete(k); }, 10 * 60e3).unref();
+const cleanIdem = (v) => /^[a-z0-9]{16,64}$/i.test(String(v || '')) ? String(v) : '';
+function repeatedOrder(idem) {
+  const r = recentOrders.get(idem);
+  if (r) return db.orders.find((o) => o.id === r.id) || null;
+  const since = Date.now() - 30 * 60e3;
+  return db.orders.find((o) => o.idem === idem && Date.parse(o.createdAt) > since) || null;
+}
+function repeatAnswer(req, prev) {
+  return { order: customerView(prev), token: prev.token, payUrl: prev.payment.status === 'pending' ? prev.payUrl || null : null, user: publicUser(currentUser(req)), repeated: true };
+}
 async function placeOrder(req, b) {
-  const idem = /^[a-z0-9]{16,64}$/i.test(String(b.idem || '')) ? String(b.idem) : '';
-  if (idem && recentOrders.has(idem)) {
-    const prev = db.orders.find((o) => o.id === recentOrders.get(idem).id);
-    if (prev) return { order: customerView(prev), token: prev.token, payUrl: prev.payment.status === 'paid' ? null : prev.payUrl || null, user: publicUser(currentUser(req)), repeated: true };
+  const idem = cleanIdem(b.idem);
+  if (!idem) return await placeOrderNow(req, b, '');
+  const prev = repeatedOrder(idem);
+  if (prev) return repeatAnswer(req, prev);
+  if (inflightOrders.has(idem)) {
+    // тот же заказ уже оформляется: дожидаемся и отвечаем им же (если первый не удался — второй сообщит ту же ошибку)
+    await inflightOrders.get(idem).catch(() => {});
+    const done = repeatedOrder(idem);
+    if (done) return repeatAnswer(req, done);
   }
+  const job = placeOrderNow(req, b, idem);
+  inflightOrders.set(idem, job);
+  try { return await job; } finally { if (inflightOrders.get(idem) === job) inflightOrders.delete(idem); }
+}
+async function placeOrderNow(req, b, idem) {
   const user = currentUser(req), c = b.customer || {};
-  const customer = { firstName: String(c.firstName || '').trim().slice(0, 60), lastName: String(c.lastName || '').trim().slice(0, 60), phone: normPhone(c.phone), email: String(c.email || '').trim().toLowerCase().slice(0, 120) };
+  const customer = { firstName: cut(String(c.firstName || '').trim(), 60), lastName: cut(String(c.lastName || '').trim(), 60), phone: normPhone(c.phone), email: String(c.email || '').trim().toLowerCase().slice(0, 120) };
   if (!customer.firstName || !customer.lastName) fail(400, 'Укажите имя и фамилию');
   if (customer.phone.length !== 11) fail(400, 'Проверьте номер телефона');
   if (!validEmail(customer.email)) fail(400, 'Проверьте электронную почту');
@@ -805,12 +867,9 @@ async function placeOrder(req, b) {
   if ((method === 'online' && !pay.online) || (method === 'cod' && !pay.cod)) fail(400, 'Этот способ оплаты недоступен');
   // Без подключённой ЮKassa заказ «с онлайн-оплатой» повис бы неоплаченным — не принимаем такой
   if (method === 'online' && !payReady()) fail(400, 'Онлайн-оплата пока не подключена. Выберите оплату при получении.');
-  const q = await quoteFull(req, { gift: b.gift, lines: b.lines, code: b.code, deliveryId: b.deliveryId, contact: customer, useBonus: b.useBonus, cityCode: b.cityCode, pvzType: b.pvzType, payment: method }, true);
-  if (!q.lines.length) fail(400, 'Корзина пуста');
-  if (!q.delivery) fail(400, 'Выберите способ доставки');
-  const bad = q.lines.find((l) => l.problem); if (bad) fail(409, `${bad.name}: ${bad.problem.toLowerCase()}`);
-  if (b.code && !(q.promo && q.promo.ok)) fail(400, q.promo ? q.promo.message : 'Промокод не применён');
-  if (b.gift && !(q.gift && q.gift.ok)) fail(400, q.gift ? q.gift.message : 'Сертификат не применён');
+  const qArgs = { gift: b.gift, lines: b.lines, code: b.code, deliveryId: b.deliveryId, contact: customer, useBonus: b.useBonus, cityCode: b.cityCode, pvzType: b.pvzType, payment: method };
+  // Сначала всё, что ждёт сеть (цена СДЭК, пункты выдачи, город), — остатки и скидки проверяем уже после (15.11.2026)
+  const extra = await quoteExtra(req, qArgs, true);
   const m = db.settings.delivery.methods.find((x) => x.id === b.deliveryId);
   // Пункт выдачи СДЭК выбирают из списка: адрес и населённый пункт берём из данных СДЭК, а не из того, что набрал покупатель
   let pvz = null, door = null;
@@ -833,6 +892,17 @@ async function placeOrder(req, b) {
     door = Object.assign({}, city, { address: addr });
   } else if (m && m.needsAddress !== false && (!String(b.city || '').trim() || !String(b.address || '').trim())) fail(400, 'Укажите город и адрес доставки');
 
+  // Дальше до создания заказа — ни одного ожидания: проверка остатка, промокода, сертификата и бонусов
+  // и их списание идут одним шагом, второй покупатель не успеет купить ту же последнюю вещь (15.11.2026)
+  const q = quote(req, qArgs, extra);
+  if (q.delivery && extra.deliveryTariff) q.delivery.tariff = extra.deliveryTariff;
+  if (!q.lines.length) fail(400, 'Корзина пуста');
+  if (!q.delivery) fail(400, 'Выберите способ доставки');
+  const bad = q.lines.find((l) => l.problem); if (bad) fail(409, `${bad.name}: ${bad.problem.toLowerCase()}`);
+  if (b.code && !(q.promo && q.promo.ok)) fail(400, q.promo ? q.promo.message : 'Промокод не применён');
+  if (b.gift && !(q.gift && q.gift.ok)) fail(400, q.gift ? q.gift.message : 'Сертификат не применён');
+  if (q.bonusUsed && user && (user.bonus || 0) < q.bonusUsed) fail(409, 'Бонусов на счёте стало меньше — обновите страницу оформления');
+
   q.lines.forEach((l) => {
     if (l.preorder) { const pp = db.products.find((x) => x.id === l.productId); pp.preorderSold = (pp.preorderSold || 0) + l.qty; return; }
     sizeEntry(l.productId, l.colorId, l.size).stock -= l.qty;
@@ -841,7 +911,7 @@ async function placeOrder(req, b) {
   db.orderSeq = Number(db.orderSeq) || 0;
   do { db.orderSeq++; } while (db.orders.some((o) => o.number === String(db.orderSeq)));
   const order = {
-    id: uid('o'), number: String(db.orderSeq), token: crypto.randomBytes(16).toString('hex'), createdAt: new Date().toISOString(), userId: user ? user.id : null, customer, consentAt: new Date().toISOString(),
+    id: uid('o'), number: String(db.orderSeq), token: crypto.randomBytes(16).toString('hex'), createdAt: new Date().toISOString(), userId: user ? user.id : null, customer, consentAt: new Date().toISOString(), idem: idem || undefined,
     items: q.lines.map((l) => ({ productId: l.productId, slug: l.slug, name: l.name, colorId: l.colorId, color: l.color, size: l.size, qty: l.qty, price: l.price, oldPrice: l.oldPrice, image: l.image, art: l.art, preorder: l.preorder || undefined, shipDate: l.preorder ? l.shipDate : undefined })),
     subtotal: q.subtotal, saleDiscount: q.saleDiscount, promoCode: q.promo && q.promo.ok ? q.promo.code : '', promoDiscount: q.promoDiscount,
     delivery: Object.assign({}, q.delivery, pvz
@@ -1023,7 +1093,11 @@ setInterval(() => { if (statDirty) { statDirty = false; save(); } }, 60e3).unref
    Покупателю — о его заказе, ответах поддержки, обмене и возврате, поступлении, бонусах и (по желанию) акциях.
    Владельцу и сотрудникам — по их роли: новые заказы, оплаты, вопросы, заявки, возвраты, остатки, входы в панель, итоги дня.
    Подписка — это устройство: телефон или браузер. Ключи VAPID создаются один раз и хранятся в базе. */
-if (!db.secrets.vapid || !db.secrets.vapid.publicKey) { db.secrets.vapid = WebPush.generateKeys(); save(); }
+// Push браузера и веб-приложения убран полностью (13.64.6): подписки браузеров и ключи VAPID удаляются —
+// уведомления приходят только в приложение ALBAKOV для iPhone (через Apple)
+if (db.secrets.vapid || (db.pushsubs || []).some((x) => !String(x.endpoint || '').startsWith('apns:'))) {
+  db.pushsubs = (db.pushsubs || []).filter((x) => String(x.endpoint || '').startsWith('apns:')); delete db.secrets.vapid; db.webPushOff = 1; save();
+}
 // Приложение на iPhone: ключ Apple для push (панель → «Push-уведомления» → «Приложение iPhone»)
 const IOS_BUNDLE = process.env.IOS_BUNDLE_ID || 'ru.albakovofficial.app';
 function apnsCfg() { const a = db.secrets.apns; return a && a.p8 && a.keyId && a.teamId ? Object.assign({ bundleId: IOS_BUNDLE }, a) : null; }
@@ -1051,17 +1125,17 @@ const pushStats = { sent: 0, failed: 0, gone: 0 };
 async function pushTo(subs, m) {
   // Одно устройство бывает подписано дважды — как покупатель и как сотрудник: одно сообщение уходит на него один раз
   const seen = new Set(); subs = subs.filter((x) => !seen.has(x.endpoint) && seen.add(x.endpoint));
+  // Уведомления — только в приложение ALBAKOV (Apple). Push браузера и веб-приложения убраны (13.64.6)
+  subs = subs.filter((x) => x.endpoint.startsWith('apns:'));
   if (!subs.length) return 0;
-  const data = pushPayload(m), keys = db.secrets.vapid, subject = 'mailto:' + ((db.settings.contacts || {}).email || 'info@albakovofficial.ru');
+  const data = pushPayload(m);
   let ok = 0, dirty = false;
   const ac = apnsCfg();
   await Promise.all(subs.map(async (x) => {
-    // Приложение ALBAKOV на iPhone — через Apple (адрес «apns:<токен>»), браузеры — через web-push
-    const ios = x.endpoint.startsWith('apns:');
-    if (ios && !ac) return;
-    const r = ios ? await Apns.send(x.endpoint.slice(5), data, ac, { env: x.env, ttl: m.ttl })
-      : await WebPush.send(x, data, keys, { subject, urgency: m.urgent ? 'high' : 'normal', ttl: m.ttl || 86400 * 2 });
-    if (ios && Apns.gone(r)) r.status = 410;
+    // Приложение ALBAKOV на iPhone — через Apple (адрес «apns:<токен>»)
+    if (!ac) return;
+    const r = await Apns.send(x.endpoint.slice(5), data, ac, { env: x.env, ttl: m.ttl });
+    if (Apns.gone(r)) r.status = 410;
     if (r.status >= 200 && r.status < 300) { ok++; pushStats.sent++; x.lastOk = new Date().toISOString(); x.fails = 0; dirty = true; }
     else if (r.status === 404 || r.status === 410) { db.pushsubs = db.pushsubs.filter((y) => y !== x); pushStats.gone++; dirty = true; }
     else { pushStats.failed++; x.fails = (x.fails || 0) + 1; dirty = true; if (x.fails >= 20) db.pushsubs = db.pushsubs.filter((y) => y !== x); console.error('Push не доставлен:', r.status, r.reason || r.error || ''); }
@@ -1136,6 +1210,8 @@ function pushSubscribe(req, b) {
   throttle(req, 'push', 60);
   // Приложение на iPhone присылает адрес устройства Apple (b.apns = { token, env }) вместо подписки браузера
   const ap = b.apns && /^[a-f0-9]{64,200}$/i.test(String(b.apns.token || '')) ? b.apns : null;
+  if (!ap && !b.old) fail(400, 'Уведомления приходят в приложении ALBAKOV для iPhone');
+  if (!ap) return { ok: true, moved: 0 }; // браузер сменил ключи старой подписки — она больше не нужна
   const sub = ap ? { endpoint: 'apns:' + String(ap.token).toLowerCase(), keys: { p256dh: '', auth: '' } } : (b.sub || {}), keys = sub.keys || {};
   const endpoint = String(sub.endpoint || '');
   if (!ap && (!/^https:\/\/[^\s]{10,1000}$/.test(endpoint) || !keys.p256dh || !keys.auth || String(keys.p256dh).length > 200 || String(keys.auth).length > 100)) fail(400, 'Неверная подписка');
@@ -1874,7 +1950,7 @@ async function api(req, res, url, body) {
   if (p[0] === 'auth') {
     if (p[1] === 'register' && M === 'POST') {
       throttle(req, 'reg');
-      const f = { firstName: String(body.firstName || '').trim().slice(0, 60), lastName: String(body.lastName || '').trim().slice(0, 60), phone: normPhone(body.phone), email: String(body.email || '').trim().toLowerCase().slice(0, 120) };
+      const f = { firstName: cut(String(body.firstName || '').trim(), 60), lastName: cut(String(body.lastName || '').trim(), 60), phone: normPhone(body.phone), email: String(body.email || '').trim().toLowerCase().slice(0, 120) };
       if (!f.firstName || !f.lastName) fail(400, 'Укажите имя и фамилию');
       if (f.phone.length !== 11) fail(400, 'Укажите номер телефона полностью');
       if (!validEmail(f.email)) fail(400, 'Проверьте электронную почту');
@@ -1923,11 +1999,12 @@ async function api(req, res, url, body) {
       return { resendIn: VERIFY_RESEND_SEC };
     }
     if (p[1] === 'login' && M === 'POST') {
-      const tk = throttle(req, 'login');
       const l = String(body.login || '').trim().toLowerCase(), ph = normPhone(l);
+      // неверный пароль: не больше 10 попыток на один логин и 30 с одного адреса за 15 минут (15.11.2026)
       const u = db.users.find((x) => x.email === l || (ph.length === 11 && x.phone === ph));
+      const tk = throttle(req, 'login', 30), tkAcc = throttleKey('login-acc|' + (u ? u.id : l), 10);
       if (!u || !pwOk(body.password) || !checkPassword(body.password, u.hash)) fail(401, 'Неверный логин или пароль');
-      throttleOk(tk);
+      throttleOk(tk); throttleOk(tkAcc);
       // Владелец и сотрудники с нового устройства входят только по коду из письма (13.60)
       if (staffRole(u) && mailReady() && u.email && !trustedDevice(req, u)) {
         sweepPending();
@@ -2049,8 +2126,10 @@ async function api(req, res, url, body) {
       if (!pwOk(body.currentPassword) || !checkPassword(body.currentPassword, u.hash)) fail(400, 'Текущий пароль указан неверно');
       throttleOk(tk);
     }
-    Object.assign(u, { firstName: body.firstName.trim().slice(0, 60), lastName: body.lastName.trim().slice(0, 60), email, phone });
-    if (body.newPassword) { if (String(body.newPassword).length < 6) fail(400, 'Пароль должен быть не короче 6 символов'); if (!pwOk(body.newPassword)) fail(400, 'Слишком длинный пароль'); u.hash = hashPassword(body.newPassword); }
+    Object.assign(u, { firstName: cut(body.firstName.trim(), 60), lastName: cut(body.lastName.trim(), 60), email, phone });
+    if (body.newPassword) { if (String(body.newPassword).length < 6) fail(400, 'Пароль должен быть не короче 6 символов'); if (!pwOk(body.newPassword)) fail(400, 'Слишком длинный пароль'); u.hash = hashPassword(body.newPassword);
+      // остальные входы в этот аккаунт закрываем — как при сбросе пароля; текущий остаётся (15.11.2026)
+      const cur = getSession(req, 'user'); for (const k in db.sessions) if (db.sessions[k].kind === 'user' && db.sessions[k].userId === u.id && (!cur || k !== cur.token)) delete db.sessions[k]; }
     save(); return { user: publicUser(u) };
   }
 
@@ -2079,7 +2158,7 @@ async function api(req, res, url, body) {
 
   if (p[0] === 'orders') {
     if (!p[1] && M === 'GET') { const u = user(); if (!u) fail(401, 'Войдите в личный кабинет'); return { orders: db.orders.filter((o) => o.userId === u.id).reverse().map(customerView) }; }
-    if (!p[1] && M === 'POST') { throttle(req, 'order', 20); return await placeOrder(req, body); }
+    if (!p[1] && M === 'POST') { throttle(req, 'order', 40); return await placeOrder(req, body); }
     if (p[1] && p[2] === 'request' && M === 'POST') {
       throttle(req, 'request', 20);
       const o = db.orders.find((x) => x.id === p[1]); const u = user();
@@ -2134,11 +2213,19 @@ async function api(req, res, url, body) {
   // Купить сертификат: заказ с онлайн-оплатой, после оплаты код уходит получателю
   if (p[0] === 'gifts' && !p[1] && M === 'POST') {
     throttle(req, 'gift', 10);
+    // Повтор того же запроса (двойное нажатие, обрыв связи) — тот же сертификат, а не второй (15.11.2026)
+    const gIdem = cleanIdem(body.idem);
+    if (gIdem) {
+      if (inflightOrders.has('g' + gIdem)) await inflightOrders.get('g' + gIdem).catch(() => {});
+      const prev = repeatedOrder('g' + gIdem);
+      if (prev) return { order: customerView(prev), token: prev.token, payUrl: prev.payment.status === 'pending' ? prev.payUrl || null : null, repeated: true };
+    }
+    const job = (async () => {
     const cfg = giftCfg(); if (!cfg.enabled) fail(400, 'Подарочные сертификаты сейчас недоступны');
     if (!payReady()) fail(400, 'Покупка сертификатов появится после подключения онлайн-оплаты');
     const amount = Math.round(Number(body.amount) || 0);
     if (!(amount >= cfg.min && amount <= cfg.max)) fail(400, 'Сумма сертификата — от ' + Pricing.format(cfg.min) + ' до ' + Pricing.format(cfg.max));
-    const t = (v, n) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, n);
+    const t = (v, n) => cut(String(v == null ? '' : v).replace(/\s+/g, ' ').trim(), n);
     const c = body.customer || {}, user = currentUser(req);
     const customer = { firstName: t(c.firstName, 60), lastName: t(c.lastName, 60), phone: normPhone(c.phone), email: t(c.email, 120).toLowerCase() };
     if (!customer.firstName || !customer.lastName) fail(400, 'Укажите ваше имя и фамилию');
@@ -2163,8 +2250,12 @@ async function api(req, res, url, body) {
     let payUrl = null;
     try { payUrl = await createPayment(order); }
     catch (e) { db.giftcards = db.giftcards.filter((x) => x.id !== g.id); db.orders = db.orders.filter((x) => x.id !== order.id); save(); throw e; }
+    if (gIdem) { order.idem = 'g' + gIdem; recentOrders.set('g' + gIdem, { id: order.id, t: Date.now() }); }
     save();
     return { order: customerView(order), token: order.token, payUrl };
+    })();
+    if (gIdem) inflightOrders.set('g' + gIdem, job);
+    try { return await job; } finally { if (gIdem && inflightOrders.get('g' + gIdem) === job) inflightOrders.delete('g' + gIdem); }
   }
   // «Где мой заказ» без входа: номер заказа и телефон из него → секретная ссылка на страницу заказа
   if (p[0] === 'track' && M === 'POST') {
@@ -2179,7 +2270,6 @@ async function api(req, res, url, body) {
   if (p[0] === 'support') { const u = user(); if (!u) fail(401, 'Войдите в личный кабинет'); return supportApi(req, p, M, body, u); }
   // Push-уведомления: ключ, подписка устройства, настройки покупателя, проверка
   if (p[0] === 'push') {
-    if (p[1] === 'key' && M === 'GET') return { key: db.secrets.vapid.publicKey };
     if (p[1] === 'subscribe' && M === 'POST') return pushSubscribe(req, body);
     if (p[1] === 'unsubscribe' && M === 'POST') { const e = String(body.endpoint || ''); const n = db.pushsubs.length; db.pushsubs = db.pushsubs.filter((x) => !(x.endpoint === e && (body.scope === 'staff') === (x.scope === 'staff'))); if (n !== db.pushsubs.length) save(); return {}; }
     if (p[1] === 'test' && M === 'POST') {
@@ -2300,7 +2390,7 @@ async function api(req, res, url, body) {
       if (!p[2] && M === 'PUT') { const v = body.prefs || {}; u.staffPush = {}; for (const k of Object.keys(PUSH_STAFF)) if (k in v) u.staffPush[k] = !!v[k]; save(); }
       if (!p[2] && (M === 'GET' || M === 'PUT')) {
         const promoUsers = new Set(db.users.filter((x) => pushPrefsOf(x).promo).map((x) => x.id));
-        return { prefs: staffPushPrefs(u), devices: db.pushsubs.filter((x) => x.scope === 'staff' && x.userId === u.id).length,
+        return { prefs: staffPushPrefs(u), devices: db.pushsubs.filter((x) => x.scope === 'staff' && x.userId === u.id).length, apnsReady: !!apnsCfg(),
           audience: can(req, 'marketing') ? db.pushsubs.filter((x) => x.scope !== 'staff' && promoUsers.has(x.userId)).length : null,
           customers: can(req, 'marketing') ? db.pushsubs.filter((x) => x.scope !== 'staff').length : null,
           broadcasts: can(req, 'marketing') ? (db.pushBroadcasts || []).slice(0, 20) : [] };
@@ -2457,7 +2547,7 @@ async function api(req, res, url, body) {
       if (!drop.length) fail(404, p[2] === 'test' ? 'Тестовых заказов нет' : 'Заказ не найден');
       for (const o of drop) {
         if (o.status !== 'canceled') {
-          restock(o);
+          restock(o); giftReturn(o);
           const pc = o.promoCode && db.promocodes.find((x) => x.code === o.promoCode);
           if (pc) pc.used = Math.max(0, (pc.used || 0) - 1);
           o.status = 'canceled';
@@ -2784,7 +2874,8 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=u
 function readBody(req, limit) {
   return new Promise((resolve, reject) => {
     let size = 0; const chunks = [];
-    req.on('data', (c) => { size += c.length; if (size > limit) { reject(new HttpError(413, 'Слишком большой запрос')); req.destroy(); } else chunks.push(c); });
+    let big = false;
+    req.on('data', (c) => { if (big) return; size += c.length; if (size > limit) { big = true; chunks.length = 0; reject(new HttpError(413, 'Слишком большой запрос: файл больше допустимого размера')); } else chunks.push(c); });
     req.on('end', () => { if (!chunks.length) return resolve({}); try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); } catch (e) { reject(new HttpError(400, 'Неверный формат данных')); } });
     req.on('error', reject);
   });
@@ -2873,6 +2964,8 @@ const server = http.createServer(async (req, res) => {
       send(res, 200, Object.assign({ ok: true }, out));
     } catch (e) {
       if (!(e instanceof HttpError)) console.error(e);
+      // слишком большой запрос: ответить и закрыть соединение, не дочитывая остаток (15.11.2026)
+      if (e.status === 413) { res.setHeader('Connection', 'close'); res.on('finish', () => req.destroy()); }
       send(res, e.status || 500, { ok: false, error: e instanceof HttpError ? e.message : 'Ошибка сервера' });
     }
     return;

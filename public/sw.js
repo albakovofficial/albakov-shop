@@ -1,4 +1,5 @@
-// Сервис-воркер ALBAKOV: показывает push-уведомления браузера; у тех, кто раньше добавил значок на экран «Домой», — работа как приложение.
+// Сервис-воркер ALBAKOV: у тех, кто раньше добавил значок на экран «Домой», — работа как приложение.
+// Push-уведомления браузера убраны (13.64.6): уведомления приходят только в приложение ALBAKOV для iPhone.
 // Ничего не кэширует — цены, остатки и корзина всегда свежие. Если нет интернета — показывает понятную страницу вместо ошибки браузера.
 const OFFLINE = `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#ffffff"><title>ALBAKOV</title><style>
@@ -9,55 +10,14 @@ button{font:inherit;font-size:14px;letter-spacing:.06em;font-weight:500;border:1
 <script>addEventListener('online',function(){location.reload()})</script></body></html>`;
 
 self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+self.addEventListener('activate', (e) => e.waitUntil((async () => {
+  // старая подписка браузера на уведомления больше не нужна — снимаем её
+  try { const sub = await self.registration.pushManager.getSubscription(); if (sub) await sub.unsubscribe(); } catch (x) { /* нет — и хорошо */ }
+  // и уже показанные уведомления веб-приложения убираем из Центра уведомлений
+  try { (await self.registration.getNotifications()).forEach((n) => n.close()); } catch (x) { /* не поддерживается */ }
+  await self.clients.claim();
+})()));
 self.addEventListener('fetch', (e) => {
   if (e.request.mode !== 'navigate') return;   // всё, кроме открытия страниц, идёт как обычно
   e.respondWith(fetch(e.request).catch(() => new Response(OFFLINE, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })));
-});
-
-/* ---------- Push-уведомления (13.60) ----------
-   Сервер присылает зашифрованное сообщение { title, body, url, tag, icon, image, badge, actions, links }.
-   Показываем его как обычное уведомление телефона; нажатие открывает нужную страницу магазина (или фокусирует уже открытую). */
-self.addEventListener('push', (e) => {
-  let d = {};
-  try { d = e.data ? e.data.json() : {}; } catch (x) { d = { body: e.data ? e.data.text() : '' }; }
-  const opts = {
-    body: d.body || '', icon: d.icon || '/img/icon-192.png', badge: d.badge || '/img/push-badge.png', lang: 'ru', dir: 'ltr',
-    tag: d.tag || undefined, renotify: !!(d.tag && d.renotify), requireInteraction: !!d.urgent, timestamp: Date.now(),
-    data: { url: d.url || '/', links: d.links || {} }, actions: (d.actions || []).slice(0, 2)
-  };
-  if (d.image) opts.image = d.image;
-  if (!opts.tag) delete opts.renotify;
-  e.waitUntil(self.registration.showNotification(d.title || 'ALBAKOV', opts));
-});
-self.addEventListener('notificationclick', (e) => {
-  e.notification.close();
-  const data = e.notification.data || {}, links = data.links || {};
-  // «Отследить» и «Как добраться» ведут на СДЭК и карты, остальное — в магазин
-  let url = (e.action && links[e.action]) || data.url || '/';
-  url = new URL(url, self.location.origin).href;
-  e.waitUntil((async () => {
-    const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    const same = url.indexOf(self.location.origin) === 0;
-    for (const c of all) {
-      if (same && c.url.indexOf(self.location.origin) === 0 && 'focus' in c) {
-        await c.focus();
-        try { c.postMessage({ type: 'push-open', url }); return; } catch (x) { /* откроем заново */ }
-        if ('navigate' in c) { await c.navigate(url); return; }
-      }
-    }
-    if (self.clients.openWindow) await self.clients.openWindow(url);
-  })());
-});
-// Браузер сам сменил ключи подписки — сообщаем серверу новую, чтобы уведомления не потерялись
-self.addEventListener('pushsubscriptionchange', (e) => {
-  e.waitUntil((async () => {
-    try {
-      const r = await fetch('/api/push/key'); const j = await r.json(); if (!j.key) return;
-      const pad = '='.repeat((4 - (j.key.length % 4)) % 4), raw = atob((j.key + pad).replace(/-/g, '+').replace(/_/g, '/'));
-      const sub = await self.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: Uint8Array.from(raw, (c) => c.charCodeAt(0)) });
-      const body = JSON.stringify({ sub: sub.toJSON(), old: e.oldSubscription ? e.oldSubscription.endpoint : '' });
-      await fetch('/api/push/subscribe', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body });
-    } catch (x) { /* при следующем входе в магазин подписка обновится сама */ }
-  })());
 });

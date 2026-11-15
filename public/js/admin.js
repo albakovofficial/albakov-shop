@@ -2174,17 +2174,17 @@
     draw();
   }
   async function pushSection(m) {
-    m.innerHTML = head('Push-уведомления', '', 'Мгновенные уведомления на телефон и компьютер — даже когда панель закрыта. Включите их на каждом своём устройстве. Покупателям уведомления о заказе приходят сами, если они их включили.') + '<div class="loader">…</div>';
+    m.innerHTML = head('Push-уведомления', '', 'Мгновенные уведомления в приложении ALBAKOV для iPhone — даже когда приложение закрыто. Достаточно войти в приложении под своим аккаунтом и разрешить уведомления. Покупателям уведомления о заказе приходят сами, если они их включили.') + '<div class="loader">…</div>';
     var r, st = window.Push ? await Push.state('staff') : 'unsupported';
     try { r = await A().API.adminPush(); } catch (e) { m.querySelector('.loader').outerHTML = '<p class="form-error">' + esc(A().errMsg(e)) + '</p>'; return; }
     var keys = Object.keys(r.prefs || {});
     var dev = st === 'on' ? '<span class="pushs-st on">Включены на этом устройстве</span><span class="pushs-btns"><button class="btn ghost sm" type="button" data-sp="test">Проверить</button><button class="btn ghost sm" type="button" data-sp="off">Выключить</button></span>'
-      : st === 'ios-app' ? '<span class="pushs-st">На iPhone уведомления панели приходят в приложении ALBAKOV — откройте панель в нём и включите их там</span>'
+      : st === 'ios-app' ? '<span class="pushs-st">Уведомления панели приходят в приложение ALBAKOV для iPhone: войдите в нём под своим аккаунтом и разрешите уведомления</span>'
       : st === 'denied' ? '<span class="pushs-st">Запрещены в настройках браузера — разрешите уведомления для этого сайта и обновите страницу</span>'
       : st === 'unsupported' ? '<span class="pushs-st">Этот браузер не умеет показывать уведомления</span>'
       : '<span class="pushs-st">Выключены на этом устройстве</span><button class="btn sm" type="button" data-sp="on">Включить на этом устройстве</button>';
     var mk = r.audience !== null && r.audience !== undefined;
-    m.innerHTML = head('Push-уведомления', '', 'Мгновенные уведомления на телефон и компьютер — даже когда панель закрыта. Включите их на каждом своём устройстве. Покупателям уведомления о заказе приходят сами, если они их включили.') +
+    m.innerHTML = head('Push-уведомления', '', 'Мгновенные уведомления в приложении ALBAKOV для iPhone — даже когда приложение закрыто. Достаточно войти в приложении под своим аккаунтом и разрешить уведомления. Покупателям уведомления о заказе приходят сами, если они их включили.') +
       '<div class="adm-two"><div class="adm-card ps-dev"><h3 class="adm-h3">Это устройство</h3>' +
         pnStage(pnMock('Новый заказ № 1042 · 5 798 ₽', 'Анна Смирнова, Москва\nФутболка Оверсайз L, Футболка Оверсайз M', 'img/icon-192.png')) +
         '<div class="pushs-dev">' + PBELL + dev + '</div>' + (r.devices > 1 ? '<p class="al-hint">Всего ваших устройств с уведомлениями: ' + r.devices + '</p>' : '') + '<p class="form-error" id="spErr"></p></div>' +

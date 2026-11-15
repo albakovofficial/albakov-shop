@@ -2156,29 +2156,35 @@
       row(ic('<circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/>'), [c.firstName, c.lastName].filter(Boolean).join(' '), c.phone ? fmtPhone(c.phone) : '') +
     '</div>';
   }
-  /* Время на оплату вышло: вещи, которые ещё в наличии, сами возвращаются в корзину — один раз и без задвоения */
+  /* Время на оплату вышло (13.64.8): наличие берём с сервера (stockNow) — в каталоге на странице остаток ещё уменьшен
+     на этот заказ, и вещь выглядела бы разобранной. В корзину кладём сами один раз; строка уже есть — доводим количество */
+  function expiredAvail(i) {
+    var p = D.products.find(function (x) { return x.id === i.productId && x.active !== false; }); if (!p) return 0;
+    var c = (p.colors || []).find(function (x) { return x.id === i.colorId; }), z = c && (c.sizes || []).find(function (x) { return x.size === i.size; });
+    if (!z) return 0;
+    return Math.min(i.qty || 1, typeof i.stockNow === 'number' ? i.stockNow : z.stock);
+  }
+  function ensureInCart(o) {
+    o.items.forEach(function (i) { var want = expiredAvail(i); if (want <= 0) return; var have = (Cart.find(i.productId, i.colorId, i.size) || { qty: 0 }).qty; if (want > have) Cart.add(i.productId, i.colorId, i.size, want - have); });
+  }
   function returnExpired(o) {
-    var key = 'alb:expiredBack', done; try { done = JSON.parse(localStorage.getItem(key)) || []; } catch (e) { done = []; }
-    var inCart = function (i) { return !!Cart.find(i.productId, i.colorId, i.size); };
-    if (done.indexOf(o.id) < 0) {
-      o.items.forEach(function (i) {
-        var p = D.products.find(function (x) { return x.id === i.productId && x.active !== false; }); if (!p) return;
-        var c = (p.colors || []).find(function (x) { return x.id === i.colorId; }), z = c && (c.sizes || []).find(function (x) { return x.size === i.size; });
-        if (!z || z.stock <= 0) return;
-        var want = Math.min(i.qty || 1, z.stock), have = (Cart.find(p.id, c.id, i.size) || { qty: 0 }).qty;
-        if (want > have) Cart.add(p.id, c.id, i.size, want - have);
-      });
-      done.push(o.id); try { localStorage.setItem(key, JSON.stringify(done.slice(-200))); } catch (e) {}
-    }
-    return o.items.filter(inCart).length;
+    var key = 'alb:expiredBack2', done; try { done = JSON.parse(localStorage.getItem(key)) || []; } catch (e) { done = []; }
+    if (done.indexOf(o.id) < 0) { ensureInCart(o); done.push(o.id); try { localStorage.setItem(key, JSON.stringify(done.slice(-200))); } catch (e) {} }
   }
   function payTimerHtml(o) {
     if (o.payExpired) {
-      var back = returnExpired(o);
-      return '<div class="paytm out"><div class="paytm-top"><div style="display:flex;gap:12px;align-items:center"><span class="paytm-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="13" r="7.5"/><path d="M12 9v4l2.5 2M9.5 3h5"/></svg></span>' +
+      returnExpired(o);
+      var back = o.items.filter(function (i) { return expiredAvail(i) > 0; }), gone = o.items.filter(function (i) { return expiredAvail(i) <= 0; });
+      var grp = function (list, cap, ok) {
+        return '<div class="px-grp' + (ok ? '' : ' gone') + '"><span class="pc-cap">' + cap + '</span>' + list.map(function (i) {
+          return '<div class="px-it"><span class="px-ph"><img src="' + esc(i.image || Art.make(i.art)) + '" alt=""><i>' + (ok ? '✓' : '×') + '</i></span><div><b>' + esc(i.name) + '</b><span class="om">' + itemMeta(i) + '</span></div></div>';
+        }).join('') + '</div>';
+      };
+      return '<div class="paytm px"><div class="paytm-top"><div style="display:flex;gap:12px;align-items:center"><span class="paytm-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></span>' +
         '<div><b class="paytm-t">Время на оплату вышло</b><small>Заказ № ' + esc(o.number) + ' отменён</small></div></div></div>' +
-        '<p class="paytm-n">' + (!back ? 'Эти вещи уже разобрали — загляните в каталог, там много нового.' : back < o.items.length ? 'Вещи, которые ещё в наличии, вернулись в вашу корзину. Остальные уже разобрали.' : 'Вещи вернулись в вашу корзину — оформите заказ заново, пока они в наличии.') + '</p>' +
-        (back ? '<a class="btn" href="#/cart">Перейти в корзину</a>' : '<a class="btn ghost" href="#/catalog">В каталог</a>') + '</div>';
+        '<div class="px-body">' + (back.length ? grp(back, 'Снова в вашей корзине', true) : '') + (gone.length ? grp(gone, 'Уже разобрали', false) : '') + '</div>' +
+        '<p class="paytm-n">' + (back.length ? 'Успейте оформить заново, пока вещи в наличии.' : 'Загляните в каталог — там много нового, а этих размеров может появиться ещё.') + '</p>' +
+        (back.length ? '<a class="btn" href="#/cart" id="pxCart">Перейти в корзину</a>' : '<a class="btn" href="#/catalog">В каталог</a>') + '</div>';
     }
     if (!(o.payment.method === 'online' && o.payment.status === 'pending' && o.status !== 'canceled' && o.payUrl && o.payBy)) return '';
     var left = payLeftMs(o), total = PAY_WIN, hot = left <= 5 * 60e3;
@@ -2191,6 +2197,7 @@
       '<a class="btn" id="payGo" href="' + esc(o.payUrl) + '"' + (left <= 0 ? ' style="display:none"' : '') + '>Оплатить · ' + fmt(o.total) + '</a></div>';
   }
   function mountPayTimer(o, reload) {
+    var pxc = $('#pxCart'); if (pxc) pxc.addEventListener('click', function () { ensureInCart(o); });
     var box = $('#payTm'); if (!box) return;
     var timer = setInterval(function () {
       if (!document.body.contains(box)) { clearInterval(timer); return; }

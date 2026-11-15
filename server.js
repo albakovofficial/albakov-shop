@@ -700,7 +700,7 @@ function applyPayment(order, p) {
         order.paidAfterCancel = true;
         hist(order, 'Оплата пришла на отменённый заказ — верните деньги или возобновите заказ');
         pushStaff('paid', { title: 'Оплачен отменённый заказ № ' + order.number, body: money(order.total) + ' — верните деньги или возобновите заказ', url: '/admin?s=orders&id=' + order.id, tag: 'order-' + order.id, urgent: true });
-      } else { hist(order, 'Оплата получена онлайн'); sendOrderMails(order); giftActivate(order); }
+      } else { hist(order, 'Оплата получена онлайн'); sendOrderMails(order); giftActivate(order); if (order.kind !== 'gift') stockMail(order.items); }
     }
   }
   else if (p.status === 'canceled' && order.payment.status !== 'paid') {
@@ -987,7 +987,7 @@ async function placeOrderNow(req, b, idem) {
   save();
   if (order.payment.method !== 'online') sendOrderMails(order); // при онлайн-оплате письмо уйдёт после оплаты
   else { pushStaffOrder(order, 'new'); save(); }                  // а сотрудникам — сразу: «Новый заказ · ждёт оплаты»
-  stockMail(q.lines);
+  if (order.payment.method !== 'online') stockMail(q.lines);   // онлайн — «Заканчивается размер» после оплаты: неоплаченный заказ может отмениться
   console.log(`Новый заказ № ${order.number} на ${order.total} ₽`);
   return { order: customerView(order), token: order.token, payUrl, user: publicUser(user) };
 }
@@ -1988,7 +1988,9 @@ function createUser(res, f, hash, extra) {
 }
 function welcomeInfo() { const b = Pricing.bonusConf(db.settings); return { bonusPercent: b.earn ? b.percent : 0, promo: welcomePromo() }; }
 
-function orderView(o) { const c = Object.assign({}, o); delete c.token; c.items = (o.items || []).map((i) => i.sku ? i : Object.assign({}, i, { sku: (db.products.find((p) => p.id === i.productId) || {}).sku || undefined })); c.requestState = requestState(o); c.doneAt = doneAtOf(o) || undefined; return c; }
+function orderView(o) { const c = Object.assign({}, o); delete c.token; c.items = (o.items || []).map((i) => i.sku ? i : Object.assign({}, i, { sku: (db.products.find((p) => p.id === i.productId) || {}).sku || undefined }));
+  // время на оплату вышло: сколько каждой вещи в наличии прямо сейчас — по этому приложение и сайт возвращают её в корзину
+  if (o.payExpired) c.items = c.items.map((i) => { const p = db.products.find((x) => x.id === i.productId), sz = sizeEntry(i.productId, i.colorId, i.size); return Object.assign({}, i, { stockNow: p && p.active !== false && sz ? Math.max(0, sz.stock || 0) : 0 }); }); c.requestState = requestState(o); c.doneAt = doneAtOf(o) || undefined; return c; }
 // Покупателю — без служебного: заметка магазина и история изменений видны только в панели
 function customerView(o) { const c = orderView(o); delete c.adminNote; delete c.history; delete c.fin; return c; }
 

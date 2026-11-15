@@ -1249,11 +1249,13 @@ setInterval(() => {
   }
 }, 30 * 60e3).unref();
 // --- Итоги дня владельцу и финансам: в 21:00 по Москве ---
-let digestDay = '';
+// День последней отправки хранится в базе: после перезапуска сервера (выпуск сайта) в 21:xx итоги не уходят второй раз
+// (сегодня итоги уже уходили до этой версии — если сервер обновится в 21:xx, третьего раза не будет)
+if (!db.digestDay && new Date(Date.now() + 3 * 3600e3).getUTCHours() === 21) db.digestDay = new Date(Date.now() + 3 * 3600e3).toISOString().slice(0, 10);
 setInterval(() => {
   const msk = new Date(Date.now() + 3 * 3600e3), day = msk.toISOString().slice(0, 10);
-  if (msk.getUTCHours() !== 21 || digestDay === day) return;
-  digestDay = day;
+  if (msk.getUTCHours() !== 21 || db.digestDay === day) return;
+  db.digestDay = day; save();
   const from = Date.parse(day + 'T00:00:00+03:00');
   const list = db.orders.filter((o) => !o.test && Date.parse(o.createdAt) >= from && o.status !== 'canceled' && (!o.payment || o.payment.method !== 'exchange'));
   const sum = list.reduce((a, o) => a + (o.total || 0), 0), q = db.tickets.filter((t) => t.unreadShop).length;

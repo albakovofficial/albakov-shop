@@ -1,0 +1,2 @@
+/* src-sha1:f93c8e79e87201f62edacbe262115886e257d621 */
+(function () { document.documentElement.className += ' js'; try { if (window.fetch) window.__albState = fetch('api/state', { credentials: 'same-origin', headers: { Accept: 'application/json' }, cache: 'no-store' }); } catch (e) { } try { if (window.AlbakovApp || sessionStorage.getItem('albakov:intro') === '1' || (/^#\/admin/.test(location.hash) || /^\/admin/.test(location.pathname))) document.documentElement.className += ' sp-skip'; } catch (e) { } })();

@@ -769,6 +769,7 @@
         (o.payment.method === 'cod' ? '<p class="cs-cod">Оплата при получении: СДЭК возьмёт с покупателя <b>' + fmt(o.total - (o.refunded || 0)) + '</b></p>' : '') +
         (!sp ? '<p class="rf-note">Сначала укажите пункт отгрузки: «Оплата и доставка» → «Отправка заказов в СДЭК».</p>' : '') +
         '<div class="pm-f"><span>Посылка · ' + esc(pk.pack) + '</span><div class="cs-pkg"><label><input class="input num" id="coW" type="number" min="50" step="50" value="' + pk.weight + '"><i>г</i></label><label><input class="input num" id="coL" type="number" min="1" value="' + pk.length + '"><i>см</i></label><span>×</span><label><input class="input num" id="coWd" type="number" min="1" value="' + pk.width + '"><i>см</i></label><span>×</span><label><input class="input num" id="coH" type="number" min="1" value="' + pk.height + '"><i>см</i></label></div></div>' +
+        (o.cdekAutoError ? '<p class="form-error">Автоматически не создалось: ' + esc(o.cdekAutoError) + '</p>' : o.cdekAutoAt && !o.cdek ? '<p class="muted" style="font-size:13px;margin:0">Отправление создаётся автоматически — обновите заказ через несколько секунд</p>' : '') +
         '<p class="form-error" id="csErr"></p><button class="btn" type="button" id="csCreate"' + (unpaid || !sp || ['canceled', 'returned'].includes(o.status) ? ' disabled' : '') + '>' + (unpaid ? 'Заказ ещё не оплачен' : 'Создать отправление в СДЭК') + '</button>' +
         '<p class="muted" style="font-size:13px;margin:0">СДЭК присвоит номер. Когда сдадите посылку в пункт, покупатель автоматически получит письмо с трек-номером, а заказ станет «Передан в доставку».</p></div>';
     }
@@ -2440,6 +2441,8 @@
         '<label class="pm-f"><span>Возвраты получает (имя или ИП)</span><input class="input" id="csRetName" value="' + esc((c.returnTo && c.returnTo.name) || '') + '" placeholder="ИП Албаков Ибрагим Магомедович"></label>' +
         '<label class="pm-f"><span>Телефон для возвратов</span><input class="input" id="csRetPhone" type="tel" value="' + esc(c.returnTo && c.returnTo.phone ? A().fmtPhone(c.returnTo.phone) : '') + '" placeholder="+7 (___) ___-__-__"><small>СДЭК позвонит, когда возврат придёт в ваш пункт</small></label>' +
       '</div>' +
+      '<div class="cs-sv"><span class="cs-sv-h">Автоматически</span>' +
+        '<label class="check"><input type="checkbox" id="csAuto"' + (c.autoShip !== false ? ' checked' : '') + '> <span><b>Создавать отправление сам</b> — заказ с оплатой при получении сразу после оформления, онлайн — сразу после оплаты. Останется распечатать наклейку и сдать посылку. Не получится — придёт уведомление, создайте кнопкой в заказе</span></label></div>' +
       '<div class="cs-sv"><span class="cs-sv-h">Услуги для покупателя (включите, если они есть в вашем договоре со СДЭК)</span>' +
         '<label class="check"><input type="checkbox" id="csPart"' + (sv.partDeliv ? ' checked' : '') + '> <span><b>Частичный выкуп</b> — покупатель забирает только то, что подошло, остальное СДЭК везёт вам обратно</span></label>' +
         '<label class="check"><input type="checkbox" id="csTry"' + (sv.tryOn ? ' checked' : '') + '> <span><b>Примерка</b> — покупатель может примерить вещи при получении</span></label></div>' +
@@ -2475,7 +2478,7 @@
       try {
         var packs = $$('.cs-pack', box).map(function (r) { var v = function (k) { return $('[data-pk="' + k + '"]', r).value; }; return { id: r.dataset.id, name: v('name').trim() || 'Упаковка', length: v('length'), width: v('width'), height: v('height'), weight: v('weight') }; });
         if (!packs.length) { el.textContent = 'Нужна хотя бы одна упаковка'; el.className = 'warn'; return; }
-        var r = await A().API.adminCdek({ check: false, shipmentPoint: pick, tariff: Number($('#csTariff').value), tariffDoor: Number($('#csTariffDoor').value), packs: packs, defaultPack: $('#csDefPack').value, pkg: { weight: $('#csW').value, length: 30, width: 25, height: 10 }, services: { partDeliv: $('#csPart').checked, tryOn: $('#csTry').checked }, returnTo: { name: $('#csRetName').value, phone: $('#csRetPhone').value } });
+        var r = await A().API.adminCdek({ check: false, shipmentPoint: pick, tariff: Number($('#csTariff').value), tariffDoor: Number($('#csTariffDoor').value), packs: packs, defaultPack: $('#csDefPack').value, pkg: { weight: $('#csW').value, length: 30, width: 25, height: 10 }, services: { partDeliv: $('#csPart').checked, tryOn: $('#csTry').checked }, autoShip: $('#csAuto').checked, returnTo: { name: $('#csRetName').value, phone: $('#csRetPhone').value } });
         DATA.settings.cdek = r.settings.cdek; s.cdek = r.settings.cdek;
         el.textContent = pick ? 'Сохранено' : 'Сохранено. Укажите пункт отгрузки — без него отправление не создать'; el.className = pick ? 'ok' : 'warn';
       } catch (e) { el.textContent = A().errMsg(e); el.className = 'warn'; }

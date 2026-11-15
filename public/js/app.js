@@ -660,12 +660,12 @@
       // если новинок мало — дополняем последними поступлениями раздела, чтобы ряд не выглядел пустым
       if (news.length < 4) news = news.concat(gProducts().filter(function (p) { return news.indexOf(p) === -1; }).sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); })).slice(0, 4);
       news = news.slice(0, 8);
-      if (news.length) html += '<section class="section"><div class="wrap"><div class="section-head"><h2>Новинки' + (curGender() ? ' <em class="h-sub">' + GENDERS[curGender()].toLowerCase() + '</em>' : '') + '</h2><a class="link sh-more" href="#/catalog?tag=new"><span>Смотреть все</span><i aria-hidden="true">' + ARROW + '</i></a></div><div class="grid">' + news.map(card).join('') + '</div></div></section>';
+      if (news.length) html += '<section class="section"><div class="wrap"><div class="section-head"><h2>Новинки</h2><a class="link sh-more" href="#/catalog?tag=new"><span>Смотреть все</span><i aria-hidden="true">' + ARROW + '</i></a></div><div class="grid">' + news.map(card).join('') + '</div></div></section>';
     }
     if (h.showHits !== false) {
       var hits = hitList(gProducts()).slice(0, 8);
       // на телефоне — лента, которую листают пальцем; на компьютере — сетка
-      if (hits.length) html += '<section class="section hits-sec"><div class="wrap"><div class="section-head"><h2>Хиты продаж' + (curGender() ? ' <em class="h-sub">' + GENDERS[curGender()].toLowerCase() + '</em>' : '') + '</h2><a class="link sh-more" href="#/catalog?tag=hit"><span>Смотреть все</span><i aria-hidden="true">' + ARROW + '</i></a></div><div class="grid hits">' + hits.map(card).join('') + '</div></div></section>';
+      if (hits.length) html += '<section class="section hits-sec"><div class="wrap"><div class="section-head"><h2>Хиты продаж</h2><a class="link sh-more" href="#/catalog?tag=hit"><span>Смотреть все</span><i aria-hidden="true">' + ARROW + '</i></a></div><div class="grid hits">' + hits.map(card).join('') + '</div></div></section>';
     }
     html += '<div id="recentHome"></div>';
     if (h.showBonus !== false) html += bonusBand(h);

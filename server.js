@@ -690,6 +690,17 @@ function applyPayment(order, p) {
   if (!order || !p) return;
   if (p.test) order.test = true;
   if (p.status === 'succeeded' && p.paid) {
+    // Сверка: платёж именно по этому заказу и на всю сумму в рублях (аудит L-2)
+    const sumOk = p.amount && p.amount.currency === 'RUB' && Math.round(Number(p.amount.value) * 100) === Math.round(order.total * 100);
+    const idOk = !p.metadata || !p.metadata.orderId || p.metadata.orderId === order.id;
+    if (!sumOk || !idOk) {
+      if (!order.payMismatch) {
+        order.payMismatch = true;
+        hist(order, 'ЮKassa сообщила об оплате, но ' + (!idOk ? 'платёж от другого заказа' : 'сумма не совпадает: ' + (p.amount ? p.amount.value + ' ' + p.amount.currency : '—')) + ' — проверьте в личном кабинете ЮKassa');
+        pushStaff('paid', { title: 'Проверьте оплату заказа № ' + order.number, body: 'Сумма или заказ в ЮKassa не совпадают с заказом — заказ не отмечен оплаченным', url: '/admin?s=orders&id=' + order.id, tag: 'order-' + order.id, urgent: true });
+      }
+      return;
+    }
     // способ оплаты нужен для комиссии в «Финансах»: у СБП она ниже
     if (p.payment_method && p.payment_method.type) order.payment.type = String(p.payment_method.type).slice(0, 30);
     if (order.payment.status !== 'paid') {
@@ -763,6 +774,13 @@ setInterval(async () => {
 // 10 минут — столько же, сколько живёт страница оплаты ЮKassa («Завершите платёж в течение…»); отсчёт — от создания платежа.
 // Минуту после срока ждём ответа ЮKassa: покупатель мог нажать «Оплатить» в последние секунды.
 const PAY_WINDOW_MIN = 10, PAY_GRACE = 60e3;
+const OPEN_ORDERS_MAX = 3;
+// Всплеск заказов: 10 и больше за 15 минут — push владельцу, не чаще раза в час (аудит M-2)
+let surgeAt = 0;
+function orderSurge() {
+  const since = Date.now() - 15 * 60e3, n = db.orders.filter((o) => !o.test && o.kind !== 'gift' && Date.parse(o.createdAt) > since).length;
+  if (n >= 10 && Date.now() - surgeAt > 60 * 60e3) { surgeAt = Date.now(); pushStaff('order', { title: 'Много заказов за 15 минут: ' + n, body: 'Проверьте, нет ли среди них ненастоящих — неподтверждённые можно отменить в панели', url: '/admin?s=orders', tag: 'surge', urgent: true }); }
+}
 function expireUnpaid(o) {
   if (o.status === 'canceled' || o.payment.status !== 'pending') return;
   hist(o, 'Время на оплату вышло — заказ отменён, товар вернулся на склад');
@@ -775,7 +793,8 @@ function expireUnpaid(o) {
   processWaitlist().catch(() => {});
   pushStaffOrder(o, 'expired'); save();
   // вещи возвращаются в корзину покупателя (приложение и сайт кладут их сами, когда открывается заказ)
-  if (o.kind !== 'gift') pushCustomer(o, 'orders', { title: 'Время на оплату вышло', body: 'Заказ № ' + o.number + ' отменён, вещи вернулись в корзину — оформите заново, пока они в наличии', url: '/order/' + o.id, tag: 'pay-' + o.id }).catch(() => {});
+  if (o.kind === 'gift') pushCustomer(o, 'orders', { title: 'Сертификат не оплачен', body: 'Время на оплату вышло, деньги не списаны — оформите сертификат заново', url: '/order/' + o.id, tag: 'pay-' + o.id }).catch(() => {});
+  else pushCustomer(o, 'orders', { title: 'Время на оплату вышло', body: 'Заказ № ' + o.number + ' отменён, вещи вернулись в корзину — оформите заново, пока они в наличии', url: '/order/' + o.id, tag: 'pay-' + o.id }).catch(() => {});
 }
 // заказы, оформленные до срока на оплату, получают те же 10 минут с момента обновления сервера
 db.orders.forEach((o) => { if (o.payment && o.payment.method === 'online' && o.payment.status === 'pending' && o.status !== 'canceled' && !o.payBy) o.payBy = new Date(Date.now() + PAY_WINDOW_MIN * 60e3).toISOString(); });
@@ -788,13 +807,16 @@ setInterval(async () => {
       pushCustomer(o, 'orders', { title: 'Заказ № ' + o.number + ' ждёт оплаты', body: 'Осталось 5 минут — потом заказ отменится, а вещи вернутся в корзину', url: '/order/' + o.id, tag: 'pay-' + o.id, urgent: true });
     }
     if (left <= 0) {
-      await syncPayment(o);   // оплата могла пройти, а уведомление ЮKassa — задержаться
+      await syncPayment(o, true);   // оплата могла пройти, а уведомление ЮKassa — задержаться
       if (left <= -PAY_GRACE && o.payment.status === 'pending' && o.status !== 'canceled') expireUnpaid(o);
     }
   }
 }, 15e3).unref();
-async function syncPayment(order) {
+const paySyncAt = new Map();   // заказ → время последней сверки с ЮKassa (аудит L-4)
+async function syncPayment(order, force) {
   if (order.payment.method !== 'online' || order.payment.status !== 'pending' || !order.payment.providerId) return;
+  const now = Date.now(); if (!force && now - (paySyncAt.get(order.id) || 0) < 10e3) return;
+  paySyncAt.set(order.id, now); if (paySyncAt.size > 2000) paySyncAt.clear();
   try { applyPayment(order, await ykRequest('GET', '/payments/' + order.payment.providerId)); } catch (e) { /* не критично */ }
 }
 function sizeEntry(productId, colorId, size) {
@@ -931,6 +953,12 @@ async function placeOrderNow(req, b, idem) {
   if (customer.phone.length !== 11) fail(400, 'Проверьте номер телефона');
   if (!validEmail(customer.email)) fail(400, 'Проверьте электронную почту');
   if (!b.consent) fail(400, 'Нужно согласие на обработку персональных данных');
+  // Количество — целое, не меньше 1: «0» или «−1» не превращаем молча в 1 штуку (аудит L-1)
+  if (Array.isArray(b.lines) && b.lines.some((l) => !(Number.isInteger(Number(l && l.qty)) && Number(l.qty) >= 1))) fail(400, 'Укажите количество — не меньше 1 шт.');
+  // Не больше 3 неподтверждённых заказов на один телефон или почту — иначе можно занять весь остаток (аудит M-2)
+  const openOrders = db.orders.filter((o) => !o.test && o.kind !== 'gift' && o.status === 'new' && o.payment.status === 'pending' &&
+    ((o.customer || {}).phone === customer.phone || (o.customer || {}).email === customer.email)).length;
+  if (openOrders >= OPEN_ORDERS_MAX) fail(429, 'У вас уже есть 3 заказа, которые ждут подтверждения. Дождитесь звонка менеджера или напишите в поддержку — поможем');
   const pay = db.settings.payment || {};
   const method = b.payment === 'online' ? 'online' : 'cod';
   if ((method === 'online' && !pay.online) || (method === 'cod' && !pay.cod)) fail(400, 'Этот способ оплаты недоступен');
@@ -1016,6 +1044,7 @@ async function placeOrderNow(req, b, idem) {
   save();
   if (order.payment.method !== 'online') sendOrderMails(order); // при онлайн-оплате письмо уйдёт после оплаты
   else { pushStaffOrder(order, 'new'); save(); }                  // а сотрудникам — сразу: «Новый заказ · ждёт оплаты»
+  orderSurge();
   if (order.payment.method !== 'online') stockMail(q.lines);   // онлайн — «Заканчивается размер» после оплаты: неоплаченный заказ может отмениться
   console.log(`Новый заказ № ${order.number} на ${order.total} ₽`);
   return { order: customerView(order), token: order.token, payUrl, user: publicUser(user) };
@@ -2023,7 +2052,7 @@ function orderView(o) { const c = Object.assign({}, o); delete c.token; c.items 
   // время на оплату вышло: сколько каждой вещи в наличии прямо сейчас — по этому приложение и сайт возвращают её в корзину
   if (o.payExpired) c.items = c.items.map((i) => { const p = db.products.find((x) => x.id === i.productId), sz = sizeEntry(i.productId, i.colorId, i.size); return Object.assign({}, i, { stockNow: p && p.active !== false && sz ? Math.max(0, sz.stock || 0) : 0 }); }); c.requestState = requestState(o); c.doneAt = doneAtOf(o) || undefined; return c; }
 // Покупателю — без служебного: заметка магазина и история изменений видны только в панели
-function customerView(o) { const c = orderView(o); delete c.adminNote; delete c.history; delete c.fin; return c; }
+function customerView(o) { const c = orderView(o); delete c.adminNote; delete c.history; delete c.fin; delete c.pushed; delete c.userId; delete c.payMismatch; return c; }
 
 /* ---------------- Маршруты API ---------------- */
 async function api(req, res, url, body) {

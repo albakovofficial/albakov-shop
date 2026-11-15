@@ -470,6 +470,7 @@
     var r = parseHash(), v = $('#view'), p = r.parts;
     $$('.nav a').forEach(function (a) { a.classList.toggle('active', a.getAttribute('href') === curRoute()); });
     var name = p[0] || '';
+    document.body.setAttribute('data-page', name);   // корзина и оформление прячут кнопку чата на узких экранах (аудит M-3)
     var map = { '': home, catalog: catalog, product: product, sale: sale, sizes: function () { go('#/catalog'); }, cart: cartPage, checkout: checkout, account: account, order: orderPage, page: textPage, favorites: favoritesPage, track: trackPage, gift: giftPage };
     var fn = map.hasOwnProperty(name) ? map[name] : isAdminRoute(name) ? adminPage : notFound;
     if ((name === '' || name === 'catalog' || name === 'sale') && gClosed(curGender())) fn = soonPage;
@@ -2177,7 +2178,7 @@
       o.items.forEach(function (i) { var c = Cart.find(i.productId, i.colorId, i.size); if (c) Cart.update(i.productId, i.colorId, i.size, Math.max(0, c.qty - (i.qty || 1))); });
       lsPush('alb:expiredUndo', o.id); return;
     }
-    if (!o.payExpired || paidLate(o)) return;
+    if (!o.payExpired || paidLate(o) || o.kind === 'gift') return;
     if (lsList('alb:expiredBack2').indexOf(o.id) < 0) { ensureInCart(o); lsPush('alb:expiredBack2', o.id); }
   }
   function payTimerHtml(o) {
@@ -2192,6 +2193,13 @@
           return '<div class="px-it"><span class="px-ph"><img src="' + esc(i.image || Art.make(i.art)) + '" alt=""><i>×</i></span><div><b>' + esc(i.name) + '</b><span class="om">' + itemMeta(i) + '</span></div></div>'; }).join('') + '</div></div>' : '') +
         '<p class="paytm-n">' + (back2 ? 'Деньги ушли на карту, с которой вы платили. Банк зачисляет их от нескольких минут до нескольких дней.' : 'Пока шла оплата, эти вещи успели купить. Мы вернём ' + fmt(o.total) + ' на карту, с которой вы платили, — напишем, когда деньги уйдут.') + '</p>' +
         '<a class="btn ghost" href="#/support">Написать в поддержку</a></div>';
+    }
+    if (o.payExpired && o.kind === 'gift') {
+      // сертификат: «Уже разобрали» тут не к месту — деньги не списаны, его можно оформить заново (аудит M-1)
+      return '<div class="paytm px"><div class="paytm-top"><div style="display:flex;gap:12px;align-items:center"><span class="paytm-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M12 8v12M3 12h18M12 8c-1.5-3-5-3-5-1s3 1 5 1c2 0 5 1 5-1s-3.5-2-5 1"/></svg></span>' +
+        '<div><b class="paytm-t">Сертификат не оплачен</b><small>Заказ № ' + esc(o.number) + ' отменён</small></div></div></div>' +
+        '<p class="paytm-n">Время на оплату вышло, деньги не списаны. Оформите сертификат заново — это займёт минуту.</p>' +
+        '<a class="btn" href="#/gift">Оформить заново</a></div>';
     }
     if (o.payExpired) {
       var back = o.items.filter(function (i) { return expiredAvail(i) > 0; }), gone = o.items.filter(function (i) { return expiredAvail(i) <= 0; });

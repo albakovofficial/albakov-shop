@@ -4116,3 +4116,51 @@ body::after { content: none; display: none; }
 /* таблица размеров товара в окне (13.64.3): плотнее, единицы — в заголовке */
 .p-sizes th, .p-sizes td { padding: 12px 14px; font-size: 14.5px; white-space: nowrap; }
 .p-sizes thead th { font-size: 12.5px; }
+
+/* Время на оплату (13.64.7): обратный отсчёт 15 минут на странице заказа */
+.paytm { width: 100%; max-width: 560px; text-align: left; padding: 20px; border-radius: 22px; background: var(--paper); box-shadow: inset 0 0 0 1px var(--line); display: flex; flex-direction: column; gap: 14px; }
+.paytm-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.paytm-t { display: block; font-size: 17px; font-weight: 500; }
+.paytm-top small { color: var(--muted); font-size: 13px; }
+.paytm-clock { display: flex; flex-direction: column; align-items: flex-end; }
+.paytm-clock span { font-size: 40px; font-weight: 300; letter-spacing: -1px; line-height: 1; font-variant-numeric: tabular-nums; }
+.paytm-clock small { font-size: 11px; color: var(--dim, #8a8f96); margin-top: 4px; }
+.paytm-bar { height: 4px; border-radius: 2px; background: var(--surface-2); overflow: hidden; }
+.paytm-bar i { display: block; height: 100%; border-radius: 2px; background: var(--accent); transition: width 1s linear; }
+.paytm-n { margin: 0; font-size: 14px; line-height: 1.5; color: var(--muted); }
+.paytm .btn { align-self: stretch; text-align: center; }
+.paytm.hot { background: #fdf3f2; box-shadow: inset 0 0 0 1px rgba(180, 35, 24, .22); }
+.paytm.hot .paytm-clock span, .paytm.hot .paytm-clock small { color: #b42318; }
+.paytm.hot .paytm-bar { background: rgba(180, 35, 24, .14); }
+.paytm.hot .paytm-bar i { background: #b42318; }
+.paytm.hot .paytm-n { color: #7a1d14; }
+.paytm.out { background: var(--surface); box-shadow: none; align-items: flex-start; }
+.paytm-ic { width: 44px; height: 44px; border-radius: 22px; background: var(--paper); box-shadow: inset 0 0 0 1px var(--line); display: grid; place-items: center; color: var(--muted); }
+
+/* Списки заказов (13.64.7): какие вещи в заказе и кнопка оплаты с отсчётом */
+.ao-items { display: grid; gap: 6px; }
+.ao-it { display: grid; gap: 1px; min-width: 0; }
+.ao-it b { font-weight: 500; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ao-it span, .ao-more { font-size: 12.5px; color: var(--muted); }
+.ao-it i, .o-it i, .om i { font-style: normal; white-space: nowrap; }
+.ao-paybtn { justify-self: start; display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; font-size: 13.5px; font-weight: 500; border-radius: 999px; background: var(--text); color: var(--bg); cursor: pointer; transition: background .3s; }
+.ao-paybtn b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.ao-paybtn.hot { background: var(--danger); color: #fff; }
+.ao-paybtn.out { background: none; color: var(--muted); border: 1px solid var(--line-strong); cursor: default; }
+
+/* Заказы в панели (13.64.7): фото, вещь с артикулом, отсчёт оплаты */
+.o-cell { display: flex; align-items: center; gap: 10px; min-width: 140px; }
+.o-th { display: flex; flex: none; width: 74px; }
+.o-th img { width: 38px; aspect-ratio: 3 / 4; object-fit: cover; background: var(--surface); border: 2px solid var(--bg); border-radius: 4px; }
+.o-th img + img { margin-left: -20px; }
+.o-no { display: grid; gap: 4px; justify-items: start; }
+.o-no b { font-weight: 600; white-space: nowrap; }
+.o-no .o-cdek { margin-left: 0; }
+.o-it { display: grid; gap: 2px; min-width: 150px; max-width: 215px; }
+.o-it b { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.o-it span { font-size: 12.5px; color: var(--muted); white-space: normal; }
+.o-it em { font-style: normal; font-size: 12px; color: var(--dim); }
+.o-paytm { display: block; margin-top: 5px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.o-paytm b { font-variant-numeric: tabular-nums; color: var(--text); }
+.o-paytm.hot, .o-paytm.hot b { color: #b42318; }
+.o-paytm.out { color: var(--muted); }

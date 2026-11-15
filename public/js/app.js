@@ -2113,8 +2113,8 @@
       v.innerHTML = '<div class="wrap"><div class="success"><span class="eyebrow">Заказ № ' + esc(o.number) + '</span><h1>' + (o.status === 'returned' ? 'Возврат оформлен' : 'Спасибо за заказ') + '</h1>' +
         '<p class="muted" style="max-width:46ch">' + (D.mailReady ? 'Подтверждение придёт на ' + esc(o.customer.email) + (o.payment.method === 'online' && o.payment.status !== 'paid' ? ' после оплаты' : '') + '. ' : '') + orderNext(o) + '</p>' +
         '<div style="display:flex;gap:18px;flex-wrap:wrap;justify-content:center"><span class="status ' + esc(o.status) + '">' + esc(STATUS[o.status] || o.status) + '</span><span class="status ' + esc(o.payment.status) + '">' + esc(payLabel) + '</span></div>' +
-        trackHtml(o) + '<div class="push-slot" id="pushSlot"></div>' + returnsHtml(o) + (API.user || o.requestState ? requestsHtml(o) : '') +
-        '<div class="order-card" style="width:100%;text-align:left">' + o.items.map(function (i) { return '<div class="mini-line"><img src="' + esc(i.image || Art.make(i.art)) + '" alt=""><div><div>' + esc(i.name) + '</div><div class="sub">' + (i.color ? esc(i.color) + ' · ' : '') + esc(i.size) + ' · ' + i.qty + ' шт.</div>' + (i.preorder ? preTag(i) : '') + '</div><span class="num">' + fmt(i.price * i.qty) + '</span></div>'; }).join('') +
+        payTimerHtml(o) + trackHtml(o) + '<div class="push-slot" id="pushSlot"></div>' + returnsHtml(o) + (API.user || o.requestState ? requestsHtml(o) : '') +
+        '<div class="order-card" style="width:100%;text-align:left">' + o.items.map(function (i) { return '<div class="mini-line"><img src="' + esc(i.image || Art.make(i.art)) + '" alt=""><div><div>' + esc(i.name) + '</div><div class="sub om">' + itemMeta(i) + '</div>' + (i.preorder ? preTag(i) : '') + '</div><span class="num">' + fmt(i.price * i.qty) + '</span></div>'; }).join('') +
           (o.promoDiscount ? '<div class="sum-row disc"><span>Промокод ' + esc(o.promoCode) + '</span><span>−' + fmt(o.promoDiscount) + '</span></div>' : '') +
           '<div class="sum-row"><span>' + esc(o.delivery && o.delivery.name || 'Доставка') + '</span><span>' + (o.delivery && o.delivery.price ? fmt(o.delivery.price) : 'Бесплатно') + '</span></div>' +
           (o.bonusUsed ? '<div class="sum-row disc"><span>Оплачено бонусами</span><span>−' + fmt(o.bonusUsed) + '</span></div>' : '') +
@@ -2123,9 +2123,50 @@
           (o.bonusEarn > 0 && o.status !== 'canceled' && o.status !== 'returned' ? '<div class="sum-row bonus-earn"><span><i class="b-ic" aria-hidden="true">Б</i>' + (o.bonusCredited ? 'Начислено бонусов' : 'Начислим ' + (bonusCfg().creditOn === 'done' ? 'после получения' : 'после оплаты')) + '</span><span>+' + bonusNum(o.bonusEarn) + '</span></div>' : '') + '</div>' +
         '<div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">' + (o.payUrl && o.payment.status === 'pending' ? '<a class="btn" href="' + esc(o.payUrl) + '">Оплатить заказ</a>' : '') + '<a class="btn ghost" href="#/catalog">Продолжить покупки</a>' + (API.user ? '<a class="btn ghost" href="#/account">Мои заказы</a><a class="btn ghost" href="#/account?tab=support&new=1&order=' + esc(o.id) + '">Вопрос по заказу</a>' : '') + '</div></div></div>';
       var ro = $('#reqOpen'); if (ro) ro.addEventListener('click', function () { openRequest(o, function () { orderPage(v, parts); }); });
+      mountPayTimer(o, function () { orderPage(v, parts); });
       mountOrderPush(o);
       if (API.user) refreshBonus(); // после оплаты бонусы могли прийти — обновим счёт и покажем уведомление
     } catch (e) { v.innerHTML = '<div class="wrap"><div class="empty"><h3>Заказ не найден</h3><p>' + esc(errMsg(e)) + '</p><a class="btn ghost" href="#/">На главную</a></div></div>'; }
+  }
+
+  /* ---------- Время на оплату (13.64.7): 10 минут, как у страницы ЮKassa; отсчёт по часам сервера ----------
+     Последние 5 минут — красным. Время вышло — заказ отменён, «Оформить заново» кладёт вещи обратно в корзину. */
+  var PAY_WIN = 10 * 60e3;
+  function payLeftMs(o) { return o.payBy ? Date.parse(o.payBy) - (Date.now() + (o._skew || 0)) : 0; }
+  function mmss(ms) { var t = Math.max(0, Math.ceil(ms / 1000)); return String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0'); }
+  function payTimerHtml(o) {
+    if (o.payExpired) return '<div class="paytm out"><span class="paytm-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="13" r="7.5"/><path d="M12 9v4l2.5 2M9.5 3h5"/></svg></span>' +
+      '<b class="paytm-t">Время на оплату вышло</b><p class="paytm-n">Заказ отменён, вещи вернулись в продажу. Оформите заново — если они ещё в наличии, они сразу окажутся в корзине.</p>' +
+      '<button class="btn" type="button" id="payAgain">Оформить заново</button></div>';
+    if (!(o.payment.method === 'online' && o.payment.status === 'pending' && o.status !== 'canceled' && o.payUrl && o.payBy)) return '';
+    var left = payLeftMs(o), total = PAY_WIN, hot = left <= 5 * 60e3;
+    return '<div class="paytm' + (hot ? ' hot' : '') + '" id="payTm"><div class="paytm-top"><div><b class="paytm-t">Заказ ждёт оплаты</b><small>Вещи отложены за вами</small></div>' +
+      '<div class="paytm-clock"><span id="payLeft">' + mmss(left) + '</span><small>осталось</small></div></div>' +
+      '<div class="paytm-bar"><i id="payBar" style="width:' + Math.max(0, Math.min(100, left / total * 100)) + '%"></i></div>' +
+      '<p class="paytm-n" id="payNote">' + (hot ? 'Меньше 5 минут — потом заказ отменится, а вещи вернутся в продажу' : 'Если не оплатить, заказ отменится, а вещи вернутся в продажу') + '</p>' +
+      '<a class="btn" id="payGo" href="' + esc(o.payUrl) + '"' + (left <= 0 ? ' style="display:none"' : '') + '>Оплатить · ' + fmt(o.total) + '</a></div>';
+  }
+  function mountPayTimer(o, reload) {
+    var again = $('#payAgain');
+    if (again) again.addEventListener('click', function () {
+      var n = 0;
+      o.items.forEach(function (i) {
+        var p = D.products.find(function (x) { return x.id === i.productId && x.active !== false; }); if (!p) return;
+        var c = (p.colors || []).find(function (x) { return x.id === i.colorId; }), z = c && (c.sizes || []).find(function (x) { return x.size === i.size; });
+        if (z && z.stock > 0) { Cart.add(p.id, c.id, i.size, Math.min(i.qty, z.stock)); n++; }
+      });
+      if (n) { toast(n < o.items.length ? 'Часть вещей уже закончилась — остальные в корзине' : 'Вещи снова в корзине'); location.hash = '#/cart'; }
+      else toast('Эти вещи уже закончились');
+    });
+    var box = $('#payTm'); if (!box) return;
+    var timer = setInterval(function () {
+      if (!document.body.contains(box)) { clearInterval(timer); return; }
+      var left = payLeftMs(o), hot = left <= 5 * 60e3;
+      $('#payLeft').textContent = mmss(left); $('#payBar').style.width = Math.max(0, Math.min(100, left / PAY_WIN * 100)) + '%';
+      if (left <= 0) { $('#payNote').textContent = 'Время вышло — проверяем, не прошла ли оплата…'; $('#payGo').style.display = 'none'; }
+      if (hot && left > 0 && !box.classList.contains('hot')) { box.classList.add('hot'); $('#payNote').textContent = 'Меньше 5 минут — потом заказ отменится, а вещи вернутся в продажу'; }
+      if (left <= -75000) { clearInterval(timer); reload(); }   // сервер отменит заказ — покажем «Время вышло»
+    }, 1000);
   }
 
   /* ---------- Push-уведомления (13.60): карточка на странице заказа и настройки в кабинете ----------
@@ -2355,19 +2396,39 @@
       return '<li class="' + (i < at ? 'is-done' : i === at ? 'is-now' : '') + '"><i></i><span>' + s[1] + '</span></li>';
     }).join('') + '</ol></div>';
   }
+  /* Строка вещи в списках заказов (13.64.7): что за покупка — название, цвет, размер, количество, артикул */
+  function itemMeta(i) { return [i.color, i.size, (i.qty || 1) + ' шт.', i.sku ? 'арт. ' + i.sku : ''].filter(Boolean).map(function (x) { return '<i>' + esc(x) + '</i>'; }).join(' · '); }
+  function payOpen(o) { return o.payment && o.payment.method === 'online' && o.payment.status === 'pending' && o.status !== 'canceled' && o.payBy && payLeftMs(o) > 0; }
   function ordersHtml(list) {
     if (!list.length) return '<div class="acc-empty"><h3>У Вас пока нет заказов</h3><p>Здесь будут отображаться Ваши покупки и информация об их текущем статусе</p><a class="btn" href="#/catalog">Перейти в каталог</a></div>';
     return '<div class="acc-orders">' + list.map(function (o) {
-      var n = o.items.reduce(function (s, i) { return s + (i.qty || 1); }, 0);
-      var pay = o.payment && o.payment.status === 'pending' && o.payment.method === 'online' && o.status !== 'canceled' ? '<span class="ao-pay">Ожидает оплаты</span>' : '';
+      var n = o.items.reduce(function (s, i) { return s + (i.qty || 1); }, 0), open = payOpen(o);
       var thumbs = o.items.slice(0, 3).map(function (i) { return '<img src="' + esc(i.image || Art.make(i.art)) + '" alt="" loading="lazy">'; }).join('') + (o.items.length > 3 ? '<em>+' + (o.items.length - 3) + '</em>' : '');
+      var lines = o.items.slice(0, 2).map(function (i) { return '<div class="ao-it"><b>' + esc(i.name) + '</b><span>' + itemMeta(i) + '</span></div>'; }).join('') +
+        (o.items.length > 2 ? '<span class="ao-more">и ещё ' + (o.items.length - 2) + ' ' + plural(o.items.length - 2, 'вещь', 'вещи', 'вещей') + '</span>' : '');
+      var pay = open ? '<span class="ao-paybtn' + (payLeftMs(o) <= 5 * 60e3 ? ' hot' : '') + '" data-pay="' + esc(o.payUrl || '') + '" data-payby="' + esc(o.payBy) + '" data-skew="' + (o._skew || 0) + '">Оплатить · осталось <b class="num">' + mmss(payLeftMs(o)) + '</b></span>' : '';
       return '<a class="acc-order" href="#/order/' + esc(o.id) + '">' +
         '<div class="ao-thumbs">' + thumbs + '</div>' +
-        '<div class="ao-main"><div class="ao-top"><b>Заказ № ' + esc(o.number) + '</b><span>' + esc(fmtDate(o.createdAt).replace(/ \d{4} г\.$/, '')) + '</span>' + pay + '</div>' + orderTrack(o) + (o.tracking && o.status !== 'canceled' && o.status !== 'returned' ? '<span class="ao-trk">СДЭК: <b>' + esc(o.tracking.number) + '</b> · отследить на странице заказа</span>' : '') + '</div>' +
+        '<div class="ao-main"><div class="ao-top"><b>Заказ № ' + esc(o.number) + '</b><span>' + esc(fmtDate(o.createdAt).replace(/ \d{4} г\.$/, '')) + '</span></div>' +
+          '<div class="ao-items">' + lines + '</div>' + (open ? '' : orderTrack(o)) + pay +
+          (o.tracking && o.status !== 'canceled' && o.status !== 'returned' ? '<span class="ao-trk">СДЭК: <b>' + esc(o.tracking.number) + '</b> · отследить на странице заказа</span>' : '') + '</div>' +
         '<div class="ao-sum"><b class="num">' + fmt(o.total) + '</b><span>' + n + ' ' + plural(n, 'вещь', 'вещи', 'вещей') + '</span></div>' +
       '</a>';
     }).join('') + '</div>';
   }
+  /* Живой отсчёт на карточках «Оплатить · осталось» и переход к оплате прямо из списка */
+  setInterval(function () {
+    document.querySelectorAll('[data-payby]').forEach(function (el) {
+      var left = Date.parse(el.getAttribute('data-payby')) - (Date.now() + Number(el.getAttribute('data-skew') || 0)), b = el.querySelector('b');
+      if (left <= 0) { el.classList.add('out'); el.removeAttribute('data-payby'); el.textContent = 'Время на оплату вышло'; return; }
+      if (b) b.textContent = mmss(left);
+      el.classList.toggle('hot', left <= 5 * 60e3);
+    });
+  }, 1000);
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('.ao-paybtn[data-pay]'); if (!b || b.classList.contains('out') || !b.getAttribute('data-pay')) return;
+    e.preventDefault(); e.stopPropagation(); location.href = b.getAttribute('data-pay');
+  }, true);
 
   function bonusTabHtml(u, log) {
     var c = bonusCfg(), n = u.bonus || 0, pct = String(c.percent).replace('.', ',');

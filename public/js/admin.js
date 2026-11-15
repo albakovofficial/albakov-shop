@@ -510,12 +510,25 @@
   /* ================= Заказы ================= */
   function ordersTable(list) {
     var pick = !!A().D.cdekReady;
-    return '<div class="table-wrap adm-table"><table class="sizes' + (pick ? ' o-pickable' : '') + '"><thead><tr>' + (pick ? '<th class="adm-pick"><input type="checkbox" id="oPickAll" aria-label="Выбрать все"></th>' : '') + '<th>№</th><th>Дата</th><th>Покупатель</th><th>Сумма</th><th>Оплата</th><th>Статус</th></tr></thead><tbody>' +
+    return '<div class="table-wrap adm-table"><table class="sizes' + (pick ? ' o-pickable' : '') + '"><thead><tr>' + (pick ? '<th class="adm-pick"><input type="checkbox" id="oPickAll" aria-label="Выбрать все"></th>' : '') + '<th>Заказ</th><th>Покупка</th><th>Дата</th><th>Покупатель</th><th>Сумма</th><th>Оплата</th><th>Статус</th></tr></thead><tbody>' +
       list.map(function (o) {
         var ret = o.status === 'returned';
-        return '<tr data-href="#/admin?s=orders&id=' + esc(o.id) + '"' + (ret ? ' class="row-returned"' : '') + '>' + (pick ? '<td class="adm-pick"><input type="checkbox" data-opick="' + esc(o.id) + '" aria-label="Выбрать заказ ' + esc(o.number) + '"></td>' : '') + '<td>' + esc(o.number) + (o.cdek && o.cdek.number ? '<span class="o-cdek" title="Отправление СДЭК">СДЭК ' + esc(o.cdek.number) + '</span>' : '') + (o.refunds && o.refunds.length ? '<span class="rf-tag">' + (ret ? 'Возврат' : 'Частичный возврат') + '</span>' : '') + '</td><td>' + esc(new Date(o.createdAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })) + '</td><td>' + esc(o.customer.firstName + ' ' + o.customer.lastName) + '</td><td class="num">' + (o.refunded ? '<s class="muted">' + fmt(o.total) + '</s><br><span class="rf-back">−' + fmt(o.refunded) + '</span>' : fmt(o.total)) + '</td>' +
-          '<td><span class="status ' + esc(o.refunded ? 'refunded' : o.payment.status) + '">' + esc(payText(o)) + '</span></td><td><span class="status ' + esc(o.status) + '">' + esc(A().STATUS[o.status]) + '</span></td></tr>';
+        return '<tr data-href="#/admin?s=orders&id=' + esc(o.id) + '"' + (ret ? ' class="row-returned"' : '') + '>' + (pick ? '<td class="adm-pick"><input type="checkbox" data-opick="' + esc(o.id) + '" aria-label="Выбрать заказ ' + esc(o.number) + '"></td>' : '') + '<td><div class="o-cell">' + oThumbs(o) + '<div class="o-no"><b>№ ' + esc(o.number) + '</b>' + (o.cdek && o.cdek.number ? '<span class="o-cdek" title="Отправление СДЭК">СДЭК ' + esc(o.cdek.number) + '</span>' : '') + (o.refunds && o.refunds.length ? '<span class="rf-tag">' + (ret ? 'Возврат' : 'Частичный возврат') + '</span>' : '') + '</div></div></td><td>' + oItems(o) + '</td><td>' + esc(new Date(o.createdAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })) + '</td><td>' + esc(o.customer.firstName + ' ' + o.customer.lastName) + '</td><td class="num">' + (o.refunded ? '<s class="muted">' + fmt(o.total) + '</s><br><span class="rf-back">−' + fmt(o.refunded) + '</span>' : fmt(o.total)) + '</td>' +
+          '<td><span class="status ' + esc(o.refunded ? 'refunded' : o.payment.status) + '">' + esc(payText(o)) + '</span>' + oPayLeft(o) + '</td><td><span class="status ' + esc(o.status) + '">' + esc(A().STATUS[o.status]) + '</span></td></tr>';
       }).join('') + '</tbody></table></div>';
+  }
+  /* Что за покупка (13.64.7): фото стопкой, название, цвет · размер · кол-во · артикул; неоплаченный — с отсчётом */
+  function oThumbs(o) { return '<span class="o-th">' + o.items.slice(0, 3).map(function (i) { return '<img src="' + esc(i.image || Art.make(i.art)) + '" alt="" loading="lazy">'; }).join('') + '</span>'; }
+  function oItems(o) {
+    var i = o.items[0] || {}, ip = DATA.products.find(function (x) { return x.id === i.productId; }), sku = i.sku || (ip && ip.sku) || '';
+    var meta = [i.color, i.size, (i.qty || 1) + ' шт.', sku ? 'арт. ' + sku : ''].filter(Boolean).map(function (x) { return '<i>' + esc(x) + '</i>'; }).join(' · ');
+    return '<div class="o-it"><b>' + esc(i.name || '') + '</b><span>' + meta + '</span>' + (o.items.length > 1 ? '<em>и ещё ' + (o.items.length - 1) + ' ' + A().plural(o.items.length - 1, 'вещь', 'вещи', 'вещей') + '</em>' : '') + '</div>';
+  }
+  function oPayLeft(o) {
+    if (!(o.payment.method === 'online' && o.payment.status === 'pending' && o.status !== 'canceled' && o.payBy)) return '';
+    var left = Date.parse(o.payBy) - (Date.now() + (o._skew || 0)); if (left <= 0) return '';
+    var t = Math.ceil(left / 1000);
+    return '<span class="o-paytm' + (left <= 5 * 60e3 ? ' hot' : '') + '" data-payby="' + esc(o.payBy) + '" data-skew="' + (o._skew || 0) + '">осталось <b class="num">' + String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0') + '</b></span>';
   }
   function payText(o) {
     if (o.payment.method === 'exchange') return 'Обмен';
@@ -530,7 +543,7 @@
     var f = q.f || 'all', search = (q.q || '').toLowerCase();
     var list = DATA.orders.slice().reverse().filter(function (o) {
       if (f === 'ship' ? !readyShip(o) : f === 'refund' ? !(o.refunds && o.refunds.length) : f !== 'all' && o.status !== f) return false;
-      if (search) { var t = [o.number, o.customer.firstName, o.customer.lastName, o.customer.email, o.customer.phone, A().fmtPhone(o.customer.phone), o.payment.providerId || ''].join(' ').toLowerCase(); if (t.indexOf(search) === -1) return false; }
+      if (search) { var t = [o.number, o.items.map(function (i) { var ip = DATA.products.find(function (x) { return x.id === i.productId; }); return (i.sku || (ip && ip.sku) || '') + ' ' + i.name; }).join(' '), o.customer.firstName, o.customer.lastName, o.customer.email, o.customer.phone, A().fmtPhone(o.customer.phone), o.payment.providerId || ''].join(' ').toLowerCase(); if (t.indexOf(search) === -1) return false; }
       return true;
     });
     // Фильтр по статусу: число заказов крупно, подпись под ним, цветная точка статуса
@@ -543,7 +556,7 @@
     }).join('') + '</nav>';
     var test = DATA.testOrders ? '<div class="ost-test"><span>Тестовые заказы скрыты и не считаются: ' + DATA.testOrders + '</span><button class="link" type="button" id="delTest">Удалить их</button></div>' : '';
     var emptyTxt = f === 'all' && !search ? ['Заказов пока нет', 'Они появятся здесь сразу после оформления на сайте.'] : ['Ничего не нашлось', search ? 'Проверьте номер заказа, имя, телефон, почту или номер платежа ЮKassa.' : 'В этом статусе заказов нет.'];
-    m.innerHTML = head('Заказы', '<input class="input" id="oSearch" type="search" placeholder="Номер, имя, телефон, почта" value="' + esc(q.q || '') + '" style="min-height:42px;width:280px" aria-label="Поиск заказа">') +
+    m.innerHTML = head('Заказы', '<input class="input" id="oSearch" type="search" placeholder="Номер, имя, телефон, артикул" value="' + esc(q.q || '') + '" style="min-height:42px;width:280px" aria-label="Поиск заказа">') +
       tabs + test + intakesHtml() +
       (list.length ? ordersTable(list) : '<div class="empty"><h3>' + emptyTxt[0] + '</h3><p>' + emptyTxt[1] + '</p></div>') +
       (A().D.cdekReady ? '<div class="o-bar" id="oBar" hidden><span class="o-bar-n" id="oBarN"></span><div class="o-bar-acts"><button class="btn sm" type="button" id="obCreate">Создать отправления</button><button class="btn ghost sm" type="button" data-obprint="barcode">Наклейки PDF</button><button class="btn ghost sm" type="button" data-obprint="waybill">Накладные PDF</button><button class="btn ghost sm" type="button" id="obIntake">Вызвать курьера</button><button class="link" type="button" id="obClear">Снять выбор</button></div></div>' : '');

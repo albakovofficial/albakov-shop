@@ -90,8 +90,8 @@
     async adminSupportUpload(dataUrl) { return await call('POST', 'api/admin/support/upload', { dataUrl: dataUrl }); },
     async adminSupportTemplates(list) { return (await call('PUT', 'api/admin/support/templates', { templates: list })).templates; },
     async adminSupportPatch(id, patch) { return (await call('PATCH', 'api/admin/support/' + encodeURIComponent(id), patch)).ticket; },
-    async myOrders() { return (await call('GET', 'api/orders')).orders; },
-    async getOrder(id) { var t = (lsGet('vanta:otok') || {})[id] || ''; return (await call('GET', 'api/orders/' + encodeURIComponent(id) + '?t=' + encodeURIComponent(t))).order; },
+    async myOrders() { var r = await call('GET', 'api/orders'), sk = r.now ? Date.parse(r.now) - Date.now() : 0; (r.orders || []).forEach(function (o) { o._skew = sk; }); return r.orders; },
+    async getOrder(id) { var t = (lsGet('vanta:otok') || {})[id] || ''; var r = await call('GET', 'api/orders/' + encodeURIComponent(id) + '?t=' + encodeURIComponent(t)); if (r.order && r.now) r.order._skew = Date.parse(r.now) - Date.now(); return r.order; },
     async orderRequest(id, b) { var t = (lsGet('vanta:otok') || {})[id] || ''; return (await call('POST', 'api/orders/' + encodeURIComponent(id) + '/request', Object.assign({ t: t }, b))).order; },
     async adminRequest(id, b) { return await call('POST', 'api/admin/orders/' + encodeURIComponent(id) + '/request', b); },
     async quote(lines, code, deliveryId, contact, useBonus, extra) { return (await call('POST', 'api/quote', Object.assign({ lines: lines, code: code, deliveryId: deliveryId, contact: contact, useBonus: !!useBonus }, extra || {}))).quote; },
@@ -101,7 +101,7 @@
       if (r.user) this.user = r.user;
       return { order: r.order, payUrl: r.payUrl || null, repeated: !!r.repeated };
     },
-    async adminData() { return (await call('GET', 'api/admin/data')).data; },
+    async adminData() { var d = (await call('GET', 'api/admin/data')).data, sk = d && d.now ? Date.parse(d.now) - Date.now() : 0; ((d && d.orders) || []).forEach(function (o) { o._skew = sk; }); return d; },
     async adminHealth() { return (await call('GET', 'api/admin/health')).health; },
     async adminPost(path, body) { return await call('POST', 'api/admin/' + path, body || {}); },
     async adminSave(name, value) { await call('PUT', 'api/admin/' + name, { value: value }); return true; },

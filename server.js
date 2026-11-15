@@ -744,6 +744,8 @@ function expireUnpaid(o) {
   o.payment.status = 'canceled'; o.status = 'canceled'; o.payExpired = true;
   syncBonus(o); save();
   processWaitlist().catch(() => {});
+  // вещи возвращаются в корзину покупателя (приложение и сайт кладут их сами, когда открывается заказ)
+  if (o.kind !== 'gift') pushCustomer(o, 'orders', { title: 'Время на оплату вышло', body: 'Заказ № ' + o.number + ' отменён, вещи вернулись в корзину — оформите заново, пока они в наличии', url: '/order/' + o.id, tag: 'pay-' + o.id }).catch(() => {});
 }
 // заказы, оформленные до срока на оплату, получают те же 10 минут с момента обновления сервера
 db.orders.forEach((o) => { if (o.payment && o.payment.method === 'online' && o.payment.status === 'pending' && o.status !== 'canceled' && !o.payBy) o.payBy = new Date(Date.now() + PAY_WINDOW_MIN * 60e3).toISOString(); });
@@ -753,7 +755,7 @@ setInterval(async () => {
     const left = Date.parse(o.payBy) - now;
     if (left <= 5 * 60e3 && left > 0 && !o.payReminded) {
       o.payReminded = true; save();
-      pushCustomer(o, 'orders', { title: 'Заказ № ' + o.number + ' ждёт оплаты', body: 'Осталось 5 минут — потом заказ отменится, а вещи вернутся в продажу', url: '/order/' + o.id, tag: 'pay-' + o.id, urgent: true });
+      pushCustomer(o, 'orders', { title: 'Заказ № ' + o.number + ' ждёт оплаты', body: 'Осталось 5 минут — потом заказ отменится, а вещи вернутся в корзину', url: '/order/' + o.id, tag: 'pay-' + o.id, urgent: true });
     }
     if (left <= 0) {
       await syncPayment(o);   // оплата могла пройти, а уведомление ЮKassa — задержаться

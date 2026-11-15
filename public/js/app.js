@@ -2183,8 +2183,9 @@
     if (!(o.payment.method === 'online' && o.payment.status === 'pending' && o.status !== 'canceled' && o.payUrl && o.payBy)) return '';
     var left = payLeftMs(o), total = PAY_WIN, hot = left <= 5 * 60e3;
     return '<div class="paytm' + (hot ? ' hot' : '') + '" id="payTm"><div class="paytm-top"><div><b class="paytm-t">Заказ ждёт оплаты</b><small>Вещи отложены за вами</small></div>' +
-      '<div class="paytm-clock"><span id="payLeft">' + mmss(left) + '</span><small>осталось</small></div></div>' +
-      '<div class="paytm-bar"><i id="payBar" style="width:' + Math.max(0, Math.min(100, left / total * 100)) + '%"></i></div>' +
+      // таймер — кольцо в цвете раздела: тает вместе со временем, последние 5 минут — красное и мягко пульсирует (13.64.8)
+      '<div class="paytm-ring"><svg viewBox="0 0 100 100" aria-hidden="true"><circle class="trk" cx="50" cy="50" r="44"/><circle class="val" id="payRing" cx="50" cy="50" r="44" pathLength="100" stroke-dasharray="' + Math.max(0, Math.min(100, left / total * 100)).toFixed(2) + ' 100"/></svg>' +
+        '<div class="paytm-clock"><span id="payLeft">' + mmss(left) + '</span><small>осталось</small></div></div></div>' +
       payCheckHtml(o) +
       '<p class="paytm-n" id="payNote">' + (hot ? 'Меньше 5 минут — потом заказ отменится, а вещи вернутся в корзину' : 'Не успеете — заказ отменится, а вещи вернутся в вашу корзину') + '</p>' +
       '<a class="btn" id="payGo" href="' + esc(o.payUrl) + '"' + (left <= 0 ? ' style="display:none"' : '') + '>Оплатить · ' + fmt(o.total) + '</a></div>';
@@ -2194,7 +2195,7 @@
     var timer = setInterval(function () {
       if (!document.body.contains(box)) { clearInterval(timer); return; }
       var left = payLeftMs(o), hot = left <= 5 * 60e3;
-      $('#payLeft').textContent = mmss(left); $('#payBar').style.width = Math.max(0, Math.min(100, left / PAY_WIN * 100)) + '%';
+      $('#payLeft').textContent = mmss(left); $('#payRing').setAttribute('stroke-dasharray', Math.max(0, Math.min(100, left / PAY_WIN * 100)).toFixed(2) + ' 100');
       if (left <= 0) { $('#payNote').textContent = 'Время вышло — проверяем, не прошла ли оплата…'; $('#payGo').style.display = 'none'; }
       if (hot && left > 0 && !box.classList.contains('hot')) { box.classList.add('hot'); $('#payNote').textContent = 'Меньше 5 минут — потом заказ отменится, а вещи вернутся в корзину'; }
       if (left <= -75000) { clearInterval(timer); reload(); }   // сервер отменит заказ — покажем «Время вышло»

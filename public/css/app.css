@@ -4122,17 +4122,24 @@ body::after { content: none; display: none; }
 .paytm-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
 .paytm-t { display: block; font-size: 17px; font-weight: 500; }
 .paytm-top small { color: var(--muted); font-size: 13px; }
-.paytm-clock { display: flex; flex-direction: column; align-items: flex-end; }
-.paytm-clock span { font-size: 40px; font-weight: 300; letter-spacing: -1px; line-height: 1; font-variant-numeric: tabular-nums; }
-.paytm-clock small { font-size: 11px; color: var(--dim, #8a8f96); margin-top: 4px; }
-.paytm-bar { height: 4px; border-radius: 2px; background: var(--surface-2); overflow: hidden; }
-.paytm-bar i { display: block; height: 100%; border-radius: 2px; background: var(--accent); transition: width 1s linear; }
+.paytm-top { align-items: center; }
+.paytm-ring { position: relative; flex: none; width: 108px; height: 108px; border-radius: 50%; background: radial-gradient(circle at 50% 40%, var(--tint, #f6f6f6), transparent 70%); }
+.paytm-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); display: block; }
+.paytm-ring circle { fill: none; stroke-width: 5; }
+.paytm-ring .trk { stroke: var(--surface-2); }
+.paytm-ring .val { stroke: var(--accent); stroke-linecap: round; transition: stroke-dasharray 1s linear, stroke .4s; }
+.paytm-clock { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.paytm-clock span { font-size: 25px; font-weight: 400; letter-spacing: -.5px; line-height: 1; font-variant-numeric: tabular-nums; }
+.paytm-clock small { font-size: 10.5px; letter-spacing: .06em; color: var(--dim, #8a8f96); margin-top: 5px; }
 .paytm-n { margin: 0; font-size: 14px; line-height: 1.5; color: var(--muted); }
 .paytm .btn { align-self: stretch; text-align: center; }
 .paytm.hot { background: #fdf3f2; box-shadow: inset 0 0 0 1px rgba(180, 35, 24, .22); }
 .paytm.hot .paytm-clock span, .paytm.hot .paytm-clock small { color: #b42318; }
-.paytm.hot .paytm-bar { background: rgba(180, 35, 24, .14); }
-.paytm.hot .paytm-bar i { background: #b42318; }
+.paytm.hot .paytm-ring { background: radial-gradient(circle at 50% 40%, rgba(180, 35, 24, .1), transparent 70%); animation: payPulse 1.6s ease-in-out infinite; }
+.paytm.hot .paytm-ring .trk { stroke: rgba(180, 35, 24, .14); }
+.paytm.hot .paytm-ring .val { stroke: #b42318; }
+@keyframes payPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(180, 35, 24, .0); } 50% { box-shadow: 0 0 0 8px rgba(180, 35, 24, .08); } }
+@media (prefers-reduced-motion: reduce) { .paytm.hot .paytm-ring { animation: none; } }
 .paytm.hot .paytm-n { color: #7a1d14; }
 .paytm.out { background: var(--surface); box-shadow: none; align-items: flex-start; }
 .paytm-ic { width: 44px; height: 44px; border-radius: 22px; background: var(--paper); box-shadow: inset 0 0 0 1px var(--line); display: grid; place-items: center; color: var(--muted); }

@@ -700,7 +700,7 @@ function applyPayment(order, p) {
         order.paidAfterCancel = true;
         hist(order, 'Оплата пришла на отменённый заказ — верните деньги или возобновите заказ');
         pushStaff('paid', { title: 'Оплачен отменённый заказ № ' + order.number, body: money(order.total) + ' — верните деньги или возобновите заказ', url: '/admin?s=orders&id=' + order.id, tag: 'order-' + order.id, urgent: true });
-      } else { hist(order, 'Оплата получена онлайн'); sendOrderMails(order); giftActivate(order); }
+      } else { hist(order, 'Оплата получена онлайн'); sendOrderMails(order); giftActivate(order); if (order.kind !== 'gift') stockMail(order.items); }
     }
   }
   else if (p.status === 'canceled' && order.payment.status !== 'paid') {
@@ -744,6 +744,7 @@ function expireUnpaid(o) {
   o.payment.status = 'canceled'; o.status = 'canceled'; o.payExpired = true;
   syncBonus(o); save();
   processWaitlist().catch(() => {});
+  pushStaffOrder(o, 'expired'); save();
   // вещи возвращаются в корзину покупателя (приложение и сайт кладут их сами, когда открывается заказ)
   if (o.kind !== 'gift') pushCustomer(o, 'orders', { title: 'Время на оплату вышло', body: 'Заказ № ' + o.number + ' отменён, вещи вернулись в корзину — оформите заново, пока они в наличии', url: '/order/' + o.id, tag: 'pay-' + o.id }).catch(() => {});
 }
@@ -985,7 +986,8 @@ async function placeOrderNow(req, b, idem) {
   if (idem) recentOrders.set(idem, { id: order.id, t: Date.now() });
   save();
   if (order.payment.method !== 'online') sendOrderMails(order); // при онлайн-оплате письмо уйдёт после оплаты
-  stockMail(q.lines);
+  else { pushStaffOrder(order, 'new'); save(); }                  // а сотрудникам — сразу: «Новый заказ · ждёт оплаты»
+  if (order.payment.method !== 'online') stockMail(q.lines);   // онлайн — «Заканчивается размер» после оплаты: неоплаченный заказ может отмениться
   console.log(`Новый заказ № ${order.number} на ${order.total} ₽`);
   return { order: customerView(order), token: order.token, payUrl, user: publicUser(user) };
 }
@@ -1016,14 +1018,26 @@ Object.defineProperty(Mail.DEFAULTS, 'siteUrl', { get: () => PUBLIC_URL });
 function sendMail(msg) { const e = embedImages(msg.html); return smtp.send(mailCfg(), Object.assign({}, msg, e)); }
 
 /* ---------------- Письма о заказе: покупателю и магазину ---------------- */
+/* Push сотрудникам о заказе (15.11.2026): одно уведомление на заказ, которое обновляется (тот же tag) —
+   «Новый заказ» сразу при оформлении (и при онлайн-оплате тоже) → «Оплачен заказ» после оплаты → «не оплачен», если время вышло */
+function pushStaffOrder(order, stage) {
+  if (order.test || order.payment.method === 'exchange') return;
+  const key = { new: 'staff', paid: 'staffPaid', expired: 'staffExpired' }[stage];
+  if (!key || (order.pushed && order.pushed[key])) return;
+  if (stage === 'expired' && !(order.pushed && order.pushed.staff)) return;   // о заказе и не сообщали — нечего обновлять
+  order.pushed = Object.assign({}, order.pushed, { [key]: new Date().toISOString() });
+  if (stage === 'new' && order.payment.status === 'paid') order.pushed.staffPaid = order.pushed.staff;   // оплачен сразу (бонусы, сертификат)
+  const c = order.customer || {}, pv = order.delivery && order.delivery.pvz, who = [c.firstName, c.lastName].filter(Boolean).join(' ') + (pv && pv.city ? ', ' + pv.city : '');
+  const online = order.payment.method === 'online', paid = order.payment.status === 'paid';
+  const m = stage === 'expired'
+    ? { kind: 'order', title: 'Заказ № ' + order.number + ' не оплачен', body: 'Время на оплату вышло — заказ отменён, вещи вернулись на склад\n' + who, urgent: false }
+    : stage === 'paid' || paid
+      ? { kind: 'paid', title: 'Оплачен заказ № ' + order.number + ' · ' + money(order.total), body: who + '\n' + itemsLine(order) + '\nМожно собирать', urgent: true }
+      : { kind: 'order', title: 'Новый заказ № ' + order.number + ' · ' + money(order.total), body: who + '\n' + itemsLine(order) + (online ? '\nЖдёт онлайн-оплаты — 10 минут' : '\nОплата при получении'), urgent: true };
+  pushStaff(m.kind, { title: m.title, body: m.body, url: '/admin?s=orders&id=' + order.id, tag: 'order-' + order.id, icon: firstImg(order), urgent: m.urgent, actions: [{ action: 'open', title: 'Открыть заказ' }] });
+}
 function sendOrderMails(order) {
-  if (!order.test && order.payment.method !== 'exchange' && !(order.pushed && order.pushed.staff)) {
-    order.pushed = Object.assign({}, order.pushed, { staff: new Date().toISOString() });
-    const paid = order.payment.status === 'paid', c = order.customer || {}, pv = order.delivery && order.delivery.pvz;
-    pushStaff(paid ? 'paid' : 'order', { title: (paid ? 'Оплачен заказ № ' : 'Новый заказ № ') + order.number + ' · ' + money(order.total),
-      body: [c.firstName, c.lastName].filter(Boolean).join(' ') + (pv && pv.city ? ', ' + pv.city : '') + '\n' + itemsLine(order) + (paid ? '' : '\nОплата при получении'),
-      url: '/admin?s=orders&id=' + order.id, tag: 'order-' + order.id, icon: firstImg(order), urgent: true, actions: [{ action: 'open', title: 'Открыть заказ' }] });
-  }
+  pushStaffOrder(order, order.payment.method === 'online' && order.payment.status === 'paid' ? 'paid' : 'new');
   if (!mailReady()) return;
   const pay = db.settings.payment || {}, cs = db.settings.contacts || {};
   const m = order.payment.method;
@@ -1974,7 +1988,9 @@ function createUser(res, f, hash, extra) {
 }
 function welcomeInfo() { const b = Pricing.bonusConf(db.settings); return { bonusPercent: b.earn ? b.percent : 0, promo: welcomePromo() }; }
 
-function orderView(o) { const c = Object.assign({}, o); delete c.token; c.items = (o.items || []).map((i) => i.sku ? i : Object.assign({}, i, { sku: (db.products.find((p) => p.id === i.productId) || {}).sku || undefined })); c.requestState = requestState(o); c.doneAt = doneAtOf(o) || undefined; return c; }
+function orderView(o) { const c = Object.assign({}, o); delete c.token; c.items = (o.items || []).map((i) => i.sku ? i : Object.assign({}, i, { sku: (db.products.find((p) => p.id === i.productId) || {}).sku || undefined }));
+  // время на оплату вышло: сколько каждой вещи в наличии прямо сейчас — по этому приложение и сайт возвращают её в корзину
+  if (o.payExpired) c.items = c.items.map((i) => { const p = db.products.find((x) => x.id === i.productId), sz = sizeEntry(i.productId, i.colorId, i.size); return Object.assign({}, i, { stockNow: p && p.active !== false && sz ? Math.max(0, sz.stock || 0) : 0 }); }); c.requestState = requestState(o); c.doneAt = doneAtOf(o) || undefined; return c; }
 // Покупателю — без служебного: заметка магазина и история изменений видны только в панели
 function customerView(o) { const c = orderView(o); delete c.adminNote; delete c.history; delete c.fin; return c; }
 

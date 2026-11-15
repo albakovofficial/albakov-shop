@@ -678,6 +678,8 @@ async function createPayment(order) {
   const p = await ykRequest('POST', '/payments', body, order.id);
   order.payment.providerId = p.id;
   order.payUrl = p.confirmation && p.confirmation.confirmation_url;
+  // срок оплаты — как у страницы ЮKassa: от момента создания платежа
+  order.payBy = new Date((Date.parse(p.created_at) || Date.now()) + PAY_WINDOW_MIN * 60e3).toISOString();
   return order.payUrl;
 }
 // История заказа: что и когда менялось (статус, оплата, трек-номер, возвраты) — видна в карточке заказа в панели
@@ -703,8 +705,10 @@ function applyPayment(order, p) {
   }
   else if (p.status === 'canceled' && order.payment.status !== 'paid') {
     // оплата не прошла: возвращаем товар и промокод, если заказ ещё не был отменён вручную
+    const late = p.cancellation_details && p.cancellation_details.reason === 'expired_on_confirmation';
+    if (late && order.status !== 'canceled') order.payExpired = true;   // ЮKassa закрыла страницу оплаты по времени
     if (order.status !== 'canceled') {
-      hist(order, 'Онлайн-оплата не прошла — заказ отменён, товар вернулся на склад');
+      hist(order, late ? 'Время на оплату вышло — заказ отменён, товар вернулся на склад' : 'Онлайн-оплата не прошла — заказ отменён, товар вернулся на склад');
       restock(order); giftReturn(order);
       if (order.kind === 'gift') { const g = db.giftcards.find((x) => x.id === order.giftId); if (g && g.status === 'pending') g.status = 'canceled'; }
       const pc = order.promoCode && db.promocodes.find((x) => x.code === order.promoCode);
@@ -727,7 +731,9 @@ setInterval(async () => {
 /* Время на оплату (13.64.7): онлайн-заказ ждёт оплаты 15 минут. За 5 минут до конца — пуш покупателю;
    срок вышел — сначала спрашиваем ЮKassa (вдруг оплата прошла), иначе заказ отменяется: вещи, промокод,
    сертификат и бонусы возвращаются. Оплатили позже — владелец получит уведомление (оплата отменённого заказа) */
-const PAY_WINDOW_MIN = 15;
+// 10 минут — столько же, сколько живёт страница оплаты ЮKassa («Завершите платёж в течение…»); отсчёт — от создания платежа.
+// Минуту после срока ждём ответа ЮKassa: покупатель мог нажать «Оплатить» в последние секунды.
+const PAY_WINDOW_MIN = 10, PAY_GRACE = 60e3;
 function expireUnpaid(o) {
   if (o.status === 'canceled' || o.payment.status !== 'pending') return;
   hist(o, 'Время на оплату вышло — заказ отменён, товар вернулся на склад');
@@ -739,7 +745,7 @@ function expireUnpaid(o) {
   syncBonus(o); save();
   processWaitlist().catch(() => {});
 }
-// заказы, оформленные до срока на оплату, получают те же 15 минут с момента обновления сервера
+// заказы, оформленные до срока на оплату, получают те же 10 минут с момента обновления сервера
 db.orders.forEach((o) => { if (o.payment && o.payment.method === 'online' && o.payment.status === 'pending' && o.status !== 'canceled' && !o.payBy) o.payBy = new Date(Date.now() + PAY_WINDOW_MIN * 60e3).toISOString(); });
 setInterval(async () => {
   const now = Date.now();
@@ -751,10 +757,10 @@ setInterval(async () => {
     }
     if (left <= 0) {
       await syncPayment(o);   // оплата могла пройти, а уведомление ЮKassa — задержаться
-      if (o.payment.status === 'pending' && o.status !== 'canceled') expireUnpaid(o);
+      if (left <= -PAY_GRACE && o.payment.status === 'pending' && o.status !== 'canceled') expireUnpaid(o);
     }
   }
-}, 30e3).unref();
+}, 15e3).unref();
 async function syncPayment(order) {
   if (order.payment.method !== 'online' || order.payment.status !== 'pending' || !order.payment.providerId) return;
   try { applyPayment(order, await ykRequest('GET', '/payments/' + order.payment.providerId)); } catch (e) { /* не критично */ }

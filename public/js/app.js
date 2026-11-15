@@ -2129,8 +2129,9 @@
     } catch (e) { v.innerHTML = '<div class="wrap"><div class="empty"><h3>Заказ не найден</h3><p>' + esc(errMsg(e)) + '</p><a class="btn ghost" href="#/">На главную</a></div></div>'; }
   }
 
-  /* ---------- Время на оплату (13.64.7): 15 минут, обратный отсчёт по часам сервера ----------
+  /* ---------- Время на оплату (13.64.7): 10 минут, как у страницы ЮKassa; отсчёт по часам сервера ----------
      Последние 5 минут — красным. Время вышло — заказ отменён, «Оформить заново» кладёт вещи обратно в корзину. */
+  var PAY_WIN = 10 * 60e3;
   function payLeftMs(o) { return o.payBy ? Date.parse(o.payBy) - (Date.now() + (o._skew || 0)) : 0; }
   function mmss(ms) { var t = Math.max(0, Math.ceil(ms / 1000)); return String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0'); }
   function payTimerHtml(o) {
@@ -2138,12 +2139,12 @@
       '<b class="paytm-t">Время на оплату вышло</b><p class="paytm-n">Заказ отменён, вещи вернулись в продажу. Оформите заново — если они ещё в наличии, они сразу окажутся в корзине.</p>' +
       '<button class="btn" type="button" id="payAgain">Оформить заново</button></div>';
     if (!(o.payment.method === 'online' && o.payment.status === 'pending' && o.status !== 'canceled' && o.payUrl && o.payBy)) return '';
-    var left = payLeftMs(o), total = 15 * 60e3, hot = left <= 5 * 60e3;
+    var left = payLeftMs(o), total = PAY_WIN, hot = left <= 5 * 60e3;
     return '<div class="paytm' + (hot ? ' hot' : '') + '" id="payTm"><div class="paytm-top"><div><b class="paytm-t">Заказ ждёт оплаты</b><small>Вещи отложены за вами</small></div>' +
       '<div class="paytm-clock"><span id="payLeft">' + mmss(left) + '</span><small>осталось</small></div></div>' +
       '<div class="paytm-bar"><i id="payBar" style="width:' + Math.max(0, Math.min(100, left / total * 100)) + '%"></i></div>' +
       '<p class="paytm-n" id="payNote">' + (hot ? 'Меньше 5 минут — потом заказ отменится, а вещи вернутся в продажу' : 'Если не оплатить, заказ отменится, а вещи вернутся в продажу') + '</p>' +
-      '<a class="btn" href="' + esc(o.payUrl) + '">Оплатить · ' + fmt(o.total) + '</a></div>';
+      '<a class="btn" id="payGo" href="' + esc(o.payUrl) + '"' + (left <= 0 ? ' style="display:none"' : '') + '>Оплатить · ' + fmt(o.total) + '</a></div>';
   }
   function mountPayTimer(o, reload) {
     var again = $('#payAgain');
@@ -2161,9 +2162,10 @@
     var timer = setInterval(function () {
       if (!document.body.contains(box)) { clearInterval(timer); return; }
       var left = payLeftMs(o), hot = left <= 5 * 60e3;
-      $('#payLeft').textContent = mmss(left); $('#payBar').style.width = Math.max(0, Math.min(100, left / (15 * 60e3) * 100)) + '%';
-      if (hot && !box.classList.contains('hot')) { box.classList.add('hot'); $('#payNote').textContent = 'Меньше 5 минут — потом заказ отменится, а вещи вернутся в продажу'; }
-      if (left <= -20000) { clearInterval(timer); reload(); }   // сервер отменит заказ — покажем «Время вышло»
+      $('#payLeft').textContent = mmss(left); $('#payBar').style.width = Math.max(0, Math.min(100, left / PAY_WIN * 100)) + '%';
+      if (left <= 0) { $('#payNote').textContent = 'Время вышло — проверяем, не прошла ли оплата…'; $('#payGo').style.display = 'none'; }
+      if (hot && left > 0 && !box.classList.contains('hot')) { box.classList.add('hot'); $('#payNote').textContent = 'Меньше 5 минут — потом заказ отменится, а вещи вернутся в продажу'; }
+      if (left <= -75000) { clearInterval(timer); reload(); }   // сервер отменит заказ — покажем «Время вышло»
     }, 1000);
   }
 

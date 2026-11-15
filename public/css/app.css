@@ -4164,3 +4164,8 @@ body::after { content: none; display: none; }
 .o-paytm b { font-variant-numeric: tabular-nums; color: var(--text); }
 .o-paytm.hot, .o-paytm.hot b { color: #b42318; }
 .o-paytm.out { color: var(--muted); }
+
+/* Размер, который целиком лежит в корзине (13.64.8) — значок сумки в углу */
+.chip.in-bag { position: relative; }
+.chip.in-bag::after, .chip.in-bag.on::after { display: block; content: ''; position: absolute; top: -5px; right: -5px; width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid #fff;
+  background: var(--accent, #171717) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3.5 8.5h17l-1.4 13H4.9z' fill='white'/%3E%3Cpath d='M8.5 10V6.5a3.5 3.5 0 0 1 7 0V10' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E") center / 11px no-repeat; }

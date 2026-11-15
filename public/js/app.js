@@ -2143,14 +2143,14 @@
     var st = await Push.state('customer'), extra = { orderId: o.id, t: orderToken(o.id) };
     if (!document.body.contains(slot)) return;
     if (st === 'on') { Push.link('customer', extra); slot.innerHTML = '<p class="push-on">' + BELL + '<span>Уведомления о заказе включены — сообщим, когда он будет в пути и когда приедет в пункт выдачи.</span></p>'; return; }
-    if (st === 'unsupported' || (st === 'ios-app' && !appStoreUrl())) { slot.remove(); return; }
+    if (st === 'unsupported' || (st === 'ios-app' && !appStoreUrl())) { slot.remove(); return; } // уведомления — только в приложении (13.64.6)
     var pv = o.delivery && o.delivery.pvz, img = (o.items.find(function (i) { return i.image; }) || {}).image || '';
     var mock = pv ? pushMock(pv.type === 'postamat' ? 'Заказ ждёт в постамате' : 'Заказ ждёт в пункте выдачи', (pv.type === 'postamat' ? 'Постамат' : 'Пункт СДЭК') + ' · ' + (pv.address || ''), img)
       : pushMock('Курьер везёт заказ № ' + o.number, 'Сегодня привезём по вашему адресу. Курьер позвонит перед приездом.', img);
     var ios = st === 'ios-app', denied = st === 'denied';
     slot.innerHTML = '<div class="pushc"><div class="pushc-t"><span class="pushc-ic">' + BELL + '</span>' +
       '<h3>Узнайте первым, когда заказ приедет</h3>' +
-      '<p>' + (ios ? 'На iPhone уведомления приходят в приложении ALBAKOV. Скачайте его, войдите в кабинет — и заказ будет там вместе с уведомлениями.' : denied ? 'Уведомления для этого сайта запрещены в настройках браузера. Разрешите их — и сообщим, когда заказ будет в пути и в пункте выдачи.' : 'Одно нажатие — и сообщим, когда заказ будет в пути, когда приедет в пункт выдачи, и напомним забрать. Без рекламы.') + '</p>' +
+      '<p>' + (ios ? 'Уведомления о заказе приходят в приложении ALBAKOV для iPhone. Скачайте его, войдите в кабинет — заказ будет там вместе с уведомлениями.' : denied ? 'Уведомления для этого сайта запрещены в настройках браузера. Разрешите их — и сообщим, когда заказ будет в пути и в пункте выдачи.' : 'Одно нажатие — и сообщим, когда заказ будет в пути, когда приедет в пункт выдачи, и напомним забрать. Без рекламы.') + '</p>' +
       (denied ? '' : ios ? '<a class="btn" href="' + esc(appStoreUrl()) + '" target="_blank" rel="noopener">Скачать в App Store</a>' : '<button class="btn" type="button" id="pushGo">Включить уведомления</button>') + '<p class="form-error" id="pushErr"></p></div>' + mock + '</div>';
     var b = $('#pushGo', slot); if (!b) return;
     b.addEventListener('click', async function () {
@@ -2202,7 +2202,7 @@
     if (!document.body.contains(box)) return;
     var kinds = PUSH_KINDS.filter(function (k) { return k[0] !== 'bonus' || bonusCfg().enabled; });
     var dev = st === 'on' ? '<span class="pushs-st on">Включены на этом устройстве</span><span class="pushs-btns"><button class="btn ghost sm" type="button" data-ps="test">Проверить</button><button class="btn ghost sm" type="button" data-ps="off">Выключить</button></span>'
-      : st === 'ios-app' ? '<span class="pushs-st">На iPhone уведомления приходят в приложении ALBAKOV</span>' + (appStoreUrl() ? '<a class="btn sm" href="' + esc(appStoreUrl()) + '" target="_blank" rel="noopener">Скачать в App Store</a>' : '')
+      : st === 'ios-app' ? '<span class="pushs-st">Уведомления приходят в приложении ALBAKOV для iPhone — там же их можно настроить</span>' + (appStoreUrl() ? '<a class="btn sm" href="' + esc(appStoreUrl()) + '" target="_blank" rel="noopener">Скачать в App Store</a>' : '')
       : st === 'denied' ? '<span class="pushs-st">Запрещены в настройках браузера для этого сайта</span>'
       : st === 'unsupported' ? '<span class="pushs-st">Этот браузер не поддерживает уведомления</span>'
       : '<span class="pushs-st">Выключены на этом устройстве</span><button class="btn sm" type="button" data-ps="on">Включить</button>';

@@ -1095,6 +1095,8 @@ setInterval(() => { if (statDirty) { statDirty = false; save(); } }, 60e3).unref
    Владельцу и сотрудникам — по их роли: новые заказы, оплаты, вопросы, заявки, возвраты, остатки, входы в панель, итоги дня.
    Подписка — это устройство: телефон или браузер. Ключи VAPID создаются один раз и хранятся в базе. */
 if (!db.secrets.vapid || !db.secrets.vapid.publicKey) { db.secrets.vapid = WebPush.generateKeys(); save(); }
+// Push браузера убран (13.64.6): старые подписки браузеров удаляем один раз — остаются только устройства с приложением
+if (!db.webPushOff) { db.pushsubs = (db.pushsubs || []).filter((x) => String(x.endpoint || '').startsWith('apns:')); db.webPushOff = 1; save(); }
 // Приложение на iPhone: ключ Apple для push (панель → «Push-уведомления» → «Приложение iPhone»)
 const IOS_BUNDLE = process.env.IOS_BUNDLE_ID || 'ru.albakovofficial.app';
 function apnsCfg() { const a = db.secrets.apns; return a && a.p8 && a.keyId && a.teamId ? Object.assign({ bundleId: IOS_BUNDLE }, a) : null; }
@@ -1122,6 +1124,8 @@ const pushStats = { sent: 0, failed: 0, gone: 0 };
 async function pushTo(subs, m) {
   // Одно устройство бывает подписано дважды — как покупатель и как сотрудник: одно сообщение уходит на него один раз
   const seen = new Set(); subs = subs.filter((x) => !seen.has(x.endpoint) && seen.add(x.endpoint));
+  // Уведомления — только в приложение ALBAKOV (Apple). Push браузера и веб-приложения убраны (13.64.6)
+  subs = subs.filter((x) => x.endpoint.startsWith('apns:'));
   if (!subs.length) return 0;
   const data = pushPayload(m), keys = db.secrets.vapid, subject = 'mailto:' + ((db.settings.contacts || {}).email || 'info@albakovofficial.ru');
   let ok = 0, dirty = false;
@@ -1207,6 +1211,8 @@ function pushSubscribe(req, b) {
   throttle(req, 'push', 60);
   // Приложение на iPhone присылает адрес устройства Apple (b.apns = { token, env }) вместо подписки браузера
   const ap = b.apns && /^[a-f0-9]{64,200}$/i.test(String(b.apns.token || '')) ? b.apns : null;
+  if (!ap && !b.old) fail(400, 'Уведомления приходят в приложении ALBAKOV для iPhone');
+  if (!ap) return { ok: true, moved: 0 }; // браузер сменил ключи старой подписки — она больше не нужна
   const sub = ap ? { endpoint: 'apns:' + String(ap.token).toLowerCase(), keys: { p256dh: '', auth: '' } } : (b.sub || {}), keys = sub.keys || {};
   const endpoint = String(sub.endpoint || '');
   if (!ap && (!/^https:\/\/[^\s]{10,1000}$/.test(endpoint) || !keys.p256dh || !keys.auth || String(keys.p256dh).length > 200 || String(keys.auth).length > 100)) fail(400, 'Неверная подписка');
@@ -2386,7 +2392,7 @@ async function api(req, res, url, body) {
       if (!p[2] && M === 'PUT') { const v = body.prefs || {}; u.staffPush = {}; for (const k of Object.keys(PUSH_STAFF)) if (k in v) u.staffPush[k] = !!v[k]; save(); }
       if (!p[2] && (M === 'GET' || M === 'PUT')) {
         const promoUsers = new Set(db.users.filter((x) => pushPrefsOf(x).promo).map((x) => x.id));
-        return { prefs: staffPushPrefs(u), devices: db.pushsubs.filter((x) => x.scope === 'staff' && x.userId === u.id).length,
+        return { prefs: staffPushPrefs(u), devices: db.pushsubs.filter((x) => x.scope === 'staff' && x.userId === u.id).length, apnsReady: !!apnsCfg(),
           audience: can(req, 'marketing') ? db.pushsubs.filter((x) => x.scope !== 'staff' && promoUsers.has(x.userId)).length : null,
           customers: can(req, 'marketing') ? db.pushsubs.filter((x) => x.scope !== 'staff').length : null,
           broadcasts: can(req, 'marketing') ? (db.pushBroadcasts || []).slice(0, 20) : [] };
@@ -2543,7 +2549,7 @@ async function api(req, res, url, body) {
       if (!drop.length) fail(404, p[2] === 'test' ? 'Тестовых заказов нет' : 'Заказ не найден');
       for (const o of drop) {
         if (o.status !== 'canceled') {
-          restock(o);
+          restock(o); giftReturn(o);
           const pc = o.promoCode && db.promocodes.find((x) => x.code === o.promoCode);
           if (pc) pc.used = Math.max(0, (pc.used || 0) - 1);
           o.status = 'canceled';

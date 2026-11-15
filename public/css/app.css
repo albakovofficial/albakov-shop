@@ -4129,18 +4129,19 @@ body::after { content: none; display: none; }
 .paytm-ring .trk { stroke: var(--surface-2); }
 .paytm-ring .val { stroke: var(--accent); stroke-linecap: round; transition: stroke-dasharray 1s linear, stroke .4s; }
 .paytm-clock { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-.paytm-clock span { font-size: 25px; font-weight: 400; letter-spacing: -.5px; line-height: 1; font-variant-numeric: tabular-nums; }
+.paytm-clock span { font-size: 22px; font-weight: 400; letter-spacing: -.5px; line-height: 1; font-variant-numeric: tabular-nums; }
 .paytm-clock small { font-size: 10.5px; letter-spacing: .06em; color: var(--dim, #8a8f96); margin-top: 5px; }
 .paytm-n { margin: 0; font-size: 14px; line-height: 1.5; color: var(--muted); }
 .paytm .btn { align-self: stretch; text-align: center; }
-.paytm.hot { background: #fdf3f2; box-shadow: inset 0 0 0 1px rgba(180, 35, 24, .22); }
+.paytm { background: #fff; box-shadow: inset 0 0 0 1px var(--line), 0 10px 30px rgba(20, 20, 24, .06); }
+.paytm.hot { background: #fff; box-shadow: inset 0 0 0 1.2px rgba(180, 35, 24, .35), 0 10px 30px rgba(20, 20, 24, .06); }
 .paytm.hot .paytm-clock span, .paytm.hot .paytm-clock small { color: #b42318; }
 .paytm.hot .paytm-ring { background: radial-gradient(circle at 50% 40%, rgba(180, 35, 24, .1), transparent 70%); animation: payPulse 1.6s ease-in-out infinite; }
 .paytm.hot .paytm-ring .trk { stroke: rgba(180, 35, 24, .14); }
 .paytm.hot .paytm-ring .val { stroke: #b42318; }
 @keyframes payPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(180, 35, 24, .0); } 50% { box-shadow: 0 0 0 8px rgba(180, 35, 24, .08); } }
 @media (prefers-reduced-motion: reduce) { .paytm.hot .paytm-ring { animation: none; } }
-.paytm.hot .paytm-n { color: #7a1d14; }
+.paytm.hot .paytm-n { color: #b42318; }
 .paytm.out { background: var(--surface); box-shadow: none; align-items: flex-start; }
 .paytm-ic { width: 44px; height: 44px; border-radius: 22px; background: var(--paper); box-shadow: inset 0 0 0 1px var(--line); display: grid; place-items: center; color: var(--muted); }
 
@@ -4178,11 +4179,13 @@ body::after { content: none; display: none; }
   background: var(--accent, #171717) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3.5 8.5h17l-1.4 13H4.9z' fill='white'/%3E%3Cpath d='M8.5 10V6.5a3.5 3.5 0 0 1 7 0V10' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E") center / 11px no-repeat; }
 
 /* «Проверьте перед оплатой» в карточке оплаты (13.64.8) */
-.paycheck { display: grid; gap: 10px; margin: 14px 0 4px; padding: 14px; border-radius: 14px; background: var(--surface); }
-.paycheck .pc-cap { font-size: 10.5px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
-.paycheck .pc-row { display: flex; flex-wrap: nowrap; gap: 11px; align-items: flex-start; min-width: 0; }
+.paycheck { display: grid; gap: 0; margin: 2px 0 0; padding: 14px 0 0; border-top: 1px solid var(--line); }
+.paycheck .pc-cap { font-size: 10.5px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; color: var(--dim, #8a8f96); margin-bottom: 4px; }
+.paycheck .pc-row { display: flex; flex-wrap: nowrap; gap: 12px; align-items: flex-start; min-width: 0; padding: 10px 0; }
+.paycheck .pc-row + .pc-row { border-top: 1px solid var(--line); margin-left: 46px; padding-left: 0; }
+.paycheck .pc-row + .pc-row .pc-ic { margin-left: -46px; }
 .paycheck .pc-row > div { display: grid; gap: 1px; min-width: 0; flex: 1 1 0; }
 .paycheck .pc-row b { font-weight: 500; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .paycheck .pc-row span:not(.pc-ic) { font-size: 12.5px; color: var(--muted); }
-.paycheck .pc-ic { flex: none; width: 30px; height: 30px; border-radius: 50%; background: var(--bg, #fff); display: grid; place-items: center; color: var(--text); }
+.paycheck .pc-ic { flex: none; width: 34px; height: 34px; border-radius: 50%; background: var(--surface); display: grid; place-items: center; color: var(--text); }
 .paytm.out small { display: block; font-size: 12.5px; color: var(--muted); margin-top: 2px; }

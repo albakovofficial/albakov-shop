@@ -724,6 +724,37 @@ setInterval(async () => {
     now - Date.parse(o.createdAt) > 20 * 60e3 && now - Date.parse(o.createdAt) < 7 * 864e5).slice(0, 50);
   for (const o of list) { await syncPayment(o); }
 }, 15 * 60e3).unref();
+/* Время на оплату (13.64.7): онлайн-заказ ждёт оплаты 15 минут. За 5 минут до конца — пуш покупателю;
+   срок вышел — сначала спрашиваем ЮKassa (вдруг оплата прошла), иначе заказ отменяется: вещи, промокод,
+   сертификат и бонусы возвращаются. Оплатили позже — владелец получит уведомление (оплата отменённого заказа) */
+const PAY_WINDOW_MIN = 15;
+function expireUnpaid(o) {
+  if (o.status === 'canceled' || o.payment.status !== 'pending') return;
+  hist(o, 'Время на оплату вышло — заказ отменён, товар вернулся на склад');
+  restock(o); giftReturn(o);
+  if (o.kind === 'gift') { const g = db.giftcards.find((x) => x.id === o.giftId); if (g && g.status === 'pending') g.status = 'canceled'; }
+  const pc = o.promoCode && db.promocodes.find((x) => x.code === o.promoCode);
+  if (pc) pc.used = Math.max(0, (pc.used || 0) - 1);
+  o.payment.status = 'canceled'; o.status = 'canceled'; o.payExpired = true;
+  syncBonus(o); save();
+  processWaitlist().catch(() => {});
+}
+// заказы, оформленные до срока на оплату, получают те же 15 минут с момента обновления сервера
+db.orders.forEach((o) => { if (o.payment && o.payment.method === 'online' && o.payment.status === 'pending' && o.status !== 'canceled' && !o.payBy) o.payBy = new Date(Date.now() + PAY_WINDOW_MIN * 60e3).toISOString(); });
+setInterval(async () => {
+  const now = Date.now();
+  for (const o of db.orders.filter((x) => x.payBy && x.payment && x.payment.status === 'pending' && x.status !== 'canceled')) {
+    const left = Date.parse(o.payBy) - now;
+    if (left <= 5 * 60e3 && left > 0 && !o.payReminded) {
+      o.payReminded = true; save();
+      pushCustomer(o, 'orders', { title: 'Заказ № ' + o.number + ' ждёт оплаты', body: 'Осталось 5 минут — потом заказ отменится, а вещи вернутся в продажу', url: '/order/' + o.id, tag: 'pay-' + o.id, urgent: true });
+    }
+    if (left <= 0) {
+      await syncPayment(o);   // оплата могла пройти, а уведомление ЮKassa — задержаться
+      if (o.payment.status === 'pending' && o.status !== 'canceled') expireUnpaid(o);
+    }
+  }
+}, 30e3).unref();
 async function syncPayment(order) {
   if (order.payment.method !== 'online' || order.payment.status !== 'pending' || !order.payment.providerId) return;
   try { applyPayment(order, await ykRequest('GET', '/payments/' + order.payment.providerId)); } catch (e) { /* не критично */ }
@@ -912,7 +943,7 @@ async function placeOrderNow(req, b, idem) {
   do { db.orderSeq++; } while (db.orders.some((o) => o.number === String(db.orderSeq)));
   const order = {
     id: uid('o'), number: String(db.orderSeq), token: crypto.randomBytes(16).toString('hex'), createdAt: new Date().toISOString(), userId: user ? user.id : null, customer, consentAt: new Date().toISOString(), idem: idem || undefined,
-    items: q.lines.map((l) => ({ productId: l.productId, slug: l.slug, name: l.name, colorId: l.colorId, color: l.color, size: l.size, qty: l.qty, price: l.price, oldPrice: l.oldPrice, image: l.image, art: l.art, preorder: l.preorder || undefined, shipDate: l.preorder ? l.shipDate : undefined })),
+    items: q.lines.map((l) => ({ productId: l.productId, slug: l.slug, sku: (db.products.find((p) => p.id === l.productId) || {}).sku || undefined, name: l.name, colorId: l.colorId, color: l.color, size: l.size, qty: l.qty, price: l.price, oldPrice: l.oldPrice, image: l.image, art: l.art, preorder: l.preorder || undefined, shipDate: l.preorder ? l.shipDate : undefined })),
     subtotal: q.subtotal, saleDiscount: q.saleDiscount, promoCode: q.promo && q.promo.ok ? q.promo.code : '', promoDiscount: q.promoDiscount,
     delivery: Object.assign({}, q.delivery, pvz
       ? { city: pvz.city + (pvz.region ? ' (' + pvz.region + ')' : ''), address: (pvz.type === 'postamat' ? 'Постамат СДЭК ' : 'ПВЗ СДЭК ') + pvz.code + ': ' + pvz.address, pvz: { code: pvz.code, type: pvz.type, cityCode: pvz.cityCode, city: pvz.city, region: pvz.region, address: pvz.address, full: pvz.full, hours: pvz.hours, cod: !!pvz.cod } }
@@ -929,6 +960,7 @@ async function placeOrderNow(req, b, idem) {
   // Весь заказ оплачен бонусами — платить деньгами нечего
   if (order.total === 0) order.payment = { method: order.giftUsed ? 'gift' : 'bonus', status: 'paid', provider: null };
   hist(order, 'Заказ оформлен на сайте', 'customer');
+  if (order.payment.method === 'online' && order.payment.status === 'pending') order.payBy = new Date(Date.now() + PAY_WINDOW_MIN * 60e3).toISOString();
   db.orders.push(order);
   const spent = q.bonusUsed ? Pricing.bonusMove(user, -q.bonusUsed, 'spend', order, uid) : null;
   let payUrl = null;
@@ -1934,7 +1966,7 @@ function createUser(res, f, hash, extra) {
 }
 function welcomeInfo() { const b = Pricing.bonusConf(db.settings); return { bonusPercent: b.earn ? b.percent : 0, promo: welcomePromo() }; }
 
-function orderView(o) { const c = Object.assign({}, o); delete c.token; c.requestState = requestState(o); c.doneAt = doneAtOf(o) || undefined; return c; }
+function orderView(o) { const c = Object.assign({}, o); delete c.token; c.items = (o.items || []).map((i) => i.sku ? i : Object.assign({}, i, { sku: (db.products.find((p) => p.id === i.productId) || {}).sku || undefined })); c.requestState = requestState(o); c.doneAt = doneAtOf(o) || undefined; return c; }
 // Покупателю — без служебного: заметка магазина и история изменений видны только в панели
 function customerView(o) { const c = orderView(o); delete c.adminNote; delete c.history; delete c.fin; return c; }
 
@@ -2157,7 +2189,7 @@ async function api(req, res, url, body) {
   }
 
   if (p[0] === 'orders') {
-    if (!p[1] && M === 'GET') { const u = user(); if (!u) fail(401, 'Войдите в личный кабинет'); return { orders: db.orders.filter((o) => o.userId === u.id).reverse().map(customerView) }; }
+    if (!p[1] && M === 'GET') { const u = user(); if (!u) fail(401, 'Войдите в личный кабинет'); return { orders: db.orders.filter((o) => o.userId === u.id).reverse().map(customerView), now: new Date().toISOString() }; }
     if (!p[1] && M === 'POST') { throttle(req, 'order', 40); return await placeOrder(req, body); }
     if (p[1] && p[2] === 'request' && M === 'POST') {
       throttle(req, 'request', 20);
@@ -2173,7 +2205,7 @@ async function api(req, res, url, body) {
       const allowed = o && ((u && o.userId === u.id) || safeEqual(t, o.token) || isAdmin(req));
       if (!allowed) fail(404, 'Заказ не найден');
       await syncPayment(o);
-      return { order: isAdmin(req) ? orderView(o) : customerView(o) };
+      return { order: isAdmin(req) ? orderView(o) : customerView(o), now: new Date().toISOString() };
     }
   }
 
@@ -2245,7 +2277,7 @@ async function api(req, res, url, body) {
       subtotal: amount, saleDiscount: 0, promoCode: '', promoDiscount: 0, delivery: { id: 'email', name: 'Электронный сертификат — на почту ' + to.email, price: 0, city: '', address: '' }, comment: '',
       total: amount, payment: { method: 'online', status: 'pending', provider: (db.settings.payment || {}).provider }, status: 'new', bonusUsed: 0, bonusEarn: 0
     };
-    g.orderId = order.id;
+    g.orderId = order.id; order.payBy = new Date(Date.now() + PAY_WINDOW_MIN * 60e3).toISOString();
     db.giftcards.push(g); db.orders.push(order);
     let payUrl = null;
     try { payUrl = await createPayment(order); }
@@ -2412,7 +2444,7 @@ async function api(req, res, url, body) {
     if (p[1] === 'data' && M === 'GET') {
       // Каждая роль получает только свои данные: личные данные покупателей — тем, кто работает с заказами, деньги — финансам
       const has = (...x) => x.some((k) => can(req, k)), role = adminRole(req);
-      const d = { settings: db.settings, role, roleName: ROLES[role].name, perms: perms(req), me: publicUser(currentUser(req)) };
+      const d = { settings: db.settings, role, roleName: ROLES[role].name, perms: perms(req), me: publicUser(currentUser(req)), now: new Date().toISOString() };
       for (const k of COLLECTIONS) d[k] = db[k];
       // Тестовые заказы (оплата в тестовом режиме) в панели не показываются и не считаются
       d.orders = has('orders', 'finance', 'marketing') ? db.orders.filter((o) => !o.test).map(orderView) : [];

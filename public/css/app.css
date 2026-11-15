@@ -4214,3 +4214,10 @@ body::after { content: none; display: none; }
 .section-head h2 { min-width: 0; }
 .section-head .sh-more { flex: none; white-space: nowrap; }
 @media (max-width: 560px) { .section-head { gap: 10px; } .section-head h2 { font-size: clamp(26px, 7.6vw, 40px); } }
+
+/* Аудит 15.11.2026 — M-3: на узких экранах кнопка чата не закрывает полосу доставки и шаги оформления
+   (поддержка остаётся в меню и в профиле); L-6: «Оформление заказа» без переноса с дефисом */
+@media (max-width: 420px) {
+  body[data-page="cart"] .fab, body[data-page="checkout"] .fab { display: none; }
+  .page-head h1 { hyphens: manual; overflow-wrap: normal; word-break: normal; font-size: clamp(34px, 10.4vw, 48px); }
+}

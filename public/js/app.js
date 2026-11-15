@@ -470,6 +470,7 @@
     var r = parseHash(), v = $('#view'), p = r.parts;
     $$('.nav a').forEach(function (a) { a.classList.toggle('active', a.getAttribute('href') === curRoute()); });
     var name = p[0] || '';
+    document.body.setAttribute('data-page', name);   // корзина и оформление прячут кнопку чата на узких экранах (аудит M-3)
     var map = { '': home, catalog: catalog, product: product, sale: sale, sizes: function () { go('#/catalog'); }, cart: cartPage, checkout: checkout, account: account, order: orderPage, page: textPage, favorites: favoritesPage, track: trackPage, gift: giftPage };
     var fn = map.hasOwnProperty(name) ? map[name] : isAdminRoute(name) ? adminPage : notFound;
     if ((name === '' || name === 'catalog' || name === 'sale') && gClosed(curGender())) fn = soonPage;
@@ -2167,13 +2168,40 @@
   function ensureInCart(o) {
     o.items.forEach(function (i) { var want = expiredAvail(i); if (want <= 0) return; var have = (Cart.find(i.productId, i.colorId, i.size) || { qty: 0 }).qty; if (want > have) Cart.add(i.productId, i.colorId, i.size, want - have); });
   }
+  function lsList(k) { try { return JSON.parse(localStorage.getItem(k)) || []; } catch (e) { return []; } }
+  function lsPush(k, id) { var a = lsList(k); if (a.indexOf(id) < 0) { a.push(id); try { localStorage.setItem(k, JSON.stringify(a.slice(-200))); } catch (e) {} } }
+  // оплачен после срока: деньги пришли — вещи в корзину не кладём
+  function paidLate(o) { return o.payExpired && (o.paidAfterCancel || o.payment.status === 'paid' || o.payment.status === 'refunded'); }
   function returnExpired(o) {
-    var key = 'alb:expiredBack2', done; try { done = JSON.parse(localStorage.getItem(key)) || []; } catch (e) { done = []; }
-    if (done.indexOf(o.id) < 0) { ensureInCart(o); done.push(o.id); try { localStorage.setItem(key, JSON.stringify(done.slice(-200))); } catch (e) {} }
+    // заказ возобновился (оплата пришла чуть позже срока) — убираем из корзины то, что туда вернули, чтобы не купить второй раз
+    if (!o.payExpired && o.status !== 'canceled' && lsList('alb:expiredBack2').indexOf(o.id) >= 0 && lsList('alb:expiredUndo').indexOf(o.id) < 0) {
+      o.items.forEach(function (i) { var c = Cart.find(i.productId, i.colorId, i.size); if (c) Cart.update(i.productId, i.colorId, i.size, Math.max(0, c.qty - (i.qty || 1))); });
+      lsPush('alb:expiredUndo', o.id); return;
+    }
+    if (!o.payExpired || paidLate(o) || o.kind === 'gift') return;
+    if (lsList('alb:expiredBack2').indexOf(o.id) < 0) { ensureInCart(o); lsPush('alb:expiredBack2', o.id); }
   }
   function payTimerHtml(o) {
+    returnExpired(o);
+    if (paidLate(o)) {
+      // Оплата пришла после отмены, а вещи уже купили — деньги вернёт магазин
+      var back2 = o.payment.status === 'refunded';
+      var soldOut = function (i) { return (o.resumeMissing || []).indexOf([i.name, i.color, i.size].filter(Boolean).join(' · ')) >= 0; };
+      return '<div class="paytm px"><div class="paytm-top"><div style="display:flex;gap:12px;align-items:center"><span class="paytm-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10h18M7 15h4"/></svg></span>' +
+        '<div><b class="paytm-t">' + (back2 ? 'Деньги вернули' : 'Оплата пришла после отмены') + '</b><small>Заказ № ' + esc(o.number) + ' отменён</small></div></div></div>' +
+        (o.items.some(soldOut) ? '<div class="px-body"><div class="px-grp gone"><span class="pc-cap">Уже купили</span>' + o.items.filter(soldOut).map(function (i) {
+          return '<div class="px-it"><span class="px-ph"><img src="' + esc(i.image || Art.make(i.art)) + '" alt=""><i>×</i></span><div><b>' + esc(i.name) + '</b><span class="om">' + itemMeta(i) + '</span></div></div>'; }).join('') + '</div></div>' : '') +
+        '<p class="paytm-n">' + (back2 ? 'Деньги ушли на карту, с которой вы платили. Банк зачисляет их от нескольких минут до нескольких дней.' : 'Пока шла оплата, эти вещи успели купить. Мы вернём ' + fmt(o.total) + ' на карту, с которой вы платили, — напишем, когда деньги уйдут.') + '</p>' +
+        '<a class="btn ghost" href="#/support">Написать в поддержку</a></div>';
+    }
+    if (o.payExpired && o.kind === 'gift') {
+      // сертификат: «Уже разобрали» тут не к месту — деньги не списаны, его можно оформить заново (аудит M-1)
+      return '<div class="paytm px"><div class="paytm-top"><div style="display:flex;gap:12px;align-items:center"><span class="paytm-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M12 8v12M3 12h18M12 8c-1.5-3-5-3-5-1s3 1 5 1c2 0 5 1 5-1s-3.5-2-5 1"/></svg></span>' +
+        '<div><b class="paytm-t">Сертификат не оплачен</b><small>Заказ № ' + esc(o.number) + ' отменён</small></div></div></div>' +
+        '<p class="paytm-n">Время на оплату вышло, деньги не списаны. Оформите сертификат заново — это займёт минуту.</p>' +
+        '<a class="btn" href="#/gift">Оформить заново</a></div>';
+    }
     if (o.payExpired) {
-      returnExpired(o);
       var back = o.items.filter(function (i) { return expiredAvail(i) > 0; }), gone = o.items.filter(function (i) { return expiredAvail(i) <= 0; });
       var grp = function (list, cap, ok) {
         return '<div class="px-grp' + (ok ? '' : ' gone') + '"><span class="pc-cap">' + cap + '</span>' + list.map(function (i) {
@@ -2440,7 +2468,7 @@
   function itemMeta(i) { return [i.color, i.size, (i.qty || 1) + ' шт.', i.sku ? 'арт. ' + i.sku : ''].filter(Boolean).map(function (x) { return '<i>' + esc(x) + '</i>'; }).join(' · '); }
   function payOpen(o) { return o.payment && o.payment.method === 'online' && o.payment.status === 'pending' && o.status !== 'canceled' && o.payBy && payLeftMs(o) > 0; }
   function ordersHtml(list) {
-    list.forEach(function (o) { if (o.payExpired) returnExpired(o); });   // время на оплату вышло — вещи снова в корзине
+    list.forEach(returnExpired);   // время на оплату вышло — вещи снова в корзине; заказ возобновился — убираем их обратно
     if (!list.length) return '<div class="acc-empty"><h3>У Вас пока нет заказов</h3><p>Здесь будут отображаться Ваши покупки и информация об их текущем статусе</p><a class="btn" href="#/catalog">Перейти в каталог</a></div>';
     return '<div class="acc-orders">' + list.map(function (o) {
       var n = o.items.reduce(function (s, i) { return s + (i.qty || 1); }, 0), open = payOpen(o);

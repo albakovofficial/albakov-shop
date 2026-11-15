@@ -4206,3 +4206,11 @@ body::after { content: none; display: none; }
 .px-grp.gone .px-ph img { filter: grayscale(1); opacity: .5; }
 .px-grp.gone .px-ph i { background: var(--dim, #8a8f96); }
 .px-grp.gone b { color: var(--muted); }
+
+/* Заголовки без точки в конце — везде (владелец 15.11) */
+.section-head h2::after, .page-head h1::after, .adm-head h1::after, .success h1::after, .benefits-title h2::after, .ec-title::after { content: none !important; display: none !important; }
+/* Заголовок раздела и «Смотреть все» — в одну строку, и на телефоне тоже */
+.section-head { flex-wrap: nowrap; align-items: center; }
+.section-head h2 { min-width: 0; }
+.section-head .sh-more { flex: none; white-space: nowrap; }
+@media (max-width: 560px) { .section-head { gap: 10px; } .section-head h2 { font-size: clamp(26px, 7.6vw, 40px); } }

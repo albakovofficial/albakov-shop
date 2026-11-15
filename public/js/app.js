@@ -660,12 +660,12 @@
       // если новинок мало — дополняем последними поступлениями раздела, чтобы ряд не выглядел пустым
       if (news.length < 4) news = news.concat(gProducts().filter(function (p) { return news.indexOf(p) === -1; }).sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); })).slice(0, 4);
       news = news.slice(0, 8);
-      if (news.length) html += '<section class="section"><div class="wrap"><div class="section-head"><h2>Новинки' + (curGender() ? ' <em class="h-sub">' + GENDERS[curGender()].toLowerCase() + '</em>' : '') + '</h2><a class="link sh-more" href="#/catalog?tag=new"><span>Смотреть все</span><i aria-hidden="true">' + ARROW + '</i></a></div><div class="grid">' + news.map(card).join('') + '</div></div></section>';
+      if (news.length) html += '<section class="section"><div class="wrap"><div class="section-head"><h2>Новинки</h2><a class="link sh-more" href="#/catalog?tag=new"><span>Смотреть все</span><i aria-hidden="true">' + ARROW + '</i></a></div><div class="grid">' + news.map(card).join('') + '</div></div></section>';
     }
     if (h.showHits !== false) {
       var hits = hitList(gProducts()).slice(0, 8);
       // на телефоне — лента, которую листают пальцем; на компьютере — сетка
-      if (hits.length) html += '<section class="section hits-sec"><div class="wrap"><div class="section-head"><h2>Хиты продаж' + (curGender() ? ' <em class="h-sub">' + GENDERS[curGender()].toLowerCase() + '</em>' : '') + '</h2><a class="link sh-more" href="#/catalog?tag=hit"><span>Смотреть все</span><i aria-hidden="true">' + ARROW + '</i></a></div><div class="grid hits">' + hits.map(card).join('') + '</div></div></section>';
+      if (hits.length) html += '<section class="section hits-sec"><div class="wrap"><div class="section-head"><h2>Хиты продаж</h2><a class="link sh-more" href="#/catalog?tag=hit"><span>Смотреть все</span><i aria-hidden="true">' + ARROW + '</i></a></div><div class="grid hits">' + hits.map(card).join('') + '</div></div></section>';
     }
     html += '<div id="recentHome"></div>';
     if (h.showBonus !== false) html += bonusBand(h);
@@ -2184,7 +2184,7 @@
         '<div><b class="paytm-t">Время на оплату вышло</b><small>Заказ № ' + esc(o.number) + ' отменён</small></div></div></div>' +
         '<div class="px-body">' + (back.length ? grp(back, 'Снова в вашей корзине', true) : '') + (gone.length ? grp(gone, 'Уже разобрали', false) : '') + '</div>' +
         '<p class="paytm-n">' + (back.length ? 'Успейте оформить заново, пока вещи в наличии.' : 'Загляните в каталог — там много нового, а этих размеров может появиться ещё.') + '</p>' +
-        (back.length ? '<a class="btn" href="#/cart" id="pxCart">Перейти в корзину</a>' : '<a class="btn" href="#/catalog">В каталог</a>') + '</div>';
+        (back.length ? '<a class="btn" href="#/cart" id="pxCart">Оформить заново</a>' : '<a class="btn" href="#/catalog">В каталог</a>') + '</div>';
     }
     if (!(o.payment.method === 'online' && o.payment.status === 'pending' && o.status !== 'canceled' && o.payUrl && o.payBy)) return '';
     var left = payLeftMs(o), total = PAY_WIN, hot = left <= 5 * 60e3;
@@ -3595,12 +3595,9 @@
     try { sessionStorage.setItem('albakov:intro', '1'); } catch (e) {}
     // при обновлении страницы заставка скрыта ещё до отрисовки (js/splash.js) — просто убираем её
     if (document.documentElement.classList.contains('sp-skip')) { el.remove(); return; }
-    var first = true;
-    var wait = Math.max(0, (first ? 1400 : 250) - performance.now());
-    setTimeout(function () {
-      el.classList.add('done');
-      setTimeout(function () { el.classList.add('leave'); setTimeout(function () { el.remove(); }, 950); }, 280);
-    }, wait);
+    // как в приложении: заставка не меньше 1,4 с, затем сайт раскрывается кругом от знака (0,75 с)
+    var wait = Math.max(0, 1400 - performance.now());
+    setTimeout(function () { el.classList.add('leave'); setTimeout(function () { el.remove(); }, 800); }, wait);
   }
   document.addEventListener('DOMContentLoaded', boot);
 })();

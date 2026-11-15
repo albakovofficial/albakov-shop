@@ -608,7 +608,7 @@ function recordRefund(r) {
   const known = o.refunds.find((x) => x.id === r.id); if (known) { if (known.status !== r.status) { known.status = r.status; save(); } return; }
   o.refunds.push({ id: r.id, status: r.status, amount: Number(r.amount.value), at: r.created_at || new Date().toISOString(), reason: 'Оформлен в кабинете ЮKassa', items: [], delivery: false, external: true });
   o.refunded = refundedK(o) / 100;
-  if (refundedK(o) >= Math.round(o.total * 100)) { o.payment.status = 'refunded'; if (o.status !== 'returned') { o.statusBefore = o.status; o.status = 'returned'; } }
+  if (refundedK(o) >= Math.round(o.total * 100)) { o.payment.status = 'refunded'; if (o.status !== 'returned' && o.status !== 'canceled') { o.statusBefore = o.status; o.status = 'returned'; } }
   syncBonus(o); save();
 }
 async function refundOrder(o, b) {
@@ -630,21 +630,22 @@ async function refundOrder(o, b) {
   if ((o.refunds || []).some((x) => x.id === r.id)) return { refund: o.refunds.find((x) => x.id === r.id), repeated: true };
   const refund = {
     id: r.id, status: r.status, amount: plan.amountK / 100, at: new Date().toISOString(), reason: String(b.reason || '').trim().slice(0, 300),
-    items: plan.sel.map((x) => ({ name: o.items[x.idx].name, color: o.items[x.idx].color || '', size: o.items[x.idx].size, qty: x.qty })), delivery: plan.delivery, restocked: !!b.restock,
+    items: plan.sel.map((x) => ({ name: o.items[x.idx].name, color: o.items[x.idx].color || '', size: o.items[x.idx].size, qty: x.qty })), delivery: plan.delivery, restocked: !!b.restock && o.status !== 'canceled',
     deducted: plan.deducted || 0
   };
   if (plan.deducted && Array.isArray(o.returns)) o.returns.forEach((r) => { if (r.cost && !r.deducted) r.deducted = true; });
   o.refunds = o.refunds || []; o.refunds.push(refund); hist(o, 'Возврат денег: ' + Pricing.format(refund.amount) + (refund.reason ? ' — ' + refund.reason : ''), 'admin');
   plan.sel.forEach((x) => {
     const it = o.items[x.idx]; it.refundedQty = (it.refundedQty || 0) + x.qty;
-    if (b.restock) { const st = sizeEntry(it.productId, it.colorId, it.size); if (st) st.stock += x.qty; }
+    // заказ отменён — товар вернулся на склад ещё при отмене, второй раз не прибавляем (аудит H-2)
+    if (b.restock && o.status !== 'canceled') { const st = sizeEntry(it.productId, it.colorId, it.size); if (st) st.stock += x.qty; }
   });
   if (plan.delivery) o.deliveryRefunded = true;
   // заявка покупателя на возврат денег закрывается вместе с возвратом
   (o.requests || []).forEach((q) => { if (q.kind === 'refund' && (q.status === 'new' || q.status === 'received')) { q.status = 'done'; q.refundId = r.id; } });
   o.refunded = refundedK(o) / 100;
   // Полный возврат: заказ становится «Возврат», чтобы его нельзя было спутать с действующим
-  if (refundedK(o) >= Math.round(o.total * 100)) { o.payment.status = 'refunded'; if (o.status !== 'returned') { o.statusBefore = o.status; o.status = 'returned'; } }
+  if (refundedK(o) >= Math.round(o.total * 100)) { o.payment.status = 'refunded'; if (o.status !== 'returned' && o.status !== 'canceled') { o.statusBefore = o.status; o.status = 'returned'; } }
   else if (o.bonusEarn > 0) {
     // частичный возврат: бонусы за возвращённую часть забираем
     const share = Math.floor(o.bonusEarn * plan.amountK / Math.round(o.total * 100)), u = userOf(o);
@@ -654,7 +655,7 @@ async function refundOrder(o, b) {
   save();
   if (!o.test) pushOrderEvent(o, 'refund', { amount: refund.amount });
   if (mailReady()) { try { await sendRefundMail(o, refund); refund.mailedAt = new Date().toISOString(); save(); } catch (e) { console.error('Письмо о возврате не отправлено:', e.message); } }
-  if (b.restock) processWaitlist().catch(() => {});
+  if (b.restock && o.status !== 'canceled') processWaitlist().catch(() => {});
   return { refund };
 }
 async function createPayment(order) {
@@ -708,6 +709,12 @@ function applyPayment(order, p) {
       if (order.status === 'canceled' && order.payExpired && resumePaid(order)) {
         // Оплата пришла чуть позже срока, а вещи ещё в наличии — заказ оформляется сам, как будто оплатили вовремя
         hist(order, 'Оплата пришла после срока — вещи в наличии, заказ возобновлён');
+        const twin = db.orders.find((x) => x.id !== order.id && x.status !== 'canceled' && Date.parse(x.createdAt) > Date.parse(order.createdAt) &&
+          ((x.customer || {}).phone === (order.customer || {}).phone) && x.items.some((i) => order.items.some((j) => j.productId === i.productId && j.colorId === i.colorId && j.size === i.size)));
+        if (twin) {
+          hist(order, 'У покупателя есть заказ № ' + twin.number + ' на те же вещи — проверьте, не лишний ли он');
+          pushStaff('order', { title: 'Два заказа на те же вещи: № ' + order.number + ' и № ' + twin.number, body: 'Оплата № ' + order.number + ' пришла после срока, а покупатель уже оформил № ' + twin.number + '. Свяжитесь и отмените лишний', url: '/admin?s=orders&id=' + twin.id, tag: 'twin-' + order.id, urgent: true });
+        }
         sendOrderMails(order); giftActivate(order); if (order.kind !== 'gift') stockMail(order.items);
         pushCustomer(order, 'orders', { title: 'Оплата получена', body: 'Заказ № ' + order.number + ' оформлен — начинаем собирать', url: '/order/' + order.id, tag: 'pay-' + order.id, urgent: true }).catch(() => {});
       } else if (order.status === 'canceled' && order.payExpired) {
@@ -767,6 +774,12 @@ setInterval(async () => {
   const list = db.orders.filter((o) => o.payment && o.payment.method === 'online' && o.payment.status === 'pending' && o.payment.providerId && o.status !== 'canceled' &&
     now - Date.parse(o.createdAt) > 20 * 60e3 && now - Date.parse(o.createdAt) < 7 * 864e5).slice(0, 50);
   for (const o of list) { await syncPayment(o); }
+  // заказы, отменённые таймером за последние сутки: вдруг оплата всё-таки прошла, а уведомление ЮKassa потерялось (аудит L-8)
+  const late = db.orders.filter((o) => o.payExpired && o.status === 'canceled' && o.payment.method === 'online' && o.payment.status === 'canceled' && o.payment.providerId &&
+    now - Date.parse(o.createdAt) < 864e5).slice(0, 50);
+  for (const o of late) {
+    try { const p = await ykRequest('GET', '/payments/' + o.payment.providerId); if (p.status === 'succeeded' && p.paid) applyPayment(o, p); } catch (e) { /* не критично */ }
+  }
 }, 15 * 60e3).unref();
 /* Время на оплату (13.64.7): онлайн-заказ ждёт оплаты 15 минут. За 5 минут до конца — пуш покупателю;
    срок вышел — сначала спрашиваем ЮKassa (вдруг оплата прошла), иначе заказ отменяется: вещи, промокод,
@@ -956,7 +969,9 @@ async function placeOrderNow(req, b, idem) {
   // Количество — целое, не меньше 1: «0» или «−1» не превращаем молча в 1 штуку (аудит L-1)
   if (Array.isArray(b.lines) && b.lines.some((l) => !(Number.isInteger(Number(l && l.qty)) && Number(l.qty) >= 1))) fail(400, 'Укажите количество — не меньше 1 шт.');
   // Не больше 3 неподтверждённых заказов на один телефон или почту — иначе можно занять весь остаток (аудит M-2)
-  const openOrders = db.orders.filter((o) => !o.test && o.kind !== 'gift' && o.status === 'new' && o.payment.status === 'pending' &&
+  // онлайн-заказы не считаем — неоплаченные сами отменяются через 10 минут (аудит M-5); старше 2 суток — тоже (L-10)
+  const openOrders = db.orders.filter((o) => !o.test && o.kind !== 'gift' && o.payment.method !== 'online' && o.status === 'new' && o.payment.status === 'pending' &&
+    Date.now() - Date.parse(o.createdAt) < 2 * 864e5 &&
     ((o.customer || {}).phone === customer.phone || (o.customer || {}).email === customer.email)).length;
   if (openOrders >= OPEN_ORDERS_MAX) fail(429, 'У вас уже есть 3 заказа, которые ждут подтверждения. Дождитесь звонка менеджера или напишите в поддержку — поможем');
   const pay = db.settings.payment || {};

@@ -74,7 +74,7 @@
   // Категории для меню, подвала и фильтров — только те, где в текущем разделе есть товары (пустые не показываем)
   function sortedCats() { var ps = gProducts(); return D.categories.filter(function (c) { return catInG(c) && ps.some(function (p) { return p.categoryId === c.id; }); }).sort(function (a, b) { return (a.order || 0) - (b.order || 0); }); }
   var STATUS = { new: 'Новый', processing: 'Собирается', shipped: 'Передан в доставку', done: 'Выполнен', canceled: 'Отменён', returned: 'Возврат' };
-  var PAY = { pending: 'Ожидает оплаты', paid: 'Оплачен', canceled: 'Оплата отменена', refunded: 'Деньги возвращены' };
+  var PAY = { pending: 'Ожидает оплаты', paid: 'Оплачен', canceled: 'Оплата не прошла', refunded: 'Деньги возвращены' };
 
   function md(text) {
     var out = [], list = null;
@@ -2120,9 +2120,10 @@
     try {
       var o = await API.getOrder(parts[1]);
       var payLabel = o.payment.method === 'exchange' ? 'Обмен по заказу № ' + (o.exchangeOf ? o.exchangeOf.number : '') : o.payment.method === 'gift' ? 'Оплачен подарочным сертификатом' : o.payment.method === 'bonus' ? 'Оплачен бонусами' : o.payment.method === 'online' ? PAY[o.payment.status] : 'Оплата при получении';
-      v.innerHTML = '<div class="wrap"><div class="success"><span class="eyebrow">Заказ № ' + esc(o.number) + '</span><h1>' + (o.status === 'returned' ? 'Возврат оформлен' : 'Спасибо за заказ') + '</h1>' +
-        '<p class="muted" style="max-width:46ch">' + (D.mailReady ? 'Подтверждение придёт на ' + esc(o.customer.email) + (o.payment.method === 'online' && o.payment.status !== 'paid' ? ' после оплаты' : '') + '. ' : '') + orderNext(o) + '</p>' +
-        '<div style="display:flex;gap:18px;flex-wrap:wrap;justify-content:center"><span class="status ' + esc(o.status) + '">' + esc(STATUS[o.status] || o.status) + '</span><span class="status ' + esc(o.payment.status) + '">' + esc(payLabel) + '</span></div>' +
+      v.innerHTML = '<div class="wrap"><div class="success"><span class="eyebrow">Заказ № ' + esc(o.number) + '</span><h1>' + (o.status === 'returned' ? 'Возврат оформлен' : o.payExpired ? 'Заказ отменён' : 'Спасибо за заказ') + '</h1>' +
+        (o.payExpired ? '' : '<p class="muted" style="max-width:46ch">' + (D.mailReady ? 'Подтверждение придёт на ' + esc(o.customer.email) + (o.payment.method === 'online' && o.payment.status !== 'paid' ? ' после оплаты' : '') + '. ' : '') + orderNext(o) + '</p>') +
+        // ждёт оплаты или время вышло — статус заказа («Новый», «Отменён») не показываем, его заменяет статус оплаты
+        '<div style="display:flex;gap:18px;flex-wrap:wrap;justify-content:center">' + (o.payExpired || (o.payment.method === 'online' && o.payment.status === 'pending') ? '' : '<span class="status ' + esc(o.status) + '">' + esc(STATUS[o.status] || o.status) + '</span>') + '<span class="status ' + esc(o.payment.status) + '">' + esc(payLabel) + '</span></div>' +
         payTimerHtml(o) + trackHtml(o) + '<div class="push-slot" id="pushSlot"></div>' + returnsHtml(o) + (API.user || o.requestState ? requestsHtml(o) : '') +
         '<div class="order-card" style="width:100%;text-align:left">' + o.items.map(function (i) { return '<div class="mini-line"><img src="' + esc(i.image || Art.make(i.art)) + '" alt=""><div><div>' + esc(i.name) + '</div><div class="sub om">' + itemMeta(i) + '</div>' + (i.preorder ? preTag(i) : '') + '</div><span class="num">' + fmt(i.price * i.qty) + '</span></div>'; }).join('') +
           (o.promoDiscount ? '<div class="sum-row disc"><span>Промокод ' + esc(o.promoCode) + '</span><span>−' + fmt(o.promoDiscount) + '</span></div>' : '') +
@@ -2144,37 +2145,59 @@
   var PAY_WIN = 10 * 60e3;
   function payLeftMs(o) { return o.payBy ? Date.parse(o.payBy) - (Date.now() + (o._skew || 0)) : 0; }
   function mmss(ms) { var t = Math.max(0, Math.ceil(ms / 1000)); return String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0'); }
-  function payTimerHtml(o) {
-    if (o.payExpired) return '<div class="paytm out"><span class="paytm-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="13" r="7.5"/><path d="M12 9v4l2.5 2M9.5 3h5"/></svg></span>' +
-      '<b class="paytm-t">Время на оплату вышло</b><p class="paytm-n">Заказ отменён, вещи вернулись в продажу. Оформите заново — если они ещё в наличии, они сразу окажутся в корзине.</p>' +
-      '<button class="btn" type="button" id="payAgain">Оформить заново</button></div>';
-    if (!(o.payment.method === 'online' && o.payment.status === 'pending' && o.status !== 'canceled' && o.payUrl && o.payBy)) return '';
-    var left = payLeftMs(o), total = PAY_WIN, hot = left <= 5 * 60e3;
-    return '<div class="paytm' + (hot ? ' hot' : '') + '" id="payTm"><div class="paytm-top"><div><b class="paytm-t">Заказ ждёт оплаты</b><small>Вещи отложены за вами</small></div>' +
-      '<div class="paytm-clock"><span id="payLeft">' + mmss(left) + '</span><small>осталось</small></div></div>' +
-      '<div class="paytm-bar"><i id="payBar" style="width:' + Math.max(0, Math.min(100, left / total * 100)) + '%"></i></div>' +
-      '<p class="paytm-n" id="payNote">' + (hot ? 'Меньше 5 минут — потом заказ отменится, а вещи вернутся в продажу' : 'Если не оплатить, заказ отменится, а вещи вернутся в продажу') + '</p>' +
-      '<a class="btn" id="payGo" href="' + esc(o.payUrl) + '"' + (left <= 0 ? ' style="display:none"' : '') + '>Оплатить · ' + fmt(o.total) + '</a></div>';
+  /* «Проверьте перед оплатой» (13.64.8): что в заказе, куда везём, кто получает */
+  function payCheckHtml(o) {
+    var n = o.items.reduce(function (a, i) { return a + (i.qty || 1); }, 0), d = o.delivery || {}, c = o.customer || {};
+    var ic = function (path) { return '<span class="pc-ic"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' + path + '</svg></span>'; };
+    var row = function (i, t, sub) { return '<div class="pc-row">' + i + '<div><b>' + esc(t) + '</b>' + (sub ? '<span>' + esc(sub) + '</span>' : '') + '</div></div>'; };
+    return '<div class="paycheck"><span class="pc-cap">Проверьте перед оплатой</span>' +
+      row(ic('<path d="M5 8h14l-1 12H6z"/><path d="M9 8a3 3 0 0 1 6 0"/>'), n + ' ' + plural(n, 'вещь', 'вещи', 'вещей') + ' · ' + fmt(o.total), (function () { var g = {}, order = []; o.items.forEach(function (i) { if (!g[i.name]) { g[i.name] = []; order.push(i.name); } g[i.name].push(i.size); }); return order.map(function (n) { return n + ' · ' + g[n].join(', '); }).join('; '); })()) +
+      row(ic('<path d="M3 7h11v9H3z"/><path d="M14 10h4l3 3v3h-7"/><circle cx="7" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/>'), d.name || 'Доставка', [d.city, d.address].filter(Boolean).join(', ')) +
+      row(ic('<circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/>'), [c.firstName, c.lastName].filter(Boolean).join(' '), c.phone ? fmtPhone(c.phone) : '') +
+    '</div>';
   }
-  function mountPayTimer(o, reload) {
-    var again = $('#payAgain');
-    if (again) again.addEventListener('click', function () {
-      var n = 0;
+  /* Время на оплату вышло: вещи, которые ещё в наличии, сами возвращаются в корзину — один раз и без задвоения */
+  function returnExpired(o) {
+    var key = 'alb:expiredBack', done; try { done = JSON.parse(localStorage.getItem(key)) || []; } catch (e) { done = []; }
+    var inCart = function (i) { return !!Cart.find(i.productId, i.colorId, i.size); };
+    if (done.indexOf(o.id) < 0) {
       o.items.forEach(function (i) {
         var p = D.products.find(function (x) { return x.id === i.productId && x.active !== false; }); if (!p) return;
         var c = (p.colors || []).find(function (x) { return x.id === i.colorId; }), z = c && (c.sizes || []).find(function (x) { return x.size === i.size; });
-        if (z && z.stock > 0) { Cart.add(p.id, c.id, i.size, Math.min(i.qty, z.stock)); n++; }
+        if (!z || z.stock <= 0) return;
+        var want = Math.min(i.qty || 1, z.stock), have = (Cart.find(p.id, c.id, i.size) || { qty: 0 }).qty;
+        if (want > have) Cart.add(p.id, c.id, i.size, want - have);
       });
-      if (n) { toast(n < o.items.length ? 'Часть вещей уже закончилась — остальные в корзине' : 'Вещи снова в корзине'); location.hash = '#/cart'; }
-      else toast('Эти вещи уже закончились');
-    });
+      done.push(o.id); try { localStorage.setItem(key, JSON.stringify(done.slice(-200))); } catch (e) {}
+    }
+    return o.items.filter(inCart).length;
+  }
+  function payTimerHtml(o) {
+    if (o.payExpired) {
+      var back = returnExpired(o);
+      return '<div class="paytm out"><div class="paytm-top"><div style="display:flex;gap:12px;align-items:center"><span class="paytm-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="13" r="7.5"/><path d="M12 9v4l2.5 2M9.5 3h5"/></svg></span>' +
+        '<div><b class="paytm-t">Время на оплату вышло</b><small>Заказ № ' + esc(o.number) + ' отменён</small></div></div></div>' +
+        '<p class="paytm-n">' + (!back ? 'Эти вещи уже разобрали — загляните в каталог, там много нового.' : back < o.items.length ? 'Вещи, которые ещё в наличии, вернулись в вашу корзину. Остальные уже разобрали.' : 'Вещи вернулись в вашу корзину — оформите заказ заново, пока они в наличии.') + '</p>' +
+        (back ? '<a class="btn" href="#/cart">Перейти в корзину</a>' : '<a class="btn ghost" href="#/catalog">В каталог</a>') + '</div>';
+    }
+    if (!(o.payment.method === 'online' && o.payment.status === 'pending' && o.status !== 'canceled' && o.payUrl && o.payBy)) return '';
+    var left = payLeftMs(o), total = PAY_WIN, hot = left <= 5 * 60e3;
+    return '<div class="paytm' + (hot ? ' hot' : '') + '" id="payTm"><div class="paytm-top"><div><b class="paytm-t">Заказ ждёт оплаты</b><small>Вещи отложены за вами</small></div>' +
+      // таймер — кольцо в цвете раздела: тает вместе со временем, последние 5 минут — красное и мягко пульсирует (13.64.8)
+      '<div class="paytm-ring"><svg viewBox="0 0 100 100" aria-hidden="true"><circle class="trk" cx="50" cy="50" r="44"/><circle class="val" id="payRing" cx="50" cy="50" r="44" pathLength="100" stroke-dasharray="' + Math.max(0, Math.min(100, left / total * 100)).toFixed(2) + ' 100"/></svg>' +
+        '<div class="paytm-clock"><span id="payLeft">' + mmss(left) + '</span><small>осталось</small></div></div></div>' +
+      payCheckHtml(o) +
+      '<p class="paytm-n" id="payNote">' + (hot ? 'Меньше 5 минут — потом заказ отменится, а вещи вернутся в корзину' : 'Не успеете — заказ отменится, а вещи вернутся в вашу корзину') + '</p>' +
+      '<a class="btn" id="payGo" href="' + esc(o.payUrl) + '"' + (left <= 0 ? ' style="display:none"' : '') + '>Оплатить · ' + fmt(o.total) + '</a></div>';
+  }
+  function mountPayTimer(o, reload) {
     var box = $('#payTm'); if (!box) return;
     var timer = setInterval(function () {
       if (!document.body.contains(box)) { clearInterval(timer); return; }
       var left = payLeftMs(o), hot = left <= 5 * 60e3;
-      $('#payLeft').textContent = mmss(left); $('#payBar').style.width = Math.max(0, Math.min(100, left / PAY_WIN * 100)) + '%';
+      $('#payLeft').textContent = mmss(left); $('#payRing').setAttribute('stroke-dasharray', Math.max(0, Math.min(100, left / PAY_WIN * 100)).toFixed(2) + ' 100');
       if (left <= 0) { $('#payNote').textContent = 'Время вышло — проверяем, не прошла ли оплата…'; $('#payGo').style.display = 'none'; }
-      if (hot && left > 0 && !box.classList.contains('hot')) { box.classList.add('hot'); $('#payNote').textContent = 'Меньше 5 минут — потом заказ отменится, а вещи вернутся в продажу'; }
+      if (hot && left > 0 && !box.classList.contains('hot')) { box.classList.add('hot'); $('#payNote').textContent = 'Меньше 5 минут — потом заказ отменится, а вещи вернутся в корзину'; }
       if (left <= -75000) { clearInterval(timer); reload(); }   // сервер отменит заказ — покажем «Время вышло»
     }, 1000);
   }
@@ -2410,6 +2433,7 @@
   function itemMeta(i) { return [i.color, i.size, (i.qty || 1) + ' шт.', i.sku ? 'арт. ' + i.sku : ''].filter(Boolean).map(function (x) { return '<i>' + esc(x) + '</i>'; }).join(' · '); }
   function payOpen(o) { return o.payment && o.payment.method === 'online' && o.payment.status === 'pending' && o.status !== 'canceled' && o.payBy && payLeftMs(o) > 0; }
   function ordersHtml(list) {
+    list.forEach(function (o) { if (o.payExpired) returnExpired(o); });   // время на оплату вышло — вещи снова в корзине
     if (!list.length) return '<div class="acc-empty"><h3>У Вас пока нет заказов</h3><p>Здесь будут отображаться Ваши покупки и информация об их текущем статусе</p><a class="btn" href="#/catalog">Перейти в каталог</a></div>';
     return '<div class="acc-orders">' + list.map(function (o) {
       var n = o.items.reduce(function (s, i) { return s + (i.qty || 1); }, 0), open = payOpen(o);

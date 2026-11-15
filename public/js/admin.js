@@ -686,7 +686,8 @@
       action = '<button class="btn ghost" type="button" id="rfOpen">Вернуть деньги</button>' +
         '<div class="rf-form" id="rfForm" hidden><p class="rf-hint">Отметьте, за что возвращаете деньги. Сумму посчитаем сами — с учётом промокода и бонусов, которыми платил покупатель.</p>' +
         '<div class="rf-all"><button class="link" type="button" id="rfAll">Отметить всё</button></div>' + lines + dl +
-        '<label class="check"><input type="checkbox" id="rfStock" checked> <span>Вернуть товар на склад (вещь вернулась к вам)</span></label>' +
+        (o.status === 'canceled' ? '<p class="rf-hint">Товар уже на складе — он вернулся туда, когда заказ отменили.</p>' :
+          '<label class="check"><input type="checkbox" id="rfStock" checked> <span>Вернуть товар на склад (вещь вернулась к вам)</span></label>') +
         (retCost(o) ? '<label class="check"><input type="checkbox" id="rfDeduct" checked> <span>Удержать обратную доставку СДЭК — ' + fmt(retCost(o)) + ' (по оферте её оплачивает покупатель)</span></label>' : '') +
         '<label class="field"><span>Причина, для себя</span><input class="input" id="rfReason" placeholder="Например, не подошёл размер" maxlength="300"></label>' +
         '<div class="rf-total"><span>К возврату</span><b class="num" id="rfAmt">0 ₽</b></div>' +
@@ -740,7 +741,7 @@
     open.addEventListener('click', function () { form.hidden = !form.hidden; open.textContent = form.hidden ? 'Вернуть деньги' : 'Скрыть'; });
     function body(dry) {
       var lines = $$('[data-rl]', form).filter(function (x) { return x.checked; }).map(function (x) { var q = $('[data-rq="' + x.dataset.rl + '"]', form); return { idx: Number(x.dataset.rl), qty: q ? Number(q.value) : 1 }; });
-      return { lines: lines, delivery: !!($('[data-rd]', form) && $('[data-rd]', form).checked), restock: $('#rfStock').checked, reason: $('#rfReason').value, dry: dry, key: key, deduct: $('#rfDeduct') && $('#rfDeduct').checked ? retCost(o) : 0 };
+      return { lines: lines, delivery: !!($('[data-rd]', form) && $('[data-rd]', form).checked), restock: !!($('#rfStock') && $('#rfStock').checked), reason: $('#rfReason').value, dry: dry, key: key, deduct: $('#rfDeduct') && $('#rfDeduct').checked ? retCost(o) : 0 };
     }
     async function calc() {
       var b = body(true), my = ++seq; err.textContent = '';

@@ -694,9 +694,19 @@ function applyPayment(order, p) {
     if (p.payment_method && p.payment_method.type) order.payment.type = String(p.payment_method.type).slice(0, 30);
     if (order.payment.status !== 'paid') {
       order.payment.status = 'paid'; order.payment.paidAt = p.captured_at || new Date().toISOString();
-      if (order.status === 'canceled') {
-        // Покупатель оплатил уже отменённый заказ (страница оплаты была открыта): товар уже вернулся на склад.
-        // Деньги сами не возвращаем — сообщаем владельцу: вернуть оплату или возобновить заказ (15.11.2026)
+      if (order.status === 'canceled' && order.payExpired && resumePaid(order)) {
+        // Оплата пришла чуть позже срока, а вещи ещё в наличии — заказ оформляется сам, как будто оплатили вовремя
+        hist(order, 'Оплата пришла после срока — вещи в наличии, заказ возобновлён');
+        sendOrderMails(order); giftActivate(order); if (order.kind !== 'gift') stockMail(order.items);
+        pushCustomer(order, 'orders', { title: 'Оплата получена', body: 'Заказ № ' + order.number + ' оформлен — начинаем собирать', url: '/order/' + order.id, tag: 'pay-' + order.id, urgent: true }).catch(() => {});
+      } else if (order.status === 'canceled' && order.payExpired) {
+        // Оплата пришла после срока, а вещь за это время купили. Деньги возвращает владелец сам — кнопкой «Вернуть деньги» в заказе
+        order.paidAfterCancel = true;
+        hist(order, 'Оплата пришла после срока, а вещей уже нет' + (order.resumeMissing && order.resumeMissing.length ? ': ' + order.resumeMissing.join(', ') : '') + ' — верните деньги в заказе');
+        pushStaff('paid', { title: 'Верните деньги по заказу № ' + order.number, body: 'Оплатили после срока, а вещи уже купили — ' + money(order.total) + '. Возврат — кнопкой в заказе', url: '/admin?s=orders&id=' + order.id, tag: 'order-' + order.id, urgent: true });
+        pushCustomer(order, 'orders', { title: 'Оплата пришла после отмены', body: 'Заказ № ' + order.number + ' уже отменён, а вещь купили. Мы вернём деньги на карту, с которой вы платили', url: '/order/' + order.id, tag: 'pay-' + order.id, urgent: true }).catch(() => {});
+      } else if (order.status === 'canceled') {
+        // Оплатили заказ, отменённый вручную: деньги вернуть или возобновить заказ — решает владелец в панели
         order.paidAfterCancel = true;
         hist(order, 'Оплата пришла на отменённый заказ — верните деньги или возобновите заказ');
         pushStaff('paid', { title: 'Оплачен отменённый заказ № ' + order.number, body: money(order.total) + ' — верните деньги или возобновите заказ', url: '/admin?s=orders&id=' + order.id, tag: 'order-' + order.id, urgent: true });
@@ -719,6 +729,25 @@ function applyPayment(order, p) {
   }
   syncBonus(order);
   save();
+}
+/* Оплата после срока (15.11.2026): заказ, отменённый таймером, возобновляется, если всё на месте —
+   вещи на складе, остаток сертификата и бонусов. Иначе не трогаем: владелец вернёт деньги. */
+function resumePaid(order) {
+  const missing = [];
+  order.items.forEach((i) => {
+    if (i.gift || i.preorder) return;
+    const s = sizeEntry(i.productId, i.colorId, i.size);
+    if (!s || s.stock < i.qty) missing.push([i.name, i.color, i.size].filter(Boolean).join(' · '));
+  });
+  if (order.giftUsed && order.giftReturned) { const g = findGift(order.giftCode); if (!g || g.balance < order.giftUsed) missing.push('остаток сертификата'); }
+  const u = order.bonusUsed > 0 && order.bonusReturned ? userOf(order) : null;
+  if (u && (u.bonus || 0) < order.bonusUsed) missing.push('бонусы на счёте');
+  if (missing.length) { order.resumeMissing = missing; return false; }
+  unrestock(order); giftReapply(order);
+  const pc = order.promoCode && db.promocodes.find((x) => x.code === order.promoCode); if (pc) pc.used = (pc.used || 0) + 1;
+  if (order.kind === 'gift') { const g = db.giftcards.find((x) => x.id === order.giftId); if (g && g.status === 'canceled') g.status = 'pending'; }
+  order.status = 'new'; order.payExpired = false; order.resumedAt = new Date().toISOString(); delete order.resumeMissing;
+  return true;
 }
 // Сверка с ЮKassa (15.11.2026): если уведомление ЮKassa не дошло, неоплаченные заказы старше 20 минут
 // проверяются раз в 15 минут (до 7 дней), по одному — оплаченный станет оплаченным, отменённый вернёт товар на склад

@@ -2184,7 +2184,7 @@
         '<div><b class="paytm-t">Время на оплату вышло</b><small>Заказ № ' + esc(o.number) + ' отменён</small></div></div></div>' +
         '<div class="px-body">' + (back.length ? grp(back, 'Снова в вашей корзине', true) : '') + (gone.length ? grp(gone, 'Уже разобрали', false) : '') + '</div>' +
         '<p class="paytm-n">' + (back.length ? 'Успейте оформить заново, пока вещи в наличии.' : 'Загляните в каталог — там много нового, а этих размеров может появиться ещё.') + '</p>' +
-        (back.length ? '<a class="btn" href="#/cart" id="pxCart">Перейти в корзину</a>' : '<a class="btn" href="#/catalog">В каталог</a>') + '</div>';
+        (back.length ? '<a class="btn" href="#/cart" id="pxCart">Оформить заново</a>' : '<a class="btn" href="#/catalog">В каталог</a>') + '</div>';
     }
     if (!(o.payment.method === 'online' && o.payment.status === 'pending' && o.status !== 'canceled' && o.payUrl && o.payBy)) return '';
     var left = payLeftMs(o), total = PAY_WIN, hot = left <= 5 * 60e3;
@@ -3595,12 +3595,9 @@
     try { sessionStorage.setItem('albakov:intro', '1'); } catch (e) {}
     // при обновлении страницы заставка скрыта ещё до отрисовки (js/splash.js) — просто убираем её
     if (document.documentElement.classList.contains('sp-skip')) { el.remove(); return; }
-    var first = true;
-    var wait = Math.max(0, (first ? 1400 : 250) - performance.now());
-    setTimeout(function () {
-      el.classList.add('done');
-      setTimeout(function () { el.classList.add('leave'); setTimeout(function () { el.remove(); }, 950); }, 280);
-    }, wait);
+    // как в приложении: заставка не меньше 1,4 с, затем сайт раскрывается кругом от знака (0,75 с)
+    var wait = Math.max(0, 1400 - performance.now());
+    setTimeout(function () { el.classList.add('leave'); setTimeout(function () { el.remove(); }, 800); }, wait);
   }
   document.addEventListener('DOMContentLoaded', boot);
 })();

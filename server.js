@@ -684,7 +684,7 @@ async function createPayment(order) {
 }
 // История заказа: что и когда менялось (статус, оплата, трек-номер, возвраты) — видна в карточке заказа в панели
 const ST_RU = { new: 'Новый', processing: 'Собирается', shipped: 'Передан в доставку', done: 'Выполнен', canceled: 'Отменён', returned: 'Возврат' };
-const PAY_RU = { pending: 'ожидает оплаты', paid: 'оплачен', canceled: 'оплата отменена', refunded: 'деньги возвращены' };
+const PAY_RU = { pending: 'ожидает оплаты', paid: 'оплачен', canceled: 'оплата не прошла', refunded: 'деньги возвращены' };
 function hist(o, text, by) { (o.history = o.history || []).push({ at: new Date().toISOString(), text: String(text).slice(0, 300), by: by || 'system' }); if (o.history.length > 200) o.history = o.history.slice(-200); }
 function applyPayment(order, p) {
   if (!order || !p) return;

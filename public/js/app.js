@@ -74,7 +74,7 @@
   // Категории для меню, подвала и фильтров — только те, где в текущем разделе есть товары (пустые не показываем)
   function sortedCats() { var ps = gProducts(); return D.categories.filter(function (c) { return catInG(c) && ps.some(function (p) { return p.categoryId === c.id; }); }).sort(function (a, b) { return (a.order || 0) - (b.order || 0); }); }
   var STATUS = { new: 'Новый', processing: 'Собирается', shipped: 'Передан в доставку', done: 'Выполнен', canceled: 'Отменён', returned: 'Возврат' };
-  var PAY = { pending: 'Ожидает оплаты', paid: 'Оплачен', canceled: 'Оплата отменена', refunded: 'Деньги возвращены' };
+  var PAY = { pending: 'Ожидает оплаты', paid: 'Оплачен', canceled: 'Оплата не прошла', refunded: 'Деньги возвращены' };
 
   function md(text) {
     var out = [], list = null;
@@ -2121,8 +2121,9 @@
       var o = await API.getOrder(parts[1]);
       var payLabel = o.payment.method === 'exchange' ? 'Обмен по заказу № ' + (o.exchangeOf ? o.exchangeOf.number : '') : o.payment.method === 'gift' ? 'Оплачен подарочным сертификатом' : o.payment.method === 'bonus' ? 'Оплачен бонусами' : o.payment.method === 'online' ? PAY[o.payment.status] : 'Оплата при получении';
       v.innerHTML = '<div class="wrap"><div class="success"><span class="eyebrow">Заказ № ' + esc(o.number) + '</span><h1>' + (o.status === 'returned' ? 'Возврат оформлен' : o.payExpired ? 'Заказ отменён' : 'Спасибо за заказ') + '</h1>' +
-        '<p class="muted" style="max-width:46ch">' + (D.mailReady ? 'Подтверждение придёт на ' + esc(o.customer.email) + (o.payment.method === 'online' && o.payment.status !== 'paid' ? ' после оплаты' : '') + '. ' : '') + orderNext(o) + '</p>' +
-        '<div style="display:flex;gap:18px;flex-wrap:wrap;justify-content:center"><span class="status ' + esc(o.status) + '">' + esc(STATUS[o.status] || o.status) + '</span><span class="status ' + esc(o.payment.status) + '">' + esc(payLabel) + '</span></div>' +
+        (o.payExpired ? '' : '<p class="muted" style="max-width:46ch">' + (D.mailReady ? 'Подтверждение придёт на ' + esc(o.customer.email) + (o.payment.method === 'online' && o.payment.status !== 'paid' ? ' после оплаты' : '') + '. ' : '') + orderNext(o) + '</p>') +
+        // ждёт оплаты или время вышло — статус заказа («Новый», «Отменён») не показываем, его заменяет статус оплаты
+        '<div style="display:flex;gap:18px;flex-wrap:wrap;justify-content:center">' + (o.payExpired || (o.payment.method === 'online' && o.payment.status === 'pending') ? '' : '<span class="status ' + esc(o.status) + '">' + esc(STATUS[o.status] || o.status) + '</span>') + '<span class="status ' + esc(o.payment.status) + '">' + esc(payLabel) + '</span></div>' +
         payTimerHtml(o) + trackHtml(o) + '<div class="push-slot" id="pushSlot"></div>' + returnsHtml(o) + (API.user || o.requestState ? requestsHtml(o) : '') +
         '<div class="order-card" style="width:100%;text-align:left">' + o.items.map(function (i) { return '<div class="mini-line"><img src="' + esc(i.image || Art.make(i.art)) + '" alt=""><div><div>' + esc(i.name) + '</div><div class="sub om">' + itemMeta(i) + '</div>' + (i.preorder ? preTag(i) : '') + '</div><span class="num">' + fmt(i.price * i.qty) + '</span></div>'; }).join('') +
           (o.promoDiscount ? '<div class="sum-row disc"><span>Промокод ' + esc(o.promoCode) + '</span><span>−' + fmt(o.promoDiscount) + '</span></div>' : '') +

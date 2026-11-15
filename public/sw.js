@@ -13,6 +13,8 @@ self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (e) => e.waitUntil((async () => {
   // старая подписка браузера на уведомления больше не нужна — снимаем её
   try { const sub = await self.registration.pushManager.getSubscription(); if (sub) await sub.unsubscribe(); } catch (x) { /* нет — и хорошо */ }
+  // и уже показанные уведомления веб-приложения убираем из Центра уведомлений
+  try { (await self.registration.getNotifications()).forEach((n) => n.close()); } catch (x) { /* не поддерживается */ }
   await self.clients.claim();
 })()));
 self.addEventListener('fetch', (e) => {

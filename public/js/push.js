@@ -6,6 +6,7 @@
   var webApi = 'serviceWorker' in navigator && window.isSecureContext !== false;
   if (webApi) window.addEventListener('load', function () {
     navigator.serviceWorker.register('/sw.js').then(function (r) {
+      if (r && r.getNotifications) r.getNotifications().then(function (l) { l.forEach(function (n) { n.close(); }); }).catch(function () {});
       return r && r.pushManager ? r.pushManager.getSubscription().then(function (s) { return s && s.unsubscribe(); }) : null;
     }).catch(function () { /* без него сайт работает */ });
   });

@@ -13,7 +13,6 @@ const Finance = require('./public/js/finance.js'); // раздел «Финан�
 const smtp = require('./lib/smtp.js');
 const Store = require('./lib/db.js');
 const CdekLib = require('./lib/cdek.js');
-const WebPush = require('./lib/webpush.js');
 const Audit = require('./lib/audit.js');
 const Apns = require('./lib/apns.js'); // уведомления в браузер и приложение на телефоне
 
@@ -1094,9 +1093,11 @@ setInterval(() => { if (statDirty) { statDirty = false; save(); } }, 60e3).unref
    Покупателю — о его заказе, ответах поддержки, обмене и возврате, поступлении, бонусах и (по желанию) акциях.
    Владельцу и сотрудникам — по их роли: новые заказы, оплаты, вопросы, заявки, возвраты, остатки, входы в панель, итоги дня.
    Подписка — это устройство: телефон или браузер. Ключи VAPID создаются один раз и хранятся в базе. */
-if (!db.secrets.vapid || !db.secrets.vapid.publicKey) { db.secrets.vapid = WebPush.generateKeys(); save(); }
-// Push браузера убран (13.64.6): старые подписки браузеров удаляем один раз — остаются только устройства с приложением
-if (!db.webPushOff) { db.pushsubs = (db.pushsubs || []).filter((x) => String(x.endpoint || '').startsWith('apns:')); db.webPushOff = 1; save(); }
+// Push браузера и веб-приложения убран полностью (13.64.6): подписки браузеров и ключи VAPID удаляются —
+// уведомления приходят только в приложение ALBAKOV для iPhone (через Apple)
+if (db.secrets.vapid || (db.pushsubs || []).some((x) => !String(x.endpoint || '').startsWith('apns:'))) {
+  db.pushsubs = (db.pushsubs || []).filter((x) => String(x.endpoint || '').startsWith('apns:')); delete db.secrets.vapid; db.webPushOff = 1; save();
+}
 // Приложение на iPhone: ключ Apple для push (панель → «Push-уведомления» → «Приложение iPhone»)
 const IOS_BUNDLE = process.env.IOS_BUNDLE_ID || 'ru.albakovofficial.app';
 function apnsCfg() { const a = db.secrets.apns; return a && a.p8 && a.keyId && a.teamId ? Object.assign({ bundleId: IOS_BUNDLE }, a) : null; }
@@ -1127,16 +1128,14 @@ async function pushTo(subs, m) {
   // Уведомления — только в приложение ALBAKOV (Apple). Push браузера и веб-приложения убраны (13.64.6)
   subs = subs.filter((x) => x.endpoint.startsWith('apns:'));
   if (!subs.length) return 0;
-  const data = pushPayload(m), keys = db.secrets.vapid, subject = 'mailto:' + ((db.settings.contacts || {}).email || 'info@albakovofficial.ru');
+  const data = pushPayload(m);
   let ok = 0, dirty = false;
   const ac = apnsCfg();
   await Promise.all(subs.map(async (x) => {
-    // Приложение ALBAKOV на iPhone — через Apple (адрес «apns:<токен>»), браузеры — через web-push
-    const ios = x.endpoint.startsWith('apns:');
-    if (ios && !ac) return;
-    const r = ios ? await Apns.send(x.endpoint.slice(5), data, ac, { env: x.env, ttl: m.ttl })
-      : await WebPush.send(x, data, keys, { subject, urgency: m.urgent ? 'high' : 'normal', ttl: m.ttl || 86400 * 2 });
-    if (ios && Apns.gone(r)) r.status = 410;
+    // Приложение ALBAKOV на iPhone — через Apple (адрес «apns:<токен>»)
+    if (!ac) return;
+    const r = await Apns.send(x.endpoint.slice(5), data, ac, { env: x.env, ttl: m.ttl });
+    if (Apns.gone(r)) r.status = 410;
     if (r.status >= 200 && r.status < 300) { ok++; pushStats.sent++; x.lastOk = new Date().toISOString(); x.fails = 0; dirty = true; }
     else if (r.status === 404 || r.status === 410) { db.pushsubs = db.pushsubs.filter((y) => y !== x); pushStats.gone++; dirty = true; }
     else { pushStats.failed++; x.fails = (x.fails || 0) + 1; dirty = true; if (x.fails >= 20) db.pushsubs = db.pushsubs.filter((y) => y !== x); console.error('Push не доставлен:', r.status, r.reason || r.error || ''); }
@@ -2271,7 +2270,6 @@ async function api(req, res, url, body) {
   if (p[0] === 'support') { const u = user(); if (!u) fail(401, 'Войдите в личный кабинет'); return supportApi(req, p, M, body, u); }
   // Push-уведомления: ключ, подписка устройства, настройки покупателя, проверка
   if (p[0] === 'push') {
-    if (p[1] === 'key' && M === 'GET') return { key: db.secrets.vapid.publicKey };
     if (p[1] === 'subscribe' && M === 'POST') return pushSubscribe(req, body);
     if (p[1] === 'unsubscribe' && M === 'POST') { const e = String(body.endpoint || ''); const n = db.pushsubs.length; db.pushsubs = db.pushsubs.filter((x) => !(x.endpoint === e && (body.scope === 'staff') === (x.scope === 'staff'))); if (n !== db.pushsubs.length) save(); return {}; }
     if (p[1] === 'test' && M === 'POST') {

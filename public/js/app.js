@@ -922,7 +922,7 @@
     var items = inPromo.filter(function (x) { return totalStock(x.p) > 0; }).slice(0, 3);
     if (!items.length && home) items = gProducts().filter(function (p) { return p.active !== false; }).map(function (p) { return { p: p, pr: priceOf(p) }; }).filter(function (x) { return x.pr.oldPrice; }).slice(0, 3);
     var n = inPromo.length, href = cats.length === 1 ? '#/catalog?cat=' + encodeURIComponent(cats[0].slug) : home ? '#/sale' : '#/catalog?sale=1';
-    var ends = ap.endsAt ? new Date(ap.endsAt + 'T23:59:59').getTime() : 0;
+    var ends = ap.endsAt ? new Date(ap.endsAt + 'T23:59:59+03:00').getTime() : 0;
     var timer = ends ? '<div class="deal-timer" data-ends="' + ends + '" role="timer" aria-label="До конца акции">' +
       [['d', 'дней'], ['h', 'часов'], ['m', 'минут'], ['s', 'секунд']].map(function (u) { return '<span class="st-cell" data-c="' + u[0] + '"><b data-u="' + u[0] + '">00</b><i data-l="' + u[0] + '">' + u[1] + '</i></span>'; }).join('<span class="st-sep" aria-hidden="true">:</span>') + '</div>' : '';
     var tiles = items.map(function (x) {

@@ -2725,8 +2725,8 @@
   function slideStatus(sl) {
     var now = Date.now(), pr = sl.promotionId && DATA.promotions.find(function (p) { return p.id === sl.promotionId; });
     if (!sl.active) return ['Скрыт', ''];
-    if (sl.startsAt && now < new Date(sl.startsAt + 'T00:00:00').getTime()) return ['Покажется с ' + new Date(sl.startsAt).toLocaleDateString('ru-RU'), 'processing'];
-    if (sl.endsAt && now > new Date(sl.endsAt + 'T23:59:59').getTime()) return ['Период показа закончился', 'canceled'];
+    if (sl.startsAt && now < new Date(sl.startsAt + 'T00:00:00+03:00').getTime()) return ['Покажется с ' + new Date(sl.startsAt).toLocaleDateString('ru-RU'), 'processing'];
+    if (sl.endsAt && now > new Date(sl.endsAt + 'T23:59:59+03:00').getTime()) return ['Период показа закончился', 'canceled'];
     if (sl.promotionId && (!pr || !Pricing.inWindow(pr, now))) return ['Акция не действует — слайд скрыт', 'canceled'];
     return ['Показывается', 'done'];
   }

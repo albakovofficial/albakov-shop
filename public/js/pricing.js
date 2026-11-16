@@ -148,10 +148,13 @@
   function colorOf(p, colorId) { var cs = colorsOf(p); return cs.find(function (c) { return c.id === colorId; }) || cs[0]; }
   function stockOf(c) { return (c && c.sizes || []).reduce(function (s, x) { return s + (Number(x.stock) || 0); }, 0); }
 
+  // Даты акций и промокодов — по Москве, где бы ни стоял сервер и в каком бы поясе ни был покупатель (аудит V-3, 16.11)
+  function dayStart(d) { return new Date(d + 'T00:00:00+03:00').getTime(); }
+  function dayEnd(d) { return new Date(d + 'T23:59:59+03:00').getTime(); }
   function inWindow(x, now) {
     if (!x.active) return false;
-    if (x.startsAt && now < new Date(x.startsAt + 'T00:00:00').getTime()) return false;
-    if (x.endsAt && now > new Date(x.endsAt + 'T23:59:59').getTime()) return false;
+    if (x.startsAt && now < dayStart(x.startsAt)) return false;
+    if (x.endsAt && now > dayEnd(x.endsAt)) return false;
     return true;
   }
 
@@ -189,8 +192,8 @@
     if (!code) return { ok: false, message: 'Промокод не найден' };
     var now = ctx.now || Date.now();
     if (!code.active) return { ok: false, message: 'Промокод не действует' };
-    if (code.startsAt && now < new Date(code.startsAt + 'T00:00:00').getTime()) return { ok: false, message: 'Промокод ещё не начал действовать' };
-    if (code.endsAt && now > new Date(code.endsAt + 'T23:59:59').getTime()) return { ok: false, message: 'Срок действия промокода истёк' };
+    if (code.startsAt && now < dayStart(code.startsAt)) return { ok: false, message: 'Промокод ещё не начал действовать' };
+    if (code.endsAt && now > dayEnd(code.endsAt)) return { ok: false, message: 'Срок действия промокода истёк' };
     if (code.limit && (code.used || 0) >= code.limit) return { ok: false, message: 'Лимит использования промокода исчерпан' };
     // Сначала — ограничения по покупателю (у них есть понятная причина для плашки при оформлении)
     if ((code.onlyRegistered || code.firstOrderOnly) && !ctx.registered) return { ok: false, reason: 'login', message: 'Скидка действует только для зарегистрированных покупателей. Войдите или зарегистрируйтесь — это займёт минуту.' };

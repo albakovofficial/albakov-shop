@@ -146,6 +146,8 @@ function safeEqual(a, b) {
 }
 const safeDecode = (s) => { try { return decodeURIComponent(s); } catch (e) { return null; } };
 // Обрезка по символам: эмодзи и другие «двойные» символы не разрезаются пополам (15.11.2026)
+// Текст из поля запроса: строка или число; массив и объект — пустая строка, а не «[object Object]» (аудит N-2, 16.11)
+const txt = (v) => typeof v === 'string' ? v : typeof v === 'number' && isFinite(v) ? String(v) : '';
 const cut = (v, n) => Array.from(String(v == null ? '' : v)).slice(0, n).join('');
 const uid = (p) => (p || '') + Date.now().toString(36) + crypto.randomBytes(4).toString('hex');
 const normPhone = (p) => { let d = String(p || '').replace(/\D/g, ''); if (d.length === 11 && (d[0] === '8' || d[0] === '7')) d = '7' + d.slice(1); if (d.length === 10) d = '7' + d; return d; };
@@ -476,7 +478,7 @@ const S = {
   Apns, CDEK_WAIT, COLLECTIONS, DATA_DIR, Finance, GIFT_MSG, HttpError, Mail, OWNER_PHONE, PUBLIC_DIR,
   PUBLIC_URL, Pricing, ROLES, SETTINGS_PERMS, Seo, Specs, UPLOAD_DIR, absUrl, adminRole, applyCdek, can, cdek,
   cdekCfg, cdekOrderBody, cdekPkg, checkPassword, cleanFavorites, clientIp, createSession, crypto, currentUser,
-  cut, db, fail, firstImg, fixSkus, fs, getSession, hashPassword, health, isAdmin, itemsLine, mailReady, money,
+  cut, db, fail, txt, firstImg, fixSkus, fs, getSession, hashPassword, health, isAdmin, itemsLine, mailReady, money,
   normPhone, parseCookies, path, perms, publicUser, pwOk, requireAdmin, requirePerm, safeEqual, save, seoChanged,
   seoPing, seoPingFlush, seoPingOn, setCookie, smtp, staffApi, staffList, staffRole, syncBonus, throttle,
   throttleKey, throttleOk, uid, userOf, validEmail

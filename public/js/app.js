@@ -1010,10 +1010,15 @@
       '<button class="sbtn sbtn-line" data-gender-go="all">Вся коллекция<span class="sbtn-arrow" aria-hidden="true"></span></button></div></div></section>';
   }
 
+  /* Поиск по словам (аудит 16.11, M-8): лишние пробелы и регистр не важны, слова — в любом порядке, ё = е.
+     Так же ищет приложение. «оверсайз пальто» найдёт «Пальто оверсайз». */
+  function searchWords(q) { return String(q || '').toLowerCase().replace(/ё/g, 'е').split(/\s+/).filter(Boolean); }
+  function textHas(text, words) { var t = String(text || '').toLowerCase().replace(/ё/g, 'е'); return words.every(function (w) { return t.indexOf(w) !== -1; }); }
+
   /* ---------- Каталог ---------- */
   var SORTS = { popular: 'По умолчанию', new: 'Сначала новые', cheap: 'Сначала дешевле', expensive: 'Сначала дороже' };
   function catalog(v, parts, q) {
-    var st = { cat: q.cat || '', tag: q.tag || '', sizes: q.size ? q.size.split(',') : [], colors: q.color ? q.color.split(',') : [], min: q.min || '', max: q.max || '', sale: q.sale === '1', sort: q.sort || 'popular', q: q.q || '' };
+    var st = { cat: q.cat || '', tag: q.tag || '', sizes: q.size ? q.size.split(',') : [], colors: q.color ? q.color.split(',') : [], min: q.min || '', max: q.max || '', sale: q.sale === '1', sort: q.sort || 'popular', q: (q.q || '').trim().replace(/\s+/g, ' ') };
     var cat = D.categories.find(function (c) { return c.slug === st.cat; });
     var title = st.q ? 'Поиск: ' + st.q : cat ? cat.name : st.tag === 'new' ? 'Новинки' : st.tag === 'hit' ? 'Хиты продаж' : 'Каталог';
     var gLabel = curGender() ? GENDERS[curGender()] : 'Вся коллекция';
@@ -1097,7 +1102,7 @@
         if (st.min && pr.price < +st.min) return false;
         if (st.max && pr.price > +st.max) return false;
         if (st.sale && !pr.onSale) return false;
-        if (st.q) { var t = (p.name + ' ' + (p.sku || '') + ' ' + (p.description || '') + ' ' + colorNames(p) + ' ' + (c ? c.name : '')).toLowerCase(); if (t.indexOf(st.q.toLowerCase()) === -1) return false; }
+        if (st.q && !textHas(p.name + ' ' + (p.sku || '') + ' ' + (p.description || '') + ' ' + colorNames(p) + ' ' + (c ? c.name : ''), searchWords(st.q))) return false;
         return true;
       });
       if (st.tag === 'hit' && st.sort === 'popular') list = hitList(list);
@@ -1641,7 +1646,36 @@
     var src = coSrc(), lines = src.get(), q = await API.quote(lines, code, deliveryId, contact, useBonus, extra);
     var keep = lines.filter(function (l) { return q.lines.some(function (x) { return x.productId === l.productId && x.size === l.size && (!l.colorId || x.colorId === l.colorId); }); });
     if (keep.length !== lines.length) { src.set(keep); toast('Некоторых товаров больше нет в продаже — мы убрали их из корзины', true); }
+    lastCartQ = q;
     return q;
+  }
+  /* Аудит 16.11 (M-6): вещь закончилась, пока лежала в корзине, — оформление блокируется, а не падает в самом конце.
+     Одна кнопка убирает проданное и уменьшает количество до остатка (как в приложении) */
+  var lastCartQ = null;
+  function cartIssues(q) { return q.lines.filter(function (l) { return l.problem; }); }
+  function issueBox(q) {
+    var bad = cartIssues(q); if (!bad.length) return '';
+    var gone = bad.filter(function (l) { return !/(\d+)\s*шт/.test(l.problem); }).length;
+    return '<div class="cart-issue" role="alert"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.2v.3"/></svg>' +
+      '<div><b>' + (gone === bad.length ? (bad.length === 1 ? 'Одна вещь закончилась' : 'Часть вещей закончилась') : 'Остатки изменились') + '</b>' +
+      '<span>Пока вещи лежали в корзине, их успели купить. Уберите недоступное — и можно оформлять заказ.</span>' +
+      '<button type="button" class="btn small" data-fix-cart>Убрать недоступное</button></div></div>';
+  }
+  function fixCart() {
+    var q = lastCartQ; if (!q) return;
+    var src = coSrc(), n = 0;
+    var out = src.get().map(function (l) {
+      var x = q.lines.find(function (y) { return y.productId === l.productId && y.size === l.size && (!l.colorId || y.colorId === l.colorId); });
+      if (!x || !x.problem) return l;
+      n++; var m = x.problem.match(/(\d+)\s*шт/), max = m ? Number(m[1]) : 0;
+      return max > 0 ? Object.assign({}, l, { qty: Math.min(l.qty, max) }) : null;
+    }).filter(Boolean);
+    if (!n) return;
+    src.set(out); toast(out.length ? 'Готово — корзина обновлена' : 'Недоступные вещи убраны');
+  }
+  document.addEventListener('click', function (e) { if (e.target.closest && e.target.closest('[data-fix-cart]')) fixCart(); });
+  function goCheckoutBtn(q) {
+    return cartIssues(q).length ? '<button class="btn block" type="button" disabled>Оформить заказ</button>' : '<a class="btn block" href="#/checkout">Оформить заказ</a>';
   }
   function earnRow(q) { return q.bonusEarn > 0 ? '<div class="sum-row bonus-earn"><span><i class="b-ic" aria-hidden="true">Б</i>' + (API.user ? 'Начислим за заказ' : 'Бонусы за заказ') + (q.bonusOnline > 0 ? ' <small class="muted">· из них +' + bonusNum(q.bonusOnline) + ' за онлайн-оплату</small>' : '') + '</span><span>+' + bonusNum(q.bonusEarn) + ' ' + bonusWord(q.bonusEarn) + '</span></div>' : ''; }
   /* Шкала «до бесплатной доставки»: порог — самый низкий «Бесплатно от» среди способов доставки из панели */
@@ -1670,10 +1704,10 @@
     var q = await cartQuote();
     if (!q.lines.length) { body.innerHTML = emptyCartHtml(true); foot.hidden = true; return; }
     foot.hidden = false;
-    body.innerHTML = bracketHint(q) + q.lines.map(lineHtml).join('');
+    body.innerHTML = issueBox(q) + bracketHint(q) + q.lines.map(lineHtml).join('');
     foot.innerHTML = freeShipBar(q.subtotal) + (q.saleDiscount ? '<div class="sum-row disc"><span>Скидка</span><span>−' + fmt(q.saleDiscount) + '</span></div>' : '') +
       '<div class="sum-row total"><span>Итого</span><span>' + fmt(q.subtotal) + '</span></div>' + earnRow(q) + '<p class="muted" style="font-size:13px">' + (API.user && API.user.bonus && q.bonus.enabled ? 'Доставка, промокод и оплата бонусами — на следующем шаге' : 'Доставка и промокод — на следующем шаге') + '</p>' +
-      '<a class="btn block" href="#/checkout">Оформить заказ</a><a class="btn ghost block" href="#/cart">Перейти в корзину</a>' + remindHtml();
+      goCheckoutBtn(q) + '<a class="btn ghost block" href="#/cart">Перейти в корзину</a>' + remindHtml();
   }
   // Согласие на напоминание о корзине — спрашиваем один раз, у вошедших покупателей; меняется в профиле
   function remindHtml() {
@@ -1704,11 +1738,11 @@
       var q = await cartQuote();
       if (!q.lines.length) { $('#cpLines').innerHTML = emptyCartHtml(false); drawRecent($('#cpRecent')); $('#cpSum').hidden = true; $('#cpLines').parentNode.classList.add('is-empty'); return; }
       $('#cpSum').hidden = false; $('#cpLines').parentNode.classList.remove('is-empty'); if ($('#cpRecent')) $('#cpRecent').innerHTML = '';
-      $('#cpLines').innerHTML = bracketHint(q) + q.lines.map(lineHtml).join('');
+      $('#cpLines').innerHTML = issueBox(q) + bracketHint(q) + q.lines.map(lineHtml).join('');
       $('#cpSum').innerHTML = freeShipBar(q.subtotal) + '<div class="sum-row"><span>' + q.count + ' ' + plural(q.count, 'товар', 'товара', 'товаров') + '</span><span>' + fmt(q.baseTotal) + '</span></div>' +
         (q.saleDiscount ? '<div class="sum-row disc"><span>Скидка по акциям</span><span>−' + fmt(q.saleDiscount) + '</span></div>' : '') +
         '<div class="sum-row total"><span>Итого</span><span>' + fmt(q.subtotal) + '</span></div>' + earnRow(q) +
-        (API.user && API.user.bonus && q.bonus.enabled ? '<p class="muted" style="font-size:13px">На бонусном счёте ' + bonusNum(API.user.bonus) + ' ' + bonusWord(API.user.bonus) + ' — спишете при оформлении</p>' : '') + '<a class="btn block" href="#/checkout">Оформить заказ</a>' + remindHtml();
+        (API.user && API.user.bonus && q.bonus.enabled ? '<p class="muted" style="font-size:13px">На бонусном счёте ' + bonusNum(API.user.bonus) + ' ' + bonusWord(API.user.bonus) + ' — спишете при оформлении</p>' : '') + goCheckoutBtn(q) + remindHtml();
     };
     cartPageDraw = draw; draw();
   }
@@ -1816,7 +1850,8 @@
       if (my !== st.sumSeq || !$('#coSum')) return q; // ответ пришёл, когда покупатель уже ушёл со страницы
       st.q = q;
       // Товары в заказе: количество и «Убрать» прямо здесь, без возврата в корзину
-      $('#coSum').innerHTML = '<div class="mini-lines co-lines">' + q.lines.map(function (l) {
+      st.issues = cartIssues(q).length;
+      $('#coSum').innerHTML = issueBox(q) + '<div class="mini-lines co-lines">' + q.lines.map(function (l) {
         var key = esc(l.productId + '|' + (l.colorId || '') + '|' + l.size);
         return '<div class="mini-line co-line"><img src="' + esc(l.image || Art.make(l.art)) + '" alt=""><div><div>' + esc(l.name) + '</div><div class="sub">' + (l.color ? esc(l.color) + ' · ' : '') + 'размер ' + esc(l.size) + (l.problem ? ' · <span style="color:var(--danger)">' + esc(l.problem) + '</span>' : '') + '</div>' + (l.preorder ? preTag(l) : '') +
           '<div class="co-line-acts"><span class="co-qty"><button type="button" data-co-q="-1" data-co-key="' + key + '" aria-label="Меньше"' + (l.qty <= 1 ? ' disabled' : '') + '>−</button><b>' + l.qty + '</b><button type="button" data-co-q="1" data-co-key="' + key + '" aria-label="Больше">+</button></span>' +
@@ -2000,6 +2035,7 @@
       if (bad.length) { err.textContent = 'Заполните выделенные поля'; return; }
       if (!$('#co-offer').checked) { err.textContent = 'Примите условия публичной оферты'; return; }
       if (!$('#co-agree').checked) { err.textContent = 'Нужно согласие на обработку персональных данных'; return; }
+      if (st.issues) { err.textContent = 'Часть вещей закончилась — нажмите «Убрать недоступное» в блоке «Ваш заказ»'; var ib = $('#coSum .cart-issue'); if (ib) ib.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
       err.textContent = '';
       var btn = $('#coSubmit'); btn.disabled = true; btn.textContent = 'Оформляем…';
       try {
@@ -3313,8 +3349,8 @@
     openModal('<h3 class="serif" style="font-size:34px;margin-bottom:20px">Поиск</h3><form id="sForm"><input class="input" id="sInput" placeholder="Название, цвет или артикул" autocomplete="off" aria-label="Поиск"></form><div id="sRes" style="display:grid;gap:12px;margin-top:20px"></div>');
     var i = $('#sInput'); setTimeout(function () { i.focus(); }, 50);
     i.addEventListener('input', function () {
-      var t = i.value.trim().toLowerCase();
-      var res = t.length < 2 ? [] : D.products.filter(onSale).filter(function (p) { var cat = catById(p.categoryId); return (p.name + ' ' + (p.sku || '') + ' ' + colorNames(p) + ' ' + (cat ? cat.name : '') + ' ' + (p.description || '') + ' ' + (window.Specs ? Specs.list(p).map(function (x) { return x.value; }).join(' ') : '')).toLowerCase().indexOf(t) !== -1; });
+      var t = i.value.trim().toLowerCase(), words = searchWords(t);
+      var res = t.length < 2 ? [] : D.products.filter(onSale).filter(function (p) { var cat = catById(p.categoryId); return textHas(p.name + ' ' + (p.sku || '') + ' ' + colorNames(p) + ' ' + (cat ? cat.name : '') + ' ' + (p.description || '') + ' ' + (window.Specs ? Specs.list(p).map(function (x) { return x.value; }).join(' ') : ''), words); });
       var more = res.length > 6; res = res.slice(0, 6);
       $('#sRes').innerHTML = res.map(function (p) { return '<a class="mini-line" href="#/product/' + esc(p.slug) + '"><img src="' + esc(imgOf(p)) + '" alt=""><div>' + esc(p.name) + '<div class="sub">' + esc(Pricing.colorsOf(p).map(function (c) { return c.name; }).join(', ')) + '</div></div><span class="num">' + fmt(priceOf(p).price) + '</span></a>'; }).join('') + (more ? '<a class="link sh-more" style="margin-top:14px" href="#/catalog?q=' + encodeURIComponent(i.value.trim()) + '"><span>Все результаты</span><i aria-hidden="true">' + ARROW + '</i></a>' : '') || (t.length >= 2 ? '<p class="muted">Ничего не нашлось</p>' : '');
     });

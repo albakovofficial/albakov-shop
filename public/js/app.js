@@ -1275,9 +1275,17 @@
     });
     $('#sizeChips').addEventListener('click', function (e) { var b = e.target.closest('[data-size]'); if (!b || b.disabled) return; sel = b.getAttribute('data-size'); $$('#sizeChips .chip').forEach(function (c) { c.classList.toggle('on', c === b); }); note(); });
     $$('[data-q]').forEach(function (b) { b.addEventListener('click', function () { var s = sizeOf(); var max = s ? (s.stock > 0 ? Math.max(1, s.stock - bagged(s.size)) : pre ? (preLeft === Infinity ? 99 : preLeft) : 0) : 99; qty = Math.max(1, Math.min(max, qty + Number(b.getAttribute('data-q')))); $('#qty').textContent = qty; }); });
+    // Нет размера: показать, где его выбрать. На телефоне размеры часто ниже края экрана — прокручиваем к ним (аудит N-1, 16.11)
+    function askSize() {
+      var n = $('#stockNote'); n.textContent = 'Сначала выберите размер'; n.className = 'stock-note low';
+      var sc = $('#sizeChips'); if (!sc) return;
+      var r = sc.getBoundingClientRect(), bar = document.querySelector('.sticky-buy'), bottom = bar ? bar.getBoundingClientRect().top : innerHeight;
+      if (r.top < 70 || r.bottom > bottom - 10) sc.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      sc.classList.remove('shake'); void sc.offsetWidth; sc.classList.add('shake');
+    }
     $('#addBtn').addEventListener('click', function () {
       if (waitMode()) { openNotify(p, col, sel); return; }
-      if (!sel) { var n = $('#stockNote'); n.textContent = 'Сначала выберите размер'; n.className = 'stock-note low'; var sc0 = $('#sizeChips'); if (sc0) { sc0.classList.remove('shake'); void sc0.offsetWidth; sc0.classList.add('shake'); } return; }
+      if (!sel) { askSize(); return; }
       var s = sizeOf(), inCart = (Cart.find(p.id, col.id, sel) || { qty: 0 }).qty;
       if (fullBag()) { openCart(); return; }
       if (pre && s.stock <= 0) { if (preLeft !== Infinity && inCart + qty > preLeft) { toast('По предзаказу осталось ' + preLeft + ' ' + plural(preLeft, 'место', 'места', 'мест'), true); return; } }
@@ -1290,7 +1298,7 @@
     });
     // «Купить сейчас»: оформляем только этот товар, корзину не трогаем
     $('#buyNow').addEventListener('click', function () {
-      if (!sel) { var n = $('#stockNote'); n.textContent = 'Сначала выберите размер'; n.className = 'stock-note low'; var sc = $('#sizeChips'); if (sc) { sc.classList.remove('shake'); void sc.offsetWidth; sc.classList.add('shake'); } return; }
+      if (!sel) { askSize(); return; }
       var s = sizeOf(); if (!s || (s.stock <= 0 && !pre)) { toast('Этого размера сейчас нет', true); return; }
       if (s.stock > 0 && qty > s.stock) { toast('В наличии только ' + s.stock + ' шт.', true); return; }
       BuyNow.start(p.id, col.id, sel, qty);

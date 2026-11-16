@@ -4231,3 +4231,10 @@ body::after { content: none; display: none; }
 .summary .btn[disabled] { opacity: .45; cursor: not-allowed; }
 /* Аудит 16.11 (L-13): на узких экранах кнопка чата не закрывает название товара */
 @media (max-width: 420px) { body[data-page="product"] .fab { display: none; } }
+/* Аудит 16.11 (N-5): на «Где мой заказ» кнопка чата не закрывает «Найти заказ»;
+   (N-7): «Удалить» в корзине и «Убрать» в оформлении — зона нажатия не меньше 40 px, вид прежний */
+@media (max-width: 440px) { body[data-page="track"] .fab { display: none; } }
+@media (max-width: 760px) {
+  .cart-line .remove, .remove[data-rm], .co-rm { position: relative; }
+  .remove[data-rm]::after, .co-rm::after { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 40px; transform: translateY(-50%); }
+}

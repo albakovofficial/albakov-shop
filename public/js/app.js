@@ -2162,6 +2162,15 @@
   }
   async function orderPage(v, parts) {
     v.innerHTML = '<div class="loader">…</div>';
+    // Ссылка из письма или push несёт секретный ключ заказа (?t=…): запоминаем его и убираем из адресной строки (аудит T-1, 16.11)
+    try {
+      var qs = new URLSearchParams(location.search), tk = qs.get('t');
+      if (tk && /^[a-f0-9]{16,64}$/i.test(tk) && parts[1]) {
+        var ot = {}; try { ot = JSON.parse(localStorage.getItem('vanta:otok') || '{}') || {}; } catch (e0) {}
+        ot[parts[1]] = tk; try { localStorage.setItem('vanta:otok', JSON.stringify(ot)); } catch (e1) {}
+        qs.delete('t'); history.replaceState(history.state, '', location.pathname + (qs.toString() ? '?' + qs : '') + location.hash);
+      }
+    } catch (e2) {}
     try {
       var o = await API.getOrder(parts[1]);
       var payLabel = o.payment.method === 'exchange' ? 'Обмен по заказу № ' + (o.exchangeOf ? o.exchangeOf.number : '') : o.payment.method === 'gift' ? 'Оплачен подарочным сертификатом' : o.payment.method === 'bonus' ? 'Оплачен бонусами' : o.payment.method === 'online' ? PAY[o.payment.status] : 'Оплата при получении';
@@ -2182,7 +2191,12 @@
       mountPayTimer(o, function () { orderPage(v, parts); });
       mountOrderPush(o);
       if (API.user) refreshBonus(); // после оплаты бонусы могли прийти — обновим счёт и покажем уведомление
-    } catch (e) { v.innerHTML = '<div class="wrap"><div class="empty"><h3>Заказ не найден</h3><p>' + esc(errMsg(e)) + '</p><a class="btn ghost" href="#/">На главную</a></div></div>'; }
+    } catch (e) {
+      // Заказ не открылся: подсказываем, как его найти (аудит T-3, 16.11)
+      var nf = e && e.status === 404;
+      v.innerHTML = '<div class="wrap"><div class="empty"><h3>Заказ не найден</h3><p>' + (nf ? 'Возможно, он оформлен на другом устройстве. Найдите его по номеру заказа и телефону' + (API.user ? '' : ' или войдите в личный кабинет') + '.' : esc(errMsg(e))) + '</p>' +
+        '<div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center"><a class="btn" href="#/track">Найти по номеру и телефону</a>' + (nf && !API.user ? '<a class="btn ghost" href="#/account">Войти</a>' : '<a class="btn ghost" href="#/">На главную</a>') + '</div></div></div>';
+    }
   }
 
   /* ---------- Время на оплату (13.64.7): 10 минут, как у страницы ЮKassa; отсчёт по часам сервера ----------
